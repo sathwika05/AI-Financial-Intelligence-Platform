@@ -1,0 +1,51 @@
+ticker,name,sector
+AAPL,Apple Inc,Technology
+MSFT,Microsoft Corporation,Technology
+GOOGL,Alphabet Inc,Technology
+NVDA,NVIDIA Corporation,Technology
+META,Meta Platforms Inc,Technology
+AMZN,Amazon.com Inc,Technology
+TSLA,Tesla Inc,Consumer Cyclical
+AMD,Advanced Micro Devices,Technology
+INTC,Intel Corporation,Technology
+CRM,Salesforce Inc,Technology
+JPM,JPMorgan Chase,Financial Services
+BAC,Bank of America,Financial Services
+GS,Goldman Sachs,Financial Services
+MS,Morgan Stanley,Financial Services
+WFC,Wells Fargo,Financial Services
+BLK,BlackRock Inc,Financial Services
+AXP,American Express,Financial Services
+SCHW,Charles Schwab,Financial Services
+C,Citigroup Inc,Financial Services
+V,Visa Inc,Financial Services
+JNJ,Johnson & Johnson,Healthcare
+UNH,UnitedHealth Group,Healthcare
+PFE,Pfizer Inc,Healthcare
+ABBV,AbbVie Inc,Healthcare
+MRK,Merck & Co,Healthcare
+TMO,Thermo Fisher Scientific,Healthcare
+ABT,Abbott Laboratories,Healthcare
+DHR,Danaher Corporation,Healthcare
+BMY,Bristol-Myers Squibb,Healthcare
+AMGN,Amgen Inc,Healthcare
+XOM,Exxon Mobil,Energy
+CVX,Chevron Corporation,Energy
+COP,ConocoPhillips,Energy
+SLB,SLB Schlumberger,Energy
+EOG,EOG Resources,Energy
+WMT,Walmart Inc,Consumer Defensive
+HD,Home Depot,Consumer Cyclical
+MCD,McDonalds Corporation,Consumer Cyclical
+NKE,Nike Inc,Consumer Cyclical
+SBUX,Starbucks Corporation,Consumer Cyclical
+CAT,Caterpillar Inc,Industrials
+BA,Boeing Company,Industrials
+GE,GE Aerospace,Industrials
+HON,Honeywell International,Industrials
+UPS,United Parcel Service,Industrials
+MA,Mastercard Inc,Financial Services
+PYPL,PayPal Holdings,Financial Services
+NFLX,Netflix Inc,Communication Services
+DIS,Walt Disney Company,Communication Services
+ADBE,Adobe Inc,Technology

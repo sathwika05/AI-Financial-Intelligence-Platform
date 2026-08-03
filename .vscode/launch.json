@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: FastAPI",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "backend.main:app"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "jinja": true,
+            "env": {
+                "DATABASE_URL": "postgresql+asyncpg://finuser:finpass@localhost:5433/findb",
+                "SYNC_DATABASE_URL": "postgresql+psycopg2://finuser:finpass@localhost:5433/findb",
+                "REDIS_URL": "redis://localhost:6379"
+            }
+        }
+    ]
+}

@@ -1,5 +1,6 @@
 import logging
-from backend.scoring.ranker import rerank
+
+from langsmith import traceable
 
 
 logger = logging.getLogger(__name__)
@@ -9,6 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 
+@traceable(
+    name="attach_company_evidence",
+    run_type="chain",
+    tags=["scoring", "evidence"],
+)
 def attach_company_evidence(company: dict,
     sql_result: dict | None = None,
     vector_result: dict | None = None,
@@ -33,8 +39,8 @@ def attach_company_evidence(company: dict,
                 })
             
             # Vector/news/document evidence
-    if vector_result and vector_result.get("chunks"):
-        for i, chunk in enumerate(vector_result["chunks"]):
+    if vector_result and vector_result.get("retrieved_chunks"):
+        for i, chunk in enumerate(vector_result["retrieved_chunks"]):
             text = chunk.get("content", "")
 
             if ticker in text.upper() or name in text.lower():
@@ -46,8 +52,8 @@ def attach_company_evidence(company: dict,
                 })
 
     # Market evidence
-    if market_result and market_result.get("data"):
-        info = market_result["data"].get(ticker)
+    if market_result and market_result.get("market_data"):
+        info = market_result["market_data"].get(ticker)
 
         if info:
             evidence.append({

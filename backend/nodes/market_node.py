@@ -1,181 +1,331 @@
-
-
-
+import asyncio
 import logging
-from tenacity import retry, stop_after_attempt, wait_exponential
+from typing import Any
 
-from backend.services.market_api_service import extract_tickers_from_query, fetch_market_data_bulk, parse_tickers
-from backend.services.redis_service import cache_get, cache_set, make_cache_key
+from langchain_core.runnables import RunnableConfig
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
-
+from backend.services.market_api_service import (
+    extract_tickers_from_query,
+    fetch_market_data_bulk,
+    parse_tickers,
+)
+from backend.services.redis_service import (
+    cache_get,
+    cache_set,
+    make_cache_key,
+)
 
 
 logger = logging.getLogger(__name__)
 
-# cache TTL - 5 minutes for market data
 
 MARKET_CACHE_TTL = 300
-MAX_RETRIES      = 3
+MAX_RETRIES = 3
+
 
 @retry(
     stop=stop_after_attempt(MAX_RETRIES),
-    wait=wait_exponential(multiplier=1, min=2, max=8)
+    wait=wait_exponential(
+        multiplier=1,
+        min=2,
+        max=8,
+    ),
+    retry=retry_if_exception_type(Exception),
+    reraise=True,
 )
-def fetch_with_retry(tickers: list[str]) -> dict:
+def fetch_with_retry(
+    tickers: list[str],
+) -> dict[str, Any]:
     """
-    Fetch market data with retry on failure.
-    Retries up to 3 times with exponential backoff.
-    2s → 4s → 8s between retries.
+    Fetch market data with retries.
+
+    Retries failed requests up to three times using
+    exponential backoff.
     """
     return fetch_market_data_bulk(tickers)
 
 
-def run_market_retrieval(market_query: str) -> dict:
+def empty_market_result() -> dict[str, Any]:
+    """Return a consistent empty market-result structure."""
+    return {
+        "source": "market",
+        "market_data": {},
+        "confidence": 0.0,
+        "cached": False,
+        "stale": False,
+        "degraded": False,
+        "missing_tickers": [],
+    }
+
+
+async def run_market_retrieval(
+    market_query: str,
+    config: RunnableConfig,
+) -> dict[str, Any]:
     """
-    Fetch live market data.
+    Fetch current market data for tickers in the query.
 
     Flow:
-    1. Check Redis cache for each ticker
-    2. Cache hit  → return cached data immediately
-    3. Cache miss → fetch from yfinance (with 3 retries)
-    4. API success → store in cache → return fresh data
-    5. API fails after 3 retries → check stale cache
-    6. Stale cache hit → return stale data (degraded warning)
-    7. Cache also empty → degraded mode (no data available)
-x
-    Degraded mode ONLY when:
-    cache empty AND API failed after all retries
+    1. Resolve the natural-language query into ticker symbols.
+    2. Check Redis for each ticker.
+    3. Fetch cache misses from the market-data provider.
+    4. Cache fresh results.
+    5. If the provider fails, try stale cached data.
+    6. Mark the response degraded when any ticker is unavailable.
     """
-    logger.info(f"[MARKET_NODE] Market Query = {market_query}")
-    
-    # ── Resolve natural language → ticker symbols ──────────
-    resolved = extract_tickers_from_query(market_query)
-    logger.info(f"[MARKET] Resolved: '{market_query}' → '{resolved}'")
-    
-    tickers = parse_tickers(resolved)
+    normalized_query = market_query.strip()
+
+    logger.info(
+        "[MARKET] Processing query=%r",
+        normalized_query,
+    )
+
+    resolved_tickers = await extract_tickers_from_query(
+        normalized_query, config
+    )
+
+    logger.info(
+        "[MARKET] Resolved query=%r tickers=%r",
+        normalized_query,
+        resolved_tickers,
+    )
+
+    tickers = list(
+        dict.fromkeys(
+            ticker.upper()
+            for ticker in parse_tickers(resolved_tickers)
+            if ticker
+        )
+    )
 
     if not tickers:
-        logger.info("[MARKET] No tickers to fetch")
-        return {
-            "source": "market",
-            "data": {},
-            "confidence": 0.0,
-            "cached": False
-        }
-    
-    logger.info(f"[MARKET] Fetching data for: {tickers}")
+        logger.info(
+            "[MARKET] No ticker symbols resolved"
+        )
 
-    results = {}
-    is_cached = False
-    to_fetch =[]
+        result = empty_market_result()
+        result["degraded"] = True
+        return result
 
-    # Step 1 - Check cache for each ticker
+    logger.info(
+        "[MARKET] Requested tickers=%s",
+        tickers,
+    )
+
+    results: dict[str, Any] = {}
+    to_fetch: list[str] = []
+
+    used_cache = False
+    used_stale_cache = False
+    api_failed = False
+
+    # Check normal cache.
     for ticker in tickers:
-        key = make_cache_key("market", ticker)
-        cached_val = cache_get(key)
-        if cached_val:
-            results[ticker] = cached_val
-            is_cached       = True
-            logger.info(f"[MARKET] Cache hit: {ticker}")
+        cache_key = make_cache_key(
+            "market",
+            ticker,
+        )
+
+        cached_value = cache_get(cache_key)
+
+        if cached_value is not None:
+            results[ticker] = cached_value
+            used_cache = True
+
+            logger.info(
+                "[MARKET] Cache hit ticker=%s",
+                ticker,
+            )
         else:
             to_fetch.append(ticker)
-            logger.info(f"[MARKET] Cache miss: {ticker}")
 
-    # ── Step 2 — fetch from API for cache misses ───────────
-    if to_fetch:
-        try:
-            # fetch with retry — 3 attempts with backoff
-            fresh = fetch_with_retry(to_fetch)
-
-            for ticker, data in fresh.items():
-                results[ticker] = data
-                key = make_cache_key("market", ticker)
-                cache_set(key, data, ttl=MARKET_CACHE_TTL)
-                logger.info(
-                    f"[MARKET] Fresh data cached: {ticker}"
-                )
-
-            # log any tickers that returned no data
-            failed = set(to_fetch) - set(fresh.keys())
-            for ticker in failed:
-                logger.warning(
-                    f"[MARKET] No data returned for {ticker}"
-                )
-
-        except Exception as e:
-            # ── Step 3 — API failed after all retries ─────
-            # try stale cache as last fallback
-            logger.error(
-                f"[MARKET] yfinance failed after {MAX_RETRIES} "
-                f"retries: {e}. Trying stale cache..."
+            logger.info(
+                "[MARKET] Cache miss ticker=%s",
+                ticker,
             )
 
-            for ticker in to_fetch:
-                key       = make_cache_key("market", ticker)
-                stale_val = cache_get(key)
+    # Fetch cache misses from the provider.
+    if to_fetch:
+        try:
+            fresh_results = fetch_with_retry(
+                to_fetch
+            )
 
-                if stale_val:
-                    results[ticker] = stale_val
-                    is_cached       = True
+            if not isinstance(fresh_results, dict):
+                raise TypeError(
+                    "Market-data provider returned an invalid "
+                    "response; expected a dictionary"
+                )
+
+            for ticker, data in fresh_results.items():
+                normalized_ticker = ticker.upper()
+
+                if data is None:
+                    continue
+
+                results[normalized_ticker] = data
+
+                cache_key = make_cache_key(
+                    "market",
+                    normalized_ticker,
+                )
+
+                cache_set(
+                    cache_key,
+                    data,
+                    ttl=MARKET_CACHE_TTL,
+                )
+
+                logger.info(
+                    "[MARKET] Fresh data cached ticker=%s",
+                    normalized_ticker,
+                )
+
+            missing_from_api = (
+                set(to_fetch) - set(results)
+            )
+
+            for ticker in sorted(missing_from_api):
+                logger.warning(
+                    "[MARKET] Provider returned no data "
+                    "ticker=%s",
+                    ticker,
+                )
+
+        except Exception:
+            api_failed = True
+
+            logger.exception(
+                "[MARKET] Provider failed after %s attempts; "
+                "checking stale cache",
+                MAX_RETRIES,
+            )
+
+            # This only works as stale fallback if cache_get can
+            # retrieve expired values. Otherwise use a separate
+            # stale-cache function or stale cache key.
+            for ticker in to_fetch:
+                cache_key = make_cache_key(
+                    "market",
+                    ticker,
+                )
+
+                stale_value = cache_get(cache_key)
+
+                if stale_value is not None:
+                    results[ticker] = stale_value
+                    used_cache = True
+                    used_stale_cache = True
+
                     logger.warning(
-                        f"[MARKET] Using stale cache for {ticker}"
+                        "[MARKET] Using stale cache ticker=%s",
+                        ticker,
                     )
                 else:
                     logger.error(
-                        f"[MARKET] No cache for {ticker} — "
-                        f"degraded for this ticker"
+                        "[MARKET] No provider or cached data "
+                        "ticker=%s",
+                        ticker,
                     )
 
-    # ── Step 4 — check if degraded ─────────────────────────
-    # degraded ONLY when cache was empty AND API failed
-    degraded   = len(results) == 0
-    confidence = 0.8 if results else 0.0
+    missing_tickers = [
+        ticker
+        for ticker in tickers
+        if ticker not in results
+    ]
 
-    if degraded:
-        logger.error(
-            "[MARKET] Fully degraded — "
-            "no data from API or cache"
-        )
+    # Degraded when one or more requested tickers are missing,
+    # stale data was required, or the external API failed.
+    degraded = bool(
+        missing_tickers
+        or used_stale_cache
+        or api_failed
+    )
+
+    if not results:
+        confidence = 0.0
+    elif used_stale_cache:
+        confidence = 0.5
+    elif missing_tickers:
+        confidence = 0.6
+    elif used_cache:
+        confidence = 0.8
     else:
-        logger.info(
-            f"[MARKET] Complete. "
-            f"{len(results)} tickers retrieved. "
-            f"Cached: {is_cached}, Degraded: {degraded}"
-        )
+        confidence = 0.9
+
+    logger.info(
+        "[MARKET] Completed retrieved=%s requested=%s "
+        "cached=%s stale=%s degraded=%s missing=%s",
+        len(results),
+        len(tickers),
+        used_cache,
+        used_stale_cache,
+        degraded,
+        missing_tickers,
+    )
 
     return {
-        "source":     "market",
-        "data":       results,
+        "source": "market",
+        "market_data": results,
         "confidence": confidence,
-        "cached":     is_cached,
-        "degraded":   degraded
+        "cached": used_cache,
+        "stale": used_stale_cache,
+        "degraded": degraded,
+        "missing_tickers": missing_tickers,
     }
 
-def market_node(state: dict) -> dict:
-    """
-    LangGraph node for market data retrieval.
-    Reads market_query from state.
-    Adds market_result to state.
-    """
-    market_query = state.get("market_query", "")
 
-    if not market_query:
-        logger.info("[MARKET_NODE] No market query - skipping")
+async def market_node(
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    LangGraph node for market-data retrieval.
+
+    Reads `market_query` from state and adds
+    `market_result` to state.
+    """
+    market_query = state.get(
+        "market_query",
+        "",
+    )
+
+    if not isinstance(market_query, str):
+        raise TypeError(
+            "market_query must be a string"
+        )
+
+    normalized_query = market_query.strip()
+
+    if not normalized_query:
+        logger.info(
+            "[MARKET_NODE] No market query; skipping"
+        )
+
         return {
             **state,
-            "market_result": {
-                "source": "market",
-                "data": {},
-                "confidence": 0.0,
-                "cached": False,
-                "degraded":   False
-            }
+            "market_result": empty_market_result(),
         }
-    
-    logger.info(f"[MARKET_NODE ] market_query: {market_query}")
-    market_result = run_market_retrieval(market_query)
+
+    logger.info(
+        "[MARKET_NODE] market_query=%r",
+        normalized_query,
+    )
+
+    # The market API and current Redis helpers are synchronous.
+    # Running them in a worker thread avoids blocking the
+    # LangGraph event loop.
+    market_result = await asyncio.to_thread(
+        run_market_retrieval,
+        normalized_query,
+    )
 
     return {
         **state,
-        "market_result": market_result
+        "market_result": market_result,
     }

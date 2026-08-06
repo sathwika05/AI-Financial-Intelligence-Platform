@@ -9,13 +9,17 @@
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from backend.services.postgres_service import engine
 from sqlalchemy import text
 
+from langchain_core.runnables import RunnableConfig
+from langsmith import traceable
+
+from backend.llm.llm_context import get_llm_client
+from backend.llm.llm_tiers import LLMTier
+
 logger = logging.getLogger(__name__)
 
-llm = ChatOpenAI(model = "gpt-5.4-mini",temperature=0)
 
 # ── Normalization ──────────────────────────────────────────
 
@@ -56,6 +60,11 @@ def normalize_price_change(price_change: float) -> float:
 
 # ── Fetch Companies from DB ────────────────────────────────
 
+@traceable(
+    name="companies_lookup",
+    run_type="retriever",
+    tags=["scoring", "db"],
+)
 async def get_companies_from_db(tickers: list[str] = None) -> list[dict]:
     """
     Fetch company financial metrics from DB.
@@ -120,7 +129,7 @@ def score_company_valuation(
 
     if market_result:
         ticker      = company.get("ticker", "").upper()
-        market_data = market_result.get("data", {}).get(ticker)
+        market_data = market_result.get("market_data", {}).get(ticker)
         if market_data:
             price_score = normalize_price_change(
                 market_data.get("price_change")
@@ -157,7 +166,7 @@ def score_company_relevance(
     if not vector_result:
         return 0.0
 
-    chunks = vector_result.get("chunks", [])
+    chunks = vector_result.get("retrieved_chunks", [])
     if not chunks:
         return 0.0
 
@@ -201,7 +210,7 @@ def score_company_sentiment(
     if not vector_result:
         return 0.5
 
-    chunks = vector_result.get("chunks", [])
+    chunks = vector_result.get("retrieved_chunks", [])
     if not chunks:
         return 0.5
 
@@ -284,12 +293,13 @@ def get_dynamic_weights(
 
 # ── LLM Reranker ──────────────────────────────────────────
 
-def llm_rerank_companies(
-    companies:     list[dict],
-    query:         str,
-    sql_answer:    str  = None,
-    vector_chunks: list = None,
-    market_data:   dict = None
+async def llm_rerank_companies(
+    companies: list[dict],
+    query: str,
+    config: RunnableConfig,
+    sql_answer: str | None = None,
+    vector_chunks: list | None = None,
+    market_data: dict | None = None,
 ) -> dict[str, float]:
     """
     Optional LLM-based holistic scoring per company.
@@ -370,7 +380,11 @@ Score each company 0.0 to 1.0:
 
     try:
         import json
-        response = llm.invoke([system, user])
+        llm = get_llm_client(config, LLMTier.MEDIUM,)
+        response = await llm.ainvoke(
+            [system, user],
+            config=config,
+        )
         content  = response.content.strip()
         content  = content.replace("```json", "").replace("```", "").strip()
         scores   = json.loads(content)
@@ -382,12 +396,18 @@ Score each company 0.0 to 1.0:
 
 # ── Main Reranker ──────────────────────────────────────────
 
+@traceable(
+    name="rerank_pipeline",
+    run_type="chain",
+    tags=["scoring", "rerank"],
+)
 async def rerank(
-    query:         str,
-    intent:        str,
-    sql_result:    dict = None,
-    vector_result: dict = None,
-    market_result: dict = None
+    query: str,
+    intent: str,
+    config: RunnableConfig,
+    sql_result: dict | None = None,
+    vector_result: dict | None = None,
+    market_result: dict | None = None,
 ) -> list[dict]:
     """
     Main reranker — scores each company across all dimensions.
@@ -410,12 +430,12 @@ async def rerank(
     )
     has_vector = (
         vector_result is not None and
-        bool(vector_result.get("chunks"))
+        bool(vector_result.get("retrieved_chunks"))
     )
 
     has_market = (
         market_result is not None and
-        bool(market_result.get("data"))   # or whatever key your market API returns
+        bool(market_result.get("market_data"))   # or whatever key your market API returns
     )
 
 
@@ -425,7 +445,7 @@ async def rerank(
 
     # fetch companies from DB
     market_tickers = list(
-        market_result.get("data", {}).keys()
+        market_result.get("market_data", {}).keys()
     ) if market_result else []
 
     companies = await get_companies_from_db(
@@ -437,12 +457,25 @@ async def rerank(
         return []
 
     # optional LLM scoring
-    llm_scores = llm_rerank_companies(
-        companies     = companies,
-        query         = query,
-        sql_answer    = sql_result.get("answer") if sql_result else None,
-        vector_chunks = vector_result.get("chunks") if vector_result else None,
-        market_data   = market_result.get("data") if market_result else None
+    llm_scores = await llm_rerank_companies(
+    companies=companies,
+    query=query,
+    config=config,
+    sql_answer=(
+        sql_result.get("answer")
+        if sql_result
+        else None
+    ),
+    vector_chunks=(
+        vector_result.get("retrieved_chunks")
+        if vector_result
+        else None
+    ),
+    market_data=(
+        market_result.get("market_data")
+        if market_result
+        else None
+    ),
     )
 
     # score each company

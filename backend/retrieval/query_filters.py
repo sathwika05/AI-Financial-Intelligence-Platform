@@ -8,14 +8,18 @@
 import logging
 from typing import List
 
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
+from langsmith import traceable
 from pydantic import BaseModel
 from sqlalchemy import text
+from backend.llm.llm_context import get_llm_client
+from backend.llm.llm_tiers import LLMTier
 from backend.services.postgres_service import engine
 
 logger = logging.getLogger(__name__)
 
-llm = ChatOpenAI(model="gpt-5.4-nano", temperature=0)
+
 
 # ── Pydantic Schemas ───────────────────────────────────────
 
@@ -48,6 +52,11 @@ async def get_company_mappings() -> str:
 
 # ── Company ID Lookup ──────────────────────────────────────
 
+@traceable(
+    name="company_id_lookup",
+    run_type="tool",
+    tags=["retrieval", "db"],
+)
 async def get_company_id(company_name: str) -> int | None:
     """Map company name or tocker to company_id in DB."""
     try:
@@ -70,7 +79,7 @@ async def get_company_id(company_name: str) -> int | None:
     
 # ── Extract Filters ────────────────────────────────────────
 
-async def extract_filters(query: str) -> dict:
+async def extract_filters(query: str,config: RunnableConfig) -> dict:
     """
     Extract metadata filters from natural language query.
     Loads company mappings dynamically from DB.
@@ -78,6 +87,11 @@ async def extract_filters(query: str) -> dict:
     Returns empty dict if no filters found.
     """
     try:
+        llm = get_llm_client(
+                config,
+                LLMTier.SMALL,
+            )
+        
         llm_structured = llm.with_structured_output(DocumentFilters)
         company_mappings = await get_company_mappings()
        
@@ -147,13 +161,17 @@ async def extract_filters(query: str) -> dict:
     
 # ── Generate Ranking Keywords ──────────────────────────────
 
-def generate_ranking_keywords(query: str) -> list[str]:
+def generate_ranking_keywords(query: str,config: RunnableConfig) -> list[str]:
     """
     Generate 5 financial keywords from the query.
     Keywords filter document content before MMR search.
     Only chunks containing at least one keyword are returned.
     """
     try:
+        llm = get_llm_client(
+                        config,
+                        LLMTier.SMALL,
+                    )
         llm_structured = llm.with_structured_output(RankingKeywords)
 
         prompt = f""" Generate EXACTLY 5 financial keywords from the query.

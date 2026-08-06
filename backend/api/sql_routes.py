@@ -17,11 +17,13 @@ router = APIRouter()
 
 @router.post("/api/retrieve/sql")
 async def retrieve_sql(request: QueryRequest):
-    result = sql_graph.invoke({
+    result = await sql_graph.ainvoke({
        'messages': [HumanMessage(content=request.query)],
        'retry_count': 0,
        'original_question': '',
-       'last_sql': ''
+       'last_sql': '',
+       'db_result': {},
+       'sql_executed_tools': []
     })
 
     #last message is the final agent response

@@ -13,9 +13,9 @@ class Settings(BaseSettings):
     ALPHA_VANTAGE_API_KEY: str = ""
 
 
-    LANGCHAIN_API_KEY: str = ""
-    LANGCHAIN_TRACING_V2: bool = True
-    LANGCHAIN_PROJECT: str = "financial-intelligence-pipeline"
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_TRACING: bool = False
+    LANGCHAIN_PROJECT: str = "ai-financial-intelligence-platform"
 
     model_config = SettingsConfigDict(
         env_file=".env",

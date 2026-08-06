@@ -2,6 +2,7 @@ import logging
 
 from langchain_core.tools import tool
 from langchain_openai import OpenAIEmbeddings
+from langsmith import traceable
 from sqlalchemy import text
 from rank_bm25 import BM25Plus
 
@@ -19,6 +20,11 @@ embeddings = OpenAIEmbeddings(
 )
 
 
+@traceable(
+    name="pgvector_ann_search",
+    run_type="retriever",
+    tags=["retrieval", "vector", "db"],
+)
 async def search_similar_chunks_raw(query: str, top_k: int = 20, filters: dict = None) -> list:
     """
     Fetch top-k similar chunks using raw pgvector SQL.
@@ -26,7 +32,7 @@ async def search_similar_chunks_raw(query: str, top_k: int = 20, filters: dict =
     Fetches more than needed for BM25 to rerank.
     """
 
-    query_embedding = embeddings.embed_query(query)
+    query_embedding = await embeddings.aembed_query(query)
 
     vector_str = "[" + ",".join(
         str(x) for x in query_embedding
@@ -62,6 +68,8 @@ async def search_similar_chunks_raw(query: str, top_k: int = 20, filters: dict =
 
     sql = text(f"""
         SELECT
+            dc.id,
+            dc.document_id,
             dc.content,
             dc.chunk_index,
             d.doc_type,
@@ -87,6 +95,11 @@ async def search_similar_chunks_raw(query: str, top_k: int = 20, filters: dict =
     
 # ── BM25 Reranker ──────────────────────────────────────────
 
+@traceable(
+    name="bm25_rerank",
+    run_type="chain",
+    tags=["retrieval", "rerank", "lexical"],
+)
 def bm25_rerank(
      rows: list,
      keywords: list[str],
@@ -194,11 +207,13 @@ async def retrieve_similar(query: str, top_k: int = 5) -> str:
             f"[VECTOR_SEARCH] Query: {query}, top_k: {top_k}"
         )
 
+
+
         filters  = await extract_filters(query)
         keywords = generate_ranking_keywords(query)
 
 
-        rows = search_similar_chunks(
+        rows = await search_similar_chunks(
             query = query, 
             top_k = top_k,
             filters = filters,

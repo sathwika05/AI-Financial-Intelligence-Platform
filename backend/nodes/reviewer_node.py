@@ -24,264 +24,435 @@ Output (to state):
 
 import json
 import logging
-from typing import Optional
+from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from langsmith import traceable
 
-from backend.llm.llm_factory import llm_mini
+from backend.llm.llm_context import get_llm_client
+from backend.llm.llm_tiers import LLMTier
+
 
 logger = logging.getLogger(__name__)
 
-CONFIDENCE_THRESHOLD = 0.70   # below → flag as low confidence
-HALLUCINATION_THRESHOLD = 0.30   # above → trigger retry
-MAX_RETRIES             = 3      # max retries before forced pass
-TOP_N_FINAL             = 5      # companies in final output
 
-# ----------------- Individual checks ------------------------------------------
+CONFIDENCE_THRESHOLD = 0.70 # below → flag as low confidence
+HALLUCINATION_THRESHOLD = 0.30 # above → trigger retry
+MAX_RETRIES = 3    # max retries before forced pass
+TOP_N_FINAL = 5  # companies in final output
 
-def _check_confidence(draft_report: dict) -> list[str]:
-    """Flag companies and overall report with confidence below threshold."""
-    flags = []
-    overall = draft_report.get("overall_confidence",0.0)
 
-    if overall <CONFIDENCE_THRESHOLD:
+def _check_confidence(
+    draft_report: dict[str, Any],
+) -> list[str]:
+    """Flag companies and reports below the confidence threshold."""
+    flags: list[str] = []
+
+    overall_confidence = float(
+        draft_report.get("overall_confidence", 0.0)
+    )
+
+    if overall_confidence < CONFIDENCE_THRESHOLD:
         flags.append(
-            f"Overall confidence {overall: .2f} below threshold {CONFIDENCE_THRESHOLD}"
+            f"Overall confidence {overall_confidence:.2f} "
+            f"is below threshold {CONFIDENCE_THRESHOLD:.2f}"
         )
-    
+
     for company in draft_report.get("companies", []):
-        conf = company.get("confidence", 0.0)
+        confidence = float(
+            company.get("confidence", 0.0)
+        )
         ticker = company.get("ticker", "?")
-        if conf < CONFIDENCE_THRESHOLD:
+
+        if confidence < CONFIDENCE_THRESHOLD:
             flags.append(
-                f"{ticker}: confidence {conf:.2f} below threshold {CONFIDENCE_THRESHOLD}"
+                f"{ticker}: confidence {confidence:.2f} "
+                f"is below threshold "
+                f"{CONFIDENCE_THRESHOLD:.2f}"
             )
-    return flags
-
-
-
-def _check_missing_evidence(draft_report: dict) -> list[str]:
-    """Flag companies with no evidence snippets."""
-
-    flags = []
-    for company in draft_report.get("companies",[]):
-        ticker = company.get("ticker","?")
-        evidence = company.get("evidence", [])
-        if not evidence:
-            flags.append(f"{ticker}: no evidence snippets provided")
 
     return flags
 
-def _check_company_flags(draft_report: dict) -> list[str]:
-    """Collect flags the LLM itself raised per company."""
-    flags = []
+
+def _check_missing_evidence(
+    draft_report: dict[str, Any],
+) -> list[str]:
+    """Flag companies with no attached evidence."""
+    flags: list[str] = []
+
     for company in draft_report.get("companies", []):
         ticker = company.get("ticker", "?")
-        for flag in company.get("flags", []):
-            flags.append(f"{ticker}: {flag}")
+        evidence = company.get("evidence", [])
+
+        if not evidence:
+            flags.append(
+                f"{ticker}: no evidence snippets provided"
+            )
+
     return flags
 
 
+def _check_company_flags(
+    draft_report: dict[str, Any],
+) -> list[str]:
+    """Collect flags raised by the analysis node."""
+    flags: list[str] = []
+
+    for company in draft_report.get("companies", []):
+        ticker = company.get("ticker", "?")
+
+        for flag in company.get("flags", []):
+            flags.append(
+                f"{ticker}: {flag}"
+            )
+
+    return flags
 
 
-def _build_attached_evidence_text(ranked_companies: list[dict]) -> str:
-    lines = []
+def _build_attached_evidence_text(
+    ranked_companies: list[dict[str, Any]],
+) -> str:
+    """Build evidence text for the reviewer LLM."""
+    lines: list[str] = []
 
     for company in ranked_companies:
         ticker = company.get("ticker", "?")
 
-        for e in company.get("evidence", []):
+        for evidence in company.get("evidence", []):
             lines.append(
-                f"{ticker} [{e.get('citation_id')}]: "
-                f"source={e.get('source')} | "
-                f"supports={e.get('supports')} | "
-                f"text={e.get('text')}"
+                f"{ticker} "
+                f"[{evidence.get('citation_id', 'missing')}]: "
+                f"source={evidence.get('source', 'unknown')} | "
+                f"supports={evidence.get('supports', '')} | "
+                f"text={evidence.get('text', '')}"
             )
 
     return "\n".join(lines)
 
 
-def _llm_hallucination_check(
-    draft_report: dict,
-    ranked_companies: list[dict],
-) -> dict:
-    source_evidence = _build_attached_evidence_text(ranked_companies)
+def _build_claims(
+    draft_report: dict[str, Any],
+) -> list[str]:
+    """Extract reviewable company claims from the draft."""
+    claims: list[str] = []
 
-    claims = [
-        f"{c.get('ticker')}: {c.get('summary', '')}"
-        for c in draft_report.get("companies", [])
-    ]
+    for company in draft_report.get("companies", []):
+        ticker = company.get("ticker", "?")
+        summary = company.get("summary", "")
+
+        if summary:
+            claims.append(
+                f"{ticker}: {summary}"
+            )
+
+    return claims
+
+
+async def _llm_hallucination_check(
+    draft_report: dict[str, Any],
+    ranked_companies: list[dict[str, Any]],
+    config: RunnableConfig,
+) -> dict[str, Any]:
+    """
+    Check whether draft claims are supported by attached evidence.
+    """
+    source_evidence = _build_attached_evidence_text(
+        ranked_companies
+    )
+    claims = _build_claims(
+        draft_report
+    )
 
     if not claims:
-        return {"hallucination_rate": 0.0, "flagged_claims": []}
+        return {
+            "hallucination_rate": 0.0,
+            "flagged_claims": [],
+        }
 
     if not source_evidence:
         return {
             "hallucination_rate": 1.0,
-            "flagged_claims": ["No attached company-level evidence available"]
+            "flagged_claims": [
+                "No company-level evidence is available"
+            ],
         }
 
-    system = SystemMessage(content="""
+    llm = get_llm_client(
+        config,
+        LLMTier.LARGE,
+    )
+
+    system_message = SystemMessage(
+        content="""
 You are a fact-checker for financial reports.
 
-Given report claims and company-level source evidence, classify only truly unsupported or contradicted claims as hallucinations.
+Compare each report claim against the supplied company-level evidence.
 
 Rules:
-- Use only the provided company-level evidence.
-- Claims directly matching SQL, metrics, market, or vector evidence are supported.
-- Claims reasonably inferred from provided metrics are supported, but may be considered weak evidence.
-- Do not require separate news, analyst, or earnings-call evidence unless the claim explicitly mentions news, analysts, earnings calls, estimate revisions, or transcripts.
-- Do not flag a claim only because stronger evidence could exist.
-- Flag only claims that are absent from the evidence or contradicted by the evidence.
+- Use only the supplied evidence.
+- Claims directly supported by SQL, financial metrics, market data,
+  filings, transcripts, or retrieved documents are supported.
+- Reasonable conclusions directly derived from supplied metrics may
+  be treated as supported but weak.
+- Do not require news or analyst evidence unless the claim explicitly
+  refers to news, analysts, earnings calls, estimate revisions, or
+  management commentary.
+- Flag claims that are unsupported or contradicted.
+- Do not flag a claim merely because stronger evidence could exist.
 
-Return ONLY valid JSON:
+Return only valid JSON with this structure:
+
 {
   "hallucination_rate": 0.0,
   "flagged_claims": []
 }
 
-hallucination_rate = unsupported_or_contradicted_claims / total_claims.
-If all claims are supported or reasonably inferred -> hallucination_rate: 0.0, flagged_claims: []
-No markdown. No explanation. Just JSON.
-""")
+Calculate hallucination_rate as:
 
-    user = HumanMessage(content=f"""
+unsupported_or_contradicted_claims / total_claims
+
+Do not return markdown or additional explanation.
+""".strip()
+    )
+
+    human_message = HumanMessage(
+        content=f"""
 CLAIMS TO VERIFY:
+
 {chr(10).join(claims)}
 
-COMPANY-LEVEL SOURCE EVIDENCE:
+COMPANY-LEVEL EVIDENCE:
+
 {source_evidence}
 
-Return JSON.
-""")
+Return only JSON.
+""".strip()
+    )
 
     try:
-        response = llm_mini.invoke([system, user])
-        content = response.content.strip()
-        content = content.replace("```json", "").replace("```", "").strip()
-        result = json.loads(content)
+        response = await llm.ainvoke(
+            [
+                system_message,
+                human_message,
+            ],
+            config=config,
+        )
+
+        content = response.content
+
+        if not isinstance(content, str):
+            raise TypeError(
+                "Reviewer LLM returned non-string content"
+            )
+
+        cleaned_content = (
+            content
+            .replace("```json", "")
+            .replace("```", "")
+            .strip()
+        )
+
+        result = json.loads(
+            cleaned_content
+        )
+
+        hallucination_rate = float(
+            result.get("hallucination_rate", 0.0)
+        )
+
+        hallucination_rate = min(
+            max(hallucination_rate, 0.0),
+            1.0,
+        )
+
+        flagged_claims = result.get(
+            "flagged_claims",
+            [],
+        )
+
+        if not isinstance(flagged_claims, list):
+            flagged_claims = [
+                str(flagged_claims)
+            ]
 
         return {
-            "hallucination_rate": float(result.get("hallucination_rate", 0.0)),
-            "flagged_claims": result.get("flagged_claims", []),
+            "hallucination_rate": hallucination_rate,
+            "flagged_claims": [
+                str(claim)
+                for claim in flagged_claims
+            ],
         }
 
-    except Exception as e:
-        logger.error(f"[REVIEWER] LLM hallucination check failed: {e}")
-        return {"hallucination_rate": 0.0, "flagged_claims": []}
+    except Exception:
+        logger.exception(
+            "[REVIEWER] LLM hallucination check failed"
+        )
 
+        # Fail safely instead of silently approving.
+        return {
+            "hallucination_rate": 1.0,
+            "flagged_claims": [
+                "Hallucination review could not be completed"
+            ],
+        }
+
+
+@traceable(
+    name="citation_check",
+    run_type="tool",
+    tags=["review", "guardrail"],
+)
 def _check_citations(
-    draft_report: dict,
-    ranked_companies: list[dict]  
+    draft_report: dict[str, Any],
+    ranked_companies: list[dict[str, Any]],
 ) -> list[str]:
-    
-    flags = []
+    """Validate draft citation IDs against ranked evidence."""
+    flags: list[str] = []
 
-    allowed_by_ticker = {}
+    allowed_by_ticker: dict[str, set[str]] = {}
 
     for company in ranked_companies:
-        ticker = company.get("ticker", "").upper()
-        allowed_by_ticker[ticker] = {
-            e.get("citation_id")
-            for e in company.get("evidence", [])
-            if e.get("citation_id")
-        }
-    
-    for company in draft_report.get("companies",[]):
-        ticker = company.get("ticker","").upper()
-        allowed_ids = allowed_by_ticker.get(ticker, set())
+        ticker = str(
+            company.get("ticker", "")
+        ).upper()
 
-        for ev in company.get("evidence", []):
-            citation_id = ev.get("citation_id")
+        allowed_by_ticker[ticker] = {
+            str(evidence["citation_id"])
+            for evidence in company.get("evidence", [])
+            if evidence.get("citation_id")
+        }
+
+    for company in draft_report.get("companies", []):
+        ticker = str(
+            company.get("ticker", "")
+        ).upper()
+
+        allowed_ids = allowed_by_ticker.get(
+            ticker,
+            set(),
+        )
+
+        for evidence in company.get("evidence", []):
+            citation_id = evidence.get(
+                "citation_id"
+            )
 
             if not citation_id:
-                flags.append(f"{ticker}: missing citation_id")
-            elif citation_id not in allowed_ids:
-                flags.append(f"{ticker}: invalid citation_id {citation_id}")
-    
+                flags.append(
+                    f"{ticker}: missing citation_id"
+                )
+            elif str(citation_id) not in allowed_ids:
+                flags.append(
+                    f"{ticker}: invalid citation_id "
+                    f"{citation_id}"
+                )
 
     return flags
 
-    
-    
 
-
-# ------------ Main reviewer function -------------------------------------------------------
-
-def run_reviewer(
-    draft_report: dict,
-    ranked_companies: list[dict],
-    retry_count: int = 0    
-) -> dict:
-    """
-    Review the draft report and decide: approve or retry.
-    """
-
+async def run_reviewer(
+    draft_report: dict[str, Any],
+    ranked_companies: list[dict[str, Any]],
+    retry_count: int,
+    config: RunnableConfig,
+) -> dict[str, Any]:
+    """Review the report and decide whether to approve or retry."""
     logger.info(
-        f"[REVIEWER] Reviewing draft report - "
-        f"retry_count={retry_count}, "
-        f"companies={len(draft_report.get('companies', []))}"
+        "[REVIEWER] Reviewing report retry_count=%s companies=%s",
+        retry_count,
+        len(draft_report.get("companies", [])),
     )
 
-    confidence_flags = _check_confidence(draft_report)
-    evidence_flags = _check_missing_evidence(draft_report)
-    company_flags = _check_company_flags(draft_report)
-
-    llm_hall = _llm_hallucination_check(
-        draft_report, ranked_companies
+    confidence_flags = _check_confidence(
+        draft_report
     )
-
-    hallucination_rate = llm_hall["hallucination_rate"]
-    llm_flagged_claims = llm_hall["flagged_claims"]
-
+    evidence_flags = _check_missing_evidence(
+        draft_report
+    )
+    company_flags = _check_company_flags(
+        draft_report
+    )
     citation_flags = _check_citations(
-    draft_report,
-    ranked_companies
+        draft_report,
+        ranked_companies,
     )
 
-    all_flags = (
-        confidence_flags +
-        evidence_flags +
-        company_flags + 
-        citation_flags+
-        llm_flagged_claims
+    hallucination_result = (
+        await _llm_hallucination_check(
+            draft_report=draft_report,
+            ranked_companies=ranked_companies,
+            config=config,
+        )
     )
 
-    total_flags = len(all_flags)
+    hallucination_rate = hallucination_result[
+        "hallucination_rate"
+    ]
+    hallucination_flags = hallucination_result[
+        "flagged_claims"
+    ]
 
-    has_hallucinations = (hallucination_rate > HALLUCINATION_THRESHOLD or bool(llm_flagged_claims))
-    has_missed_evidence = bool(evidence_flags)
-    has_invalid_citations = bool(citation_flags)
+    all_flags = [
+        *confidence_flags,
+        *evidence_flags,
+        *company_flags,
+        *citation_flags,
+        *hallucination_flags,
+    ]
+
+    has_hallucinations = (
+        hallucination_rate > HALLUCINATION_THRESHOLD
+        or bool(hallucination_flags)
+    )
+    has_missing_evidence = bool(
+        evidence_flags
+    )
+    has_invalid_citations = bool(
+        citation_flags
+    )
+
+    quality_failure = (
+        has_hallucinations
+        or has_missing_evidence
+        or has_invalid_citations
+    )
 
     should_retry = (
-        (has_hallucinations or has_missed_evidence or has_invalid_citations) and 
-        retry_count < MAX_RETRIES
+        quality_failure
+        and retry_count < MAX_RETRIES
     )
 
-    if retry_count >= MAX_RETRIES:
+    if retry_count >= MAX_RETRIES and quality_failure:
         decision = "forced_pass"
         passed = True
+        should_retry = False
+
         logger.warning(
-            f"[REVIEWER] Max retries reached - "
-            f"forcing pass with {total_flags} flags"
+            "[REVIEWER] Maximum retries reached; "
+            "forcing pass flags=%s",
+            len(all_flags),
         )
 
     elif should_retry:
         decision = "retry"
         passed = False
+
         logger.info(
-            f"[REVIEWER] retry triggered - "
-            f"hallucination_rate={hallucination_rate:.2f}, "
-            f"flags={total_flags}"
+            "[REVIEWER] Retry triggered "
+            "hallucination_rate=%.2f flags=%s",
+            hallucination_rate,
+            len(all_flags),
         )
 
     else:
         decision = "approved"
         passed = True
+
         logger.info(
-            f"[REVIEWER] Approved - "
-            f"confidence={draft_report.get('overall_confidence')}, "
-            f"flags={total_flags}"
+            "[REVIEWER] Approved confidence=%s flags=%s",
+            draft_report.get("overall_confidence"),
+            len(all_flags),
         )
 
     return {
@@ -290,85 +461,174 @@ def run_reviewer(
         "decision": decision,
         "confidence_flags": confidence_flags,
         "evidence_flags": evidence_flags,
-        "hallucination_flags": llm_flagged_claims,
+        "hallucination_flags": hallucination_flags,
         "company_flags": company_flags,
-        "hallucination_rate": hallucination_rate,
         "citation_flags": citation_flags,
-        "total_flags": total_flags
+        "hallucination_rate": hallucination_rate,
+        "total_flags": len(all_flags),
     }
 
-#---------------------- Final Output Builder -------------------------------------------------------------------
+
 def build_final_output(
-        draft_report: dict,
-        review_result: dict,
-)-> dict:
-    """
-    Merge draft_report + review_result into the final output
-    """
-
-    companies = draft_report.get("companies",[])
-
-    return {
-       "query_summary": draft_report.get("query_summary"),
-       "intent": draft_report.get("intent"),
-       "top_companies": companies[:TOP_N_FINAL],
-       "overall_confidence": draft_report.get("overall_confidence"),
-       "evidence_quality": draft_report.get("evidence_quality"),
-       "review":{
-           "decision": review_result["decision"],
-           "hallucination_rate": review_result["hallucination_rate"],
-           "total_flags": review_result["total_flags"],
-           "flags": (
-               review_result["confidence_flags"] +
-               review_result["evidence_flags"] +
-               review_result["citation_flags"] +
-               review_result["company_flags"] +
-               review_result["hallucination_flags"]
-           ),
-       },
-       "sources_used": draft_report.get("_meta",{}).get("sources_used", {}),
-       }
-
-
-#-------------------------- LangGraph node ------------------------------------------------------------------------
-
-async def reviewer_node(state: dict) -> dict:
-    """
-    LangGraph node - Reviewer.
-
-    Reads : draft_report, ranked_companies,retry_count
-    Writes: review_result, final_report, should_retry, retry_count
-    """
-
-    draft_report = state.get("draft_report", {})
-    retry_count = state.get("retry_count",0)
-    ranked_companies = state.get("ranked_companies", [])
-
-    if not draft_report or not draft_report.get("companies"):
-        logger.warning("[REVIEWER_NODE] Empty draft report - skipping review")
-        return {
-            **state,
-            "review_result": {"decision": "forced_pass", "total_flags":0},
-            "final_report": draft_report,
-            "should_retry": False,
-            "retry_count": retry_count
-        }    
-    
-    review_result = run_reviewer(
-        draft_report = draft_report,
-        ranked_companies=ranked_companies,
-        retry_count = retry_count
+    draft_report: dict[str, Any],
+    review_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the final user-facing report."""
+    companies = draft_report.get(
+        "companies",
+        [],
     )
 
-    should_retry = review_result["should_retry"]
+    review_flags = [
+        *review_result.get(
+            "confidence_flags",
+            [],
+        ),
+        *review_result.get(
+            "evidence_flags",
+            [],
+        ),
+        *review_result.get(
+            "citation_flags",
+            [],
+        ),
+        *review_result.get(
+            "company_flags",
+            [],
+        ),
+        *review_result.get(
+            "hallucination_flags",
+            [],
+        ),
+    ]
+
+    return {
+        "query_summary": draft_report.get(
+            "query_summary"
+        ),
+        "intent": draft_report.get(
+            "intent"
+        ),
+        "top_companies": companies[
+            :TOP_N_FINAL
+        ],
+        "overall_confidence": draft_report.get(
+            "overall_confidence"
+        ),
+        "evidence_quality": draft_report.get(
+            "evidence_quality"
+        ),
+        "review": {
+            "decision": review_result.get(
+                "decision"
+            ),
+            "hallucination_rate": review_result.get(
+                "hallucination_rate",
+                0.0,
+            ),
+            "total_flags": review_result.get(
+                "total_flags",
+                0,
+            ),
+            "flags": review_flags,
+        },
+        "sources_used": (
+            draft_report
+            .get("_meta", {})
+            .get("sources_used", {})
+        ),
+    }
+
+
+async def reviewer_node(
+    state: dict[str, Any],
+    config: RunnableConfig,
+) -> dict[str, Any]:
+    """
+    LangGraph reviewer node.
+
+    Reads:
+        draft_report
+        ranked_companies
+        retry_count
+
+    Writes:
+        review_result
+        final_report
+        should_retry
+        retry_count
+    """
+    draft_report = state.get(
+        "draft_report",
+        {},
+    )
+    ranked_companies = state.get(
+        "ranked_companies",
+        [],
+    )
+    retry_count = state.get(
+        "retry_count",
+        0,
+    )
+
+    if not draft_report or not draft_report.get(
+        "companies"
+    ):
+        logger.warning(
+            "[REVIEWER_NODE] Empty draft report; "
+            "returning forced pass"
+        )
+
+        review_result = {
+            "passed": True,
+            "should_retry": False,
+            "decision": "forced_pass",
+            "confidence_flags": [],
+            "evidence_flags": [],
+            "hallucination_flags": [],
+            "company_flags": [],
+            "citation_flags": [],
+            "hallucination_rate": 0.0,
+            "total_flags": 0,
+        }
+
+        return {
+            **state,
+            "review_result": review_result,
+            "final_report": draft_report,
+            "should_retry": False,
+            "retry_count": retry_count,
+        }
+
+    review_result = await run_reviewer(
+        draft_report=draft_report,
+        ranked_companies=ranked_companies,
+        retry_count=retry_count,
+        config=config,
+    )
+
+    should_retry = review_result[
+        "should_retry"
+    ]
 
     final_report = None
+
     if not should_retry:
-        final_report = build_final_output(draft_report, review_result)
+        final_report = build_final_output(
+            draft_report=draft_report,
+            review_result=review_result,
+        )
+
         logger.info(
-            f"[REVIEWER_NODE] Final report ready - "
-            f"decison={review_result['decision']}"
-            f"companies={len(final_report.get('top_companies',[]))}"
+            "[REVIEWER_NODE] Final report ready "
+            "decision=%s companies=%s",
+            review_result["decision"],
+            len(
+                final_report.get(
+                    "top_companies",
+                    [],
+                )
+            ),
         )
 
     return {
@@ -376,25 +636,30 @@ async def reviewer_node(state: dict) -> dict:
         "review_result": review_result,
         "final_report": final_report,
         "should_retry": should_retry,
-        "retry_count": retry_count + (1 if should_retry else 0)
+        "retry_count": (
+            retry_count + 1
+            if should_retry
+            else retry_count
+        ),
     }
-    
-# ------------------------ LangGraph conditional edge -------------------------------------------------------
 
-def route_after_review(state:dict):
-    """
-    Conditional edge after reviewer_node.
-    "retrieval" -> retry
-    "output" -> approved / forced_pass
-    """
 
-    if state.get("should_retry",False):
-        logger.info("[ROUTER] Routing back to retrieval for retry")
+def route_after_review(
+    state: dict[str, Any],
+) -> str:
+    """
+    Route to retrieval on retry, otherwise to final output.
+    """
+    if state.get("should_retry", False):
+        logger.info(
+            "[REVIEWER_ROUTER] Routing to retrieval"
+        )
         return "retrieval"
-    
-    logger.info("[ROUTER] Routing to final output")
+
+    logger.info(
+        "[REVIEWER_ROUTER] Routing to output"
+    )
     return "output"
-    
 
     
 

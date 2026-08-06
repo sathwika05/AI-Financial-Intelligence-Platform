@@ -8,11 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.llm.llm_tiers import LLMTier
 from backend.models.db_models import LLMModel, LLMProvider
-from backend.llm.encryption_service import EncryptionService, encryption_service
+from backend.llm.encryption_service import encryption_service
 from backend.llm.llm_runtime import LLMRuntime, ModelRuntime
 from backend.llm.llm_factory import create_llm_client
-
-from backend.config import settings 
 
 
 REQUIRED_TIERS = {
@@ -32,9 +30,7 @@ class LLMConfigService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-        self.encryption_service = EncryptionService(
-            settings.LLM_ENCRYPTION_KEY
-        )
+        self.encryption_service = encryption_service
 
     async def load_default_runtime(
         self,
@@ -156,3 +152,27 @@ class LLMConfigService:
                 "Missing required LLM model tiers: "
                 + ", ".join(sorted(missing_tiers))
             )
+
+    async def load_provider_runtime(self, provider_id: UUID,) -> LLMRuntime:
+        provider = await self._load_provider_by_id(provider_id)
+
+        model_records = await self._load_enabled_models(provider.id)
+
+        return self._build_runtime(provider=provider, model_records=model_records,)
+
+    async def _load_provider_by_id(self,provider_id: UUID,) -> LLMProvider:
+        result = await self.session.execute(
+            select(LLMProvider).where(
+            LLMProvider.id == provider_id,
+            LLMProvider.is_enabled.is_(True),
+        )
+        )
+
+        provider = result.scalar_one_or_none()
+
+        if provider is None:
+            raise RuntimeError(
+            "Selected provider does not exist or is disabled"
+        )
+
+        return provider

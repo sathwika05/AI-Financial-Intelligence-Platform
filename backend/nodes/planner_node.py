@@ -1,12 +1,16 @@
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
+
+from backend.llm.llm_context import get_llm_client
+from backend.llm.llm_tiers import LLMTier
+from backend.state.financial_state import FinancialState
 
 
 logger = logging.getLogger(__name__)
-llm = ChatOpenAI(model="gpt-5.4-mini", temperature=0)
+
 
 
 class QueryPlan(BaseModel):
@@ -27,7 +31,7 @@ class QueryPlan(BaseModel):
     )
 
 
-def plan_query(query: str, intent: str) -> dict:
+async def plan_query(query: str, intent: str,config: RunnableConfig ) -> dict:
     """
     Decompose user query into focused subqueries
     for each retrieval branch.
@@ -38,6 +42,8 @@ def plan_query(query: str, intent: str) -> dict:
     MIXED      → both sql_query + vector_query + market_query
     """
     try:
+
+        llm = get_llm_client(config, LLMTier.MEDIUM)
         llm_structured = llm.with_structured_output(QueryPlan)
 
         system = SystemMessage(content="""
@@ -97,12 +103,15 @@ def plan_query(query: str, intent: str) -> dict:
             → strategy:     "PARALLEL"
             """)
 
-        response = llm_structured.invoke([
-            system,
-            HumanMessage(
-                content=f"Query: {query}\nIntent: {intent}"
-            )
-        ])
+        response = await llm_structured.ainvoke(
+            [
+                system,
+                HumanMessage(
+                    content=f"Query: {query}\nIntent: {intent}"
+                )
+            ],
+            config=config,
+        )
 
         logger.info(
             f"[PLANNER] strategy: {response.strategy}, "
@@ -128,13 +137,12 @@ def plan_query(query: str, intent: str) -> dict:
         }
 
 
-def planner_node(state: dict) -> dict:
+async def planner_node(state: FinancialState,config: RunnableConfig) -> dict:
     """LangGraph node for query planning."""
     query  = state["original_query"]
     intent = state["intent"]
-    plan   = plan_query(query, intent)
+    plan   = await plan_query(query, intent,config)
     return {
-        **state,
         "sql_query":    plan["sql_query"],
         "vector_query": plan["vector_query"],
         "market_query": plan["market_query"],

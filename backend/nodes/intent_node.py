@@ -1,16 +1,21 @@
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
-
+from backend.llm.llm_context import get_llm_client
+from backend.llm.llm_tiers import LLMTier
 
 logger = logging.getLogger(__name__)
 
-llm = ChatOpenAI(model="gpt-5.4-nano", temperature=0)
 
 
 class QueryIntent(BaseModel):
+    """
+    Structured output returned by the intent-classification
+    Large Language Model.
+    """
+
     intent: str = Field(
         description="Query intent: VALUATION, GROWTH, SENTIMENT or MIXED"
     )
@@ -18,8 +23,63 @@ class QueryIntent(BaseModel):
         description="Brief reason for the classification"
     )
 
+# System instructions are stored as plain text.
+# A SystemMessage is created only when invoking the model.
+INTENT_SYSTEM_PROMPT = """
+You are a financial query classifier.
 
-def classify_intent(query: str) -> str:
+Classify the user query into exactly one of:
+
+VALUATION
+    - Questions about stock-price metrics and value
+    - Price-to-Earnings ratio, market capitalization,
+      undervalued, overvalued, or fair value
+    - Price-based filtering and ranking
+    - Examples:
+        "Find undervalued technology companies"
+        "Which stocks have a low Price-to-Earnings ratio?"
+        "Show me large-capitalization companies"
+
+GROWTH
+    - Questions about business performance and expansion
+    - Revenue growth, Earnings Per Share, earnings,
+      and profit margins
+    - Growth-based filtering and ranking
+    - Examples:
+        "Show companies with revenue growth over 20%"
+        "Which companies have strong Earnings Per Share?"
+        "Find high-growth technology stocks"
+
+SENTIMENT
+    - Questions about news, opinions, or commentary
+    - Earnings-call content, Securities and Exchange
+      Commission filings, and news articles
+    - Management statements, analyst opinions,
+      and market sentiment
+    - Examples:
+        "What did Apple say about Artificial Intelligence?"
+        "Show positive news about NVIDIA"
+        "What are analysts saying about Tesla?"
+        "What did management say about the growth outlook?"
+
+MIXED
+    - Questions requiring both structured metrics
+      and document context
+    - Combines valuation or growth with sentiment
+    - Examples:
+        "Find undervalued Artificial Intelligence companies
+         with positive news"
+        "Cheap technology stocks with good earnings commentary"
+        "Low Price-to-Earnings companies with a strong
+         growth narrative"
+        "Which high-growth companies have positive sentiment?"
+
+Return:
+- intent: exactly one of VALUATION, GROWTH, SENTIMENT, MIXED
+- reason: a short explanation for the classification
+""".strip()
+
+async def classify_intent(query: str, config: RunnableConfig) -> QueryIntent:
     """
     Classify query into business domain intent.
 
@@ -28,75 +88,73 @@ def classify_intent(query: str) -> str:
     SENTIMENT  → news, opinions, earnings calls, filings, commentary
     MIXED      → combination of metrics AND document context
     """
+    llm = get_llm_client(config, LLMTier.SMALL)
     llm_structured = llm.with_structured_output(QueryIntent)
 
-    system = SystemMessage(content="""
-            You are a financial query classifier.
-
-                Classify the user query into exactly one of:
-
-            VALUATION
-                - Questions about stock price metrics and value
-                - PE ratio, market cap, undervalued, overvalued, fair value
-                - Price-based filtering and ranking
-                - Examples:
-                        "Find undervalued tech companies"
-                        "Which stocks have low PE ratio?"
-                        "Show me large cap companies"
-
-            GROWTH
-                - Questions about business performance and expansion
-                - Revenue growth, EPS, earnings, profit margins
-                - Growth-based filtering and ranking
-                - Examples:
-                        "Show companies with revenue growth over 20%"
-                        "Which companies have strong EPS?"
-                        "Find high growth technology stocks"
-
-            SENTIMENT
-                - Questions about news, opinions, commentary
-                - Earnings call content, SEC filings, news articles
-                - What companies said, analyst opinions, market sentiment
-                - Examples:
-                        "What did Apple say about AI?"
-                        "Show positive news about NVIDIA"
-                        "What are analysts saying about Tesla?"
-                        "What did management say about growth outlook?"
-
-            MIXED
-                - Questions needing BOTH metrics AND documents
-                - Combining valuation/growth with sentiment
-                - Examples:
-                        "Find undervalued AI companies with positive news"
-                        "Cheap tech stocks with good earnings commentary"
-                        "Low PE companies with strong growth narrative"
-                        "Which high growth companies have positive sentiment?"
-
-            Return only VALUATION, GROWTH, SENTIMENT or MIXED.
-        """)
-
-    response = llm_structured.invoke([
-        system,
+    
+    # Pass RunnableConfig downstream so tags, metadata,
+    # and LangSmith tracing remain attached to this call.
+    response = await llm_structured.ainvoke([
+        SystemMessage(
+                content=INTENT_SYSTEM_PROMPT
+            ),
         HumanMessage(content=query)
-    ])
+        ],
+        config=config,
+    )
 
     intent = response.intent.upper().strip()
     if intent not in ["VALUATION", "GROWTH", "SENTIMENT", "MIXED"]:
+        logger.warning(
+            "[INTENT] Unsupported intent '%s'; "
+            "falling back to MIXED",
+            intent,
+        )
         intent = "MIXED"
 
-    logger.info(
-        f"[INTENT] Query: '{query}' → {intent} ({response.reason})"
+    result = QueryIntent(
+        intent=intent,
+        reason=response.reason.strip(),
     )
 
-    return intent
+    logger.info(
+        "[INTENT] Query='%s' intent=%s reason=%s",
+        query,
+        result.intent,
+        result.reason,
+    )
+
+    return result
 
 
-def intent_node(state: dict) -> dict:
+async def intent_node(state: dict,config: RunnableConfig) -> dict:
     """LangGraph node that classifies query intent."""
     query  = state["messages"][-1].content
-    intent = classify_intent(query)
+    # Compatibility fallback for states created before
+    # original_query was initialized.
+    if not query:
+        messages = state.get(
+            "messages",
+            [],
+        )
+
+        if not messages:
+            raise ValueError(
+                "Intent node received no original query "
+                "and no messages."
+            )
+
+        query = str(
+            messages[0].content
+        )
+
+    classification = await classify_intent(
+        query=query,
+        config=config,
+    )
+
     return {
-        **state,
-        "intent":         intent,
-        "original_query": query
+         "intent": classification.intent,
+         "intent_reason": classification.reason,
+         "original_query": query,
     }

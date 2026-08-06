@@ -9,7 +9,9 @@ import logging
 import operator
 from typing import Annotated, Any, Optional, TypedDict
 
-from langgraph.graph import END, START, StateGraph
+from langchain_core.messages import BaseMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.graph import END, START, StateGraph, add_messages
 
 from backend.nodes.analysis_node import analysis_node
 from backend.nodes.intent_node import intent_node
@@ -17,48 +19,19 @@ from backend.nodes.planner_node import planner_node
 from backend.nodes.reviewer_node import reviewer_node, route_after_review
 from backend.nodes.scoring_node import scoring_node
 from backend.retrieval.hybrid_retrieval import hybrid_retrieve_async
+from backend.state.financial_state import FinancialState
 
 
 logger = logging.getLogger(__name__)
 
-# ── State ───────────────────────────────────────────────────
 
-class FinancialState(TypedDict):
-    messages: Annotated[list, operator.add]
-    original_query: str
 
-    intent:   str
-    intent_reason: str
-    
-    sql_query: str
-    vector_query: str
-    market_query: str
-    strategy: str
-
-    sql_result: dict[str, Any]
-    vector_result: dict[str, Any]
-    market_result: dict[str, Any]
-
-    retrieved_contexts: list[str]
-    reranked_contexts: list[str]
-
-    scoring_result: Optional[dict]   # ← added
-    ranked_companies: list
-
-    draft_report: Optional[dict] # from analysis_node
-    review_result: Optional[dict] # from reviewer_node
-    final_report: Optional[dict] # approved output
-
-    should_retry: bool # reviewer retry flag
-    retry_count: int # retry counter
-
-    executed_tools: Annotated[list[str], operator.add,]
 
 
 
 # ── Retrieval Node ──────────────────────────────────────────
 
-async def retrieval_node(state: FinancialState) -> dict:
+async def retrieval_node(state: FinancialState, config: RunnableConfig) -> dict:
     """
     Runs async parallel hybrid retrieval.
     Uses asyncio.run to execute async function
@@ -85,10 +58,24 @@ async def retrieval_node(state: FinancialState) -> dict:
             intent       = intent,
             sql_query    = sql_query,
             vector_query = vector_query,
-            market_query = market_query
+            market_query = market_query,
+            config       = config
     )
 
-    return {**state, "result": result}
+    # Spread into the keys FinancialState declares. LangGraph drops any
+    # key that is not in the state schema, so a nested "result" blob
+    # would silently vanish before the scoring node runs.
+    vector_result = result.get("vector_result", {})
+
+    return {
+        **state,
+        "sql_result":         result.get("sql_result", {}),
+        "vector_result":      vector_result,
+        "market_result":      result.get("market_result", {}),
+        "retrieved_contexts": vector_result.get(
+            "retrieved_contexts", []
+        ),
+    }
 
 
 # ── Routers ─────────────────────────────────────────────────

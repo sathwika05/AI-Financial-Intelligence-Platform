@@ -50,7 +50,7 @@ def get_model_runtime(
     runtime = get_llm_runtime(config)
     return runtime.get_model(tier)
 
-def get_llmclient(
+def get_llm_client(
         config: RunnableConfig | None,
         tier: LLMTier | str,
 ) -> BaseChatModel:

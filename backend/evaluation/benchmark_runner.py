@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
+
+from langchain_core.runnables import RunnableConfig
+from langsmith import traceable
 
 from backend.evaluation.aggregation import (
     aggregate_benchmark_run,
@@ -34,12 +39,24 @@ from backend.evaluation.schemas import (
     BenchmarkRunResult,
     BenchmarkStatus,
     EvalQuestion,
+    EvaluatorResult,
     PipelineExecution,
     QuestionEvaluationResult,
 )
+from backend.state.state_factory import (
+    build_initial_financial_state,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class BenchmarkRunner:
+    """
+    Execute a selected question set through the financial graph
+    and run the six evaluation components.
+    """
+
     def __init__(
         self,
         *,
@@ -49,16 +66,26 @@ class BenchmarkRunner:
 
         self.intent_evaluator = IntentEvaluator()
         self.sql_evaluator = SQLEvaluator()
+        self.ragas_evaluator = RagasEvaluator()
         self.tool_evaluator = ToolEvaluator()
         self.ranking_evaluator = RankingEvaluator()
         self.market_evaluator = MarketEvaluator()
-        self.ragas_evaluator = RagasEvaluator()
 
     async def run(
         self,
+        *,
         config: BenchmarkConfig,
+        runnable_config: RunnableConfig,
+        run_id: UUID,
     ) -> BenchmarkRunResult:
+        """
+        Execute every question in config.question_set.
+
+        runnable_config contains the provider-specific LLMRuntime,
+        LangSmith tags, and LangSmith metadata.
+        """
         result = BenchmarkRunResult(
+            run_id=run_id,
             config=config,
             status=BenchmarkStatus.RUNNING,
         )
@@ -68,12 +95,23 @@ class BenchmarkRunner:
                 config.question_set
             )
 
-            result.total_questions = len(questions)
+            result.total_questions = len(
+                questions
+            )
+
+            logger.info(
+                "[BENCHMARK] Starting run_id=%s "
+                "question_set=%s total_questions=%s",
+                run_id,
+                config.question_set,
+                result.total_questions,
+            )
 
             for question in questions:
                 question_result = await self._run_question(
                     question=question,
                     config=config,
+                    runnable_config=runnable_config,
                 )
 
                 result.question_results.append(
@@ -85,50 +123,93 @@ class BenchmarkRunner:
                 else:
                     result.failed_questions += 1
 
-            result.aggregate_metrics = aggregate_benchmark_run(
-                result
+            result.aggregate_metrics = (
+                aggregate_benchmark_run(
+                    result
+                )
             )
 
             result.status = BenchmarkStatus.COMPLETED
 
         except Exception as exc:
+            logger.exception(
+                "[BENCHMARK] Run failed run_id=%s",
+                run_id,
+            )
+
             result.status = BenchmarkStatus.FAILED
             result.error = str(exc)
 
         finally:
-            result.completed_at = datetime.now(timezone.utc)
+            result.completed_at = datetime.now(
+                timezone.utc
+            )
 
         return result
 
+    @traceable(
+        name="benchmark_question",
+        run_type="chain",
+        tags=["eval"],
+    )
     async def _run_question(
         self,
         *,
         question: EvalQuestion,
         config: BenchmarkConfig,
+        runnable_config: RunnableConfig,
     ) -> QuestionEvaluationResult:
+        """
+        Execute one question and select evaluators by expected route.
+
+        VALUATION/GROWTH:
+            intent + SQL + optional tool + optional ranking
+
+        SENTIMENT:
+            intent + RAGAS + optional tool + optional ranking
+
+        MIXED:
+            intent + SQL + RAGAS + tool + ranking + market
+        """
         try:
             execution = await self._execute_pipeline(
-                question=question
+                question=question,
+                runnable_config=runnable_config,
             )
 
-            evaluator_results = {}
+            evaluator_results: dict[
+                str,
+                EvaluatorResult,
+            ] = {}
 
+            # Intent applies to every question.
             evaluator_results["intent"] = (
                 self.intent_evaluator.evaluate(
-                    expected_intent=question.expected_intent.value,
-                    actual_intent=execution.actual_intent,
+                    expected_intent=(
+                        question.expected_intent.value
+                    ),
+                    actual_intent=(
+                        execution.actual_intent
+                    ),
                 )
             )
 
-            evaluator_results["tool"] = (
-                self.tool_evaluator.evaluate(
-                    expected_tools=question.expected_tools,
-                    executed_tools=execution.executed_tools,
+            route = question.expected_intent.value
+
+            # Only run ToolEvaluator when golden expected tools exist.
+            if question.expected_tools:
+                evaluator_results["tool"] = (
+                    self.tool_evaluator.evaluate(
+                        expected_tools=(
+                            question.expected_tools
+                        ),
+                        executed_tools=(
+                            execution.executed_tools
+                        ),
+                    )
                 )
-            )
 
-            route = question.expected_intent.value.upper()
-
+            # SQL applies to valuation, growth, and mixed questions.
             if route in {
                 "VALUATION",
                 "GROWTH",
@@ -136,32 +217,39 @@ class BenchmarkRunner:
             }:
                 evaluator_results["sql"] = (
                     self.sql_evaluator.evaluate(
-                        generated_sql=execution.generated_sql,
-                        actual_result=execution.sql_result,
+                        generated_sql=(
+                            execution.generated_sql
+                        ),
+                        actual_result=(
+                            execution.sql_result
+                        ),
                         expected_result=(
                             question.expected_sql_result
                         ),
-                        expected_sql=question.expected_sql,
+                        expected_sql=(
+                            question.expected_sql
+                        ),
                     )
                 )
 
+            # RAGAS applies to sentiment and mixed questions.
             if route in {
                 "SENTIMENT",
                 "MIXED",
             }:
-                answer = self._answer_to_text(
-                    execution.final_answer
-                )
+                if route == "SENTIMENT":
+                    contexts = execution.retrieved_contexts
 
-                contexts = (
-                    execution.reranked_contexts
-                    or execution.retrieved_contexts
-                )
+                else:
+                    contexts = execution.reranked_contexts
+                
 
                 evaluator_results["ragas"] = (
                     await self.ragas_evaluator.evaluate(
                         question=question.question,
-                        answer=answer,
+                        answer=self._answer_to_text(
+                            execution.final_answer
+                        ),
                         contexts=contexts,
                         reference_answer=(
                             question.reference_answer
@@ -172,6 +260,7 @@ class BenchmarkRunner:
                     )
                 )
 
+            # Ranking applies only when the golden set contains companies.
             if question.expected_companies:
                 evaluator_results["ranking"] = (
                     self.ranking_evaluator.evaluate(
@@ -185,6 +274,7 @@ class BenchmarkRunner:
                     )
                 )
 
+            # Market evaluation is currently part of mixed questions.
             if route == "MIXED":
                 evaluator_results["market"] = (
                     self.market_evaluator.evaluate(
@@ -200,9 +290,7 @@ class BenchmarkRunner:
             question_result = QuestionEvaluationResult(
                 question_id=question.question_id,
                 question=question.question,
-                expected_intent=(
-                    question.expected_intent.value
-                ),
+                expected_intent=route,
                 actual_intent=execution.actual_intent,
                 execution=execution,
                 evaluator_results=evaluator_results,
@@ -213,7 +301,11 @@ class BenchmarkRunner:
             )
 
         except Exception as exc:
-            empty_execution = PipelineExecution()
+            logger.exception(
+                "[BENCHMARK] Question failed "
+                "question_id=%s",
+                question.question_id,
+            )
 
             return QuestionEvaluationResult(
                 question_id=question.question_id,
@@ -221,7 +313,7 @@ class BenchmarkRunner:
                 expected_intent=(
                     question.expected_intent.value
                 ),
-                execution=empty_execution,
+                execution=PipelineExecution(),
                 passed=False,
                 error=str(exc),
             )
@@ -230,19 +322,20 @@ class BenchmarkRunner:
         self,
         *,
         question: EvalQuestion,
+        runnable_config: RunnableConfig,
     ) -> PipelineExecution:
+        """
+        Build a clean initial FinancialState and invoke LangGraph.
+        """
         started_at = time.perf_counter()
 
-        initial_state = {
-            "messages": [],
-            "original_query": question.question,
-            "retry_count": 0,
-            "should_retry": False,
-            "executed_tools": [],
-        }
+        initial_state = build_initial_financial_state(
+            question.question
+        )
 
         final_state = await self.graph.ainvoke(
-            initial_state
+            initial_state,
+            config=runnable_config,
         )
 
         latency_ms = (
@@ -260,35 +353,45 @@ class BenchmarkRunner:
         final_state: dict[str, Any],
         latency_ms: float,
     ) -> PipelineExecution:
-        vector_result = (
-            final_state.get("vector_result")
-            or {}
-        )
-
+        """
+        Normalize FinancialState fields into PipelineExecution.
+        """
         retrieved_contexts = final_state.get(
             "retrieved_contexts",
             [],
         )
 
+        # Compatibility fallback while older vector nodes still place
+        # chunks only inside vector_result.
         if not retrieved_contexts:
-            retrieved_contexts = (
-                vector_result.get("chunks", [])
-                if isinstance(vector_result, dict)
-                else []
+            vector_result = (
+                final_state.get("vector_result")
+                or {}
             )
 
+            if isinstance(vector_result, dict):
+                retrieved_contexts = (
+                    vector_result.get(
+                        "chunks",
+                        [],
+                    )
+                )
+
         return PipelineExecution(
-            actual_intent=final_state.get("intent"),
-
-            generated_sql=final_state.get("sql_query"),
-            sql_result=final_state.get("sql_result"),
-
+            actual_intent=final_state.get(
+                "intent"
+            ),
+            generated_sql=final_state.get(
+                "sql_query"
+            ),
+            sql_result=final_state.get(
+                "sql_result"
+            ),
             retrieved_contexts=(
                 BenchmarkRunner._contexts_to_text(
                     retrieved_contexts
                 )
             ),
-
             reranked_contexts=(
                 BenchmarkRunner._contexts_to_text(
                     final_state.get(
@@ -297,32 +400,30 @@ class BenchmarkRunner:
                     )
                 )
             ),
-
             market_result=final_state.get(
                 "market_result"
             ),
-
             ranked_companies=final_state.get(
                 "ranked_companies",
                 [],
             ),
-
             executed_tools=final_state.get(
                 "executed_tools",
                 [],
             ),
-
             final_answer=(
                 final_state.get("final_report")
-                or final_state.get("draft_report")
+                or final_state.get(
+                    "draft_report"
+                )
             ),
-
-            latency_ms=round(latency_ms, 3),
-
+            latency_ms=round(
+                latency_ms,
+                3,
+            ),
             cost_usd=final_state.get(
                 "total_cost_usd"
             ),
-
             raw_state=final_state,
         )
 
@@ -330,6 +431,7 @@ class BenchmarkRunner:
     def _contexts_to_text(
         contexts: list[Any],
     ) -> list[str]:
+        """Convert strings, dictionaries, or Documents to plain text."""
         output: list[str] = []
 
         for context in contexts:
@@ -344,9 +446,14 @@ class BenchmarkRunner:
                 )
 
                 if text:
-                    output.append(str(text))
+                    output.append(
+                        str(text)
+                    )
 
-            elif hasattr(context, "page_content"):
+            elif hasattr(
+                context,
+                "page_content",
+            ):
                 output.append(
                     str(context.page_content)
                 )
@@ -354,7 +461,10 @@ class BenchmarkRunner:
         return output
 
     @staticmethod
-    def _answer_to_text(answer: Any) -> str:
+    def _answer_to_text(
+        answer: Any,
+    ) -> str:
+        """Convert the structured report into text for RAGAS."""
         if answer is None:
             return ""
 
@@ -362,21 +472,39 @@ class BenchmarkRunner:
             return answer
 
         if isinstance(answer, dict):
-            companies = answer.get("companies", [])
-            parts = [
-                str(answer.get("query_summary", ""))
-            ]
+            parts: list[str] = []
+
+            query_summary = answer.get(
+                "query_summary"
+            )
+
+            if query_summary:
+                parts.append(
+                    str(query_summary)
+                )
+
+            companies = (
+                answer.get("companies")
+                or answer.get("top_companies")
+                or []
+            )
 
             for company in companies:
-                if isinstance(company, dict):
+                if not isinstance(
+                    company,
+                    dict,
+                ):
+                    continue
+
+                summary = company.get(
+                    "summary"
+                )
+
+                if summary:
                     parts.append(
-                        str(company.get("summary", ""))
+                        str(summary)
                     )
 
-            return "\n".join(
-                part
-                for part in parts
-                if part
-            )
+            return "\n".join(parts)
 
         return str(answer)

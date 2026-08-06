@@ -1,13 +1,16 @@
 import re
 
 from langchain_community.utilities import SQLDatabase
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 import logging
 
 from backend.config import settings
+from backend.llm.llm_context import get_llm_client
+from backend.llm.llm_tiers import LLMTier
 
-llm = ChatOpenAI(model="gpt-5.4-mini", temperature=0)
 
 ALLOWED_TABLES = ["companies", "financial_metrics", "documents"]
 
@@ -23,7 +26,7 @@ SCHEMA = db.get_table_info()
 
 
 @tool
-def get_database_schema(table_name: str = None):
+def get_database_schema(table_name: str = None)-> str:
     """Get database schema information for SQL query generation."""
 
     if table_name:
@@ -38,8 +41,13 @@ def get_database_schema(table_name: str = None):
 
 
 @tool
-def generate_sql_query(question: str, schema_info: str = None):
+def generate_sql_query(question: str, config: RunnableConfig, schema_info: str = None):
     """Generate a safe PostgreSQL SELECT query from a user question."""
+
+    llm = get_llm_client(
+        config,
+        LLMTier.MEDIUM,
+    )
 
     schema_to_use = schema_info if schema_info else SCHEMA
 
@@ -64,7 +72,7 @@ def generate_sql_query(question: str, schema_info: str = None):
     - Return only the SQL query, nothing else
     """
 
-    response = llm.invoke(prompt)
+    response = llm.invoke(prompt, config=config,)
     sql_query = response.content.strip()
 
     logger.info(
@@ -152,42 +160,57 @@ def execute_sql_query(sql_query: str, question: str = ""):
             )
 
 @tool
-def fix_sql_error(original_query: str, error_message: str, question: str):
+async def fix_sql_error(original_query: str, error_message: str, question: str, config: RunnableConfig | None = None,)-> str:
     """Fix a failed SQL query."""
 
-    fix_prompt = f"""
-    The following SQL query failed:
+    llm = get_llm_client(
+        config,
+        LLMTier.MEDIUM,
+    )
 
-    Query:
-    {original_query}
 
-    Error:
-    {error_message}
+    system_message = SystemMessage(
+        content="""
+        You repair failed PostgreSQL queries.
 
-    Original Question:
-    {question}
+        Rules:
+            - Return only corrected SQL.
+            - Use only SELECT or read-only WITH queries.
+            - Use only tables and columns present in the supplied schema.
+            - Preserve the original user intent.
+            - Fix PostgreSQL casts and function signatures.
+            - Qualify ambiguous columns with table aliases.
+            - Add every non-aggregated selected column to GROUP BY.
+            - Never introduce unknown tables or columns.
+            - Never use data-changing statements.
+            """.strip()
+        )
 
-    Database Schema:
-    {SCHEMA}
+    human_message = HumanMessage(
+                content=f"""
+                    ORIGINAL QUESTION:
+                            {question}
 
-    Fix the query.
+                    FAILED SQL:
+                            {original_query}
 
-    Rules:
-        - Return only corrected SQL
-        - Use only SELECT statements
-        - Use PostgreSQL syntax
-        - Use only valid tables and columns
-        - Preserve the original question intent
-        - Fix type-casting errors using explicit casts
-        - Fix function signature errors using PostgreSQL-compatible syntax
-        - Fix ambiguous columns by qualifying columns with table aliases
-        - If using ANY aggregate function (STRING_AGG, COUNT, SUM, AVG, MAX, MIN),
-            you MUST add GROUP BY for every non-aggregated column in SELECT
-        - If the error is a GroupingError, add the missing columns to GROUP BY
-        - Do not introduce new tables or columns
-    """
+                    DATABASE ERROR:
+                            {error_message}
 
-    response = llm.invoke(fix_prompt)
+                    DATABASE SCHEMA:
+                            {SCHEMA}
+
+                    Return only corrected SQL.
+                    """.strip()
+        )
+
+    response = await llm.ainvoke(
+        [
+            system_message,
+            human_message,
+        ],
+        config=config,
+    )
     fixed_query = response.content.strip()
 
     logger.info(

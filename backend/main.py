@@ -1,6 +1,11 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy import text
+
+from backend.observability.langsmith_setup import setup_langsmith
+
+
+
 from backend.services.postgres_service import engine, Base, enable_pgvector
 from backend.services.redis_service import ping_redis
 from backend.models import db_models  
@@ -16,6 +21,8 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(message)s"
 )
+
+setup_langsmith()
 
 logger = logging.getLogger(__name__)
 

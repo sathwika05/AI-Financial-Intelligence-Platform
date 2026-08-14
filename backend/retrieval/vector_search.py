@@ -1,5 +1,6 @@
 import logging
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langchain_openai import OpenAIEmbeddings
 from langsmith import traceable
@@ -201,7 +202,11 @@ async def search_similar_chunks(
 
 
 @tool
-async def retrieve_similar(query: str, top_k: int = 5) -> str:
+async def retrieve_similar(
+    query: str,
+    config: RunnableConfig,
+    top_k: int = 5,
+) -> str:
     """
     Retrieve top-k semantically similar document chunks
     using pgvector cosine similarity + BM25 reranking.
@@ -216,8 +221,8 @@ async def retrieve_similar(query: str, top_k: int = 5) -> str:
 
 
 
-        filters  = await extract_filters(query)
-        keywords = generate_ranking_keywords(query)
+        filters  = await extract_filters(query, config)
+        keywords = generate_ranking_keywords(query, config)
 
 
         rows = await search_similar_chunks(

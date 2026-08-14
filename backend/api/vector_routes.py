@@ -12,9 +12,13 @@ from fastapi.security import APIKeyHeader
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.config import settings
 from backend.graph.vector_graph import vector_graph
 from backend.ingestion.indexing_service import embed_all_documents, embed_document
+from backend.llm.llm_config_service import LLMConfigService
+from backend.services.postgres_service import get_db
 
 
 logger = logging.getLogger(__name__)
@@ -45,13 +49,24 @@ class IndexRequest(BaseModel):
 # ── Retrieval endpoint ─────────────────────────────────────
 
 @router.post("/api/retrieve/vector")
-async def vector_retrieval(request: QueryRequest):
+async def vector_retrieval(
+    request: QueryRequest,
+    session: AsyncSession = Depends(get_db),
+):
     """Semantic search over indexed document chunks."""
     try:
         logger.info(f"[VECTOR_ROUTES] Query: {request.query}")
-        result = vector_graph.invoke({
-            "messages": [HumanMessage(content=request.query)]
-        })
+
+        # vector_node is async and resolves its LLM from the runtime in
+        # config, exactly like the financial route does.
+        llm_runtime = await (
+            LLMConfigService(session).load_default_runtime()
+        )
+
+        result = await vector_graph.ainvoke(
+            {"messages": [HumanMessage(content=request.query)]},
+            config={"configurable": {"llm_runtime": llm_runtime}},
+        )
         return {
             "query": request.query,
             "answer": result["messages"][-1].content

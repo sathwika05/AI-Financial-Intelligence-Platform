@@ -93,6 +93,37 @@ def _check_missing_evidence(
     return flags
 
 
+def _check_retrieval_evidence(
+    ranked_companies: list[dict[str, Any]],
+) -> list[str]:
+    """
+    Flag companies backed only by their own DB metrics.
+
+    Every ranked company now carries a metrics evidence item, so the
+    draft-level check above can always be satisfied. This one looks at
+    the attached evidence and asks whether retrieval actually found
+    anything about the company — if not, that is a retrieval failure.
+    """
+    flags: list[str] = []
+
+    for company in ranked_companies:
+        ticker = company.get("ticker", "?")
+
+        sources = {
+            str(evidence.get("source", "")).lower()
+            for evidence in company.get("evidence", [])
+        }
+
+        # Empty counts too: no evidence at all is worse than metrics-only.
+        if not (sources - {"metrics"}):
+            flags.append(
+                f"{ticker}: no retrieval evidence — "
+                f"backed only by database metrics"
+            )
+
+    return flags
+
+
 def _check_company_flags(
     draft_report: dict[str, Any],
 ) -> list[str]:
@@ -367,9 +398,10 @@ async def run_reviewer(
     confidence_flags = _check_confidence(
         draft_report
     )
-    evidence_flags = _check_missing_evidence(
-        draft_report
-    )
+    evidence_flags = [
+        *_check_missing_evidence(draft_report),
+        *_check_retrieval_evidence(ranked_companies),
+    ]
     company_flags = _check_company_flags(
         draft_report
     )

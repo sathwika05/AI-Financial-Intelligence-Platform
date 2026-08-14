@@ -135,10 +135,41 @@ def _safe_float(
         return default
 
 
+def _format_review_feedback(
+    review_feedback: list[str] | None,
+) -> str:
+    """
+    Render the previous attempt's reviewer flags.
+
+    A retry that repeats the same prompt is a blind re-roll, so the
+    claims the reviewer rejected are handed back for repair.
+    """
+    if not review_feedback:
+        return ""
+
+    flags = "\n".join(
+        f"- {flag}"
+        for flag in review_feedback
+    )
+
+    return f"""
+PREVIOUS ATTEMPT WAS REJECTED BY THE REVIEWER.
+
+These claims were judged unsupported by the attached evidence:
+
+{flags}
+
+For each one, either cite evidence that actually contains the value, or
+drop the claim and lower that company's confidence. Do not restate an
+unsupported claim with the same citation.
+""".strip()
+
+
 def _build_user_prompt(
     query: str,
     intent: str,
     ranked: list[dict[str, Any]],
+    review_feedback: list[str] | None = None,
 ) -> str:
     """Build the analysis prompt from ranked companies."""
     top_companies = ranked[:MAX_COMPANIES]
@@ -206,6 +237,13 @@ def _build_user_prompt(
         company_sections
     )
 
+    feedback_block = _format_review_feedback(
+        review_feedback
+    )
+
+    if feedback_block:
+        feedback_block = f"\n{feedback_block}\n"
+
     return f"""
 USER QUERY:
 {query}
@@ -216,7 +254,7 @@ INTENT:
 RANKED COMPANIES WITH COMPANY-LEVEL EVIDENCE:
 
 {company_block}
-
+{feedback_block}
 Generate the financial report JSON now.
 """.strip()
 
@@ -226,6 +264,7 @@ async def run_llm_analysis(
     intent: str,
     ranked: list[dict[str, Any]],
     config: RunnableConfig,
+    review_feedback: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Generate a structured financial report.
@@ -249,12 +288,15 @@ async def run_llm_analysis(
         query=query,
         intent=intent,
         ranked=ranked,
+        review_feedback=review_feedback,
     )
 
     logger.info(
-        "[ANALYSIS] Generating report companies=%s intent=%s",
+        "[ANALYSIS] Generating report companies=%s intent=%s "
+        "review_feedback=%s",
         min(len(ranked), MAX_COMPANIES),
         intent,
+        len(review_feedback or []),
     )
 
     try:
@@ -403,11 +445,17 @@ async def analysis_node(
         intent=intent,
         ranked=ranked,
         config=config,
+        review_feedback=state.get(
+            "review_feedback",
+            [],
+        ),
     )
 
     return {
         **state,
         "draft_report": draft_report,
+        # Consumed — a later retry gets the fresh reviewer flags.
+        "review_feedback": [],
     }
 
 

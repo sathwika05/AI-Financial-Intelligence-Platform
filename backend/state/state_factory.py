@@ -60,6 +60,8 @@ def build_initial_financial_state(
         # Retry
         "should_retry": False,
         "retry_count": 0,
+        "retry_target": "retrieval",
+        "review_feedback": [],
 
         # Tool tracing
         "executed_tools": [],

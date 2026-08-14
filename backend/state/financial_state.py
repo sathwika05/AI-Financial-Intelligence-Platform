@@ -56,6 +56,10 @@ class FinancialState(TypedDict):
     # Retry
     should_retry: bool
     retry_count: int
+    # Which stage a retry goes to, and the rejected claims handed to
+    # analysis when the failure was a grounding problem.
+    retry_target: str
+    review_feedback: list[str]
 
     # Evaluation / tracing
     executed_tools: Annotated[

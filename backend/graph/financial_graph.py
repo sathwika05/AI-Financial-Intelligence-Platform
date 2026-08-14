@@ -146,7 +146,8 @@ def build_financial_graph():
         "reviewer",
         route_after_review,
         {
-            "retrieval": "retrieval",  # retry → back to retrieval
+            "retrieval": "retrieval",  # missing evidence → re-retrieve
+            "analysis":  "analysis",   # ungrounded claims → redraft
             "output":    END,          # approved → done
         }
     )

@@ -424,6 +424,17 @@ async def run_reviewer(
         and retry_count < MAX_RETRIES
     )
 
+    # Missing evidence and bad citations are retrieval problems, so those
+    # go back to retrieval. A grounding failure is not — re-running the
+    # same queries cannot fix it, so the draft is regenerated instead,
+    # with the rejected claims handed back to the analysis prompt.
+    if has_missing_evidence or has_invalid_citations:
+        retry_target = "retrieval"
+    elif has_hallucinations:
+        retry_target = "analysis"
+    else:
+        retry_target = "retrieval"
+
     if retry_count >= MAX_RETRIES and quality_failure:
         decision = "forced_pass"
         passed = True
@@ -440,8 +451,9 @@ async def run_reviewer(
         passed = False
 
         logger.info(
-            "[REVIEWER] Retry triggered "
+            "[REVIEWER] Retry triggered target=%s "
             "hallucination_rate=%.2f flags=%s",
+            retry_target,
             hallucination_rate,
             len(all_flags),
         )
@@ -460,6 +472,7 @@ async def run_reviewer(
         "passed": passed,
         "should_retry": should_retry,
         "decision": decision,
+        "retry_target": retry_target,
         "confidence_flags": confidence_flags,
         "evidence_flags": evidence_flags,
         "hallucination_flags": hallucination_flags,
@@ -631,11 +644,26 @@ async def reviewer_node(
                 )
             ),
         )
+    retry_target = review_result.get(
+        "retry_target",
+        "retrieval",
+    )
+
+    # Only an analysis retry can act on the flags; a retrieval retry
+    # rebuilds the evidence and starts from a clean draft.
+    review_feedback = (
+        review_result.get("hallucination_flags", [])
+        if should_retry and retry_target == "analysis"
+        else []
+    )
+
     return {
         **state,
         "review_result": review_result,
         "final_report": final_report,
         "should_retry": should_retry,
+        "retry_target": retry_target,
+        "review_feedback": review_feedback,
         "retry_count": (
             retry_count + 1
             if should_retry
@@ -648,13 +676,20 @@ def route_after_review(
     state: dict[str, Any],
 ) -> str:
     """
-    Route to retrieval on retry, otherwise to final output.
+    Route a retry to whichever stage can actually fix the failure,
+    otherwise to final output.
     """
     if state.get("should_retry", False):
-        logger.info(
-            "[REVIEWER_ROUTER] Routing to retrieval"
+        target = (
+            state.get("retry_target")
+            or "retrieval"
         )
-        return "retrieval"
+
+        logger.info(
+            "[REVIEWER_ROUTER] Routing to %s",
+            target,
+        )
+        return target
 
     logger.info(
         "[REVIEWER_ROUTER] Routing to output"

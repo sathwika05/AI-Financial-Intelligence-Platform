@@ -1,4 +1,6 @@
+import json
 import re
+from typing import Any
 
 from langchain_community.utilities import SQLDatabase
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -6,6 +8,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 import logging
+from sqlalchemy import create_engine, text
 
 from backend.config import settings
 from backend.llm.llm_context import get_llm_client
@@ -23,6 +26,55 @@ db = SQLDatabase.from_uri(
 )
 
 SCHEMA = db.get_table_info()
+
+# SQLDatabase.run() renders rows as a Python repr string, which collapses
+# a whole result set into one opaque blob. Downstream scoring needs real
+# rows — one evidence candidate per company, with usable column names —
+# so SELECTs are executed here and returned as structured JSON.
+_engine = create_engine(
+    settings.SYNC_DATABASE_URL,
+    pool_pre_ping=True,
+)
+
+
+def _run_select(query: str) -> dict[str, Any]:
+    """Execute a validated SELECT and return structured rows."""
+    with _engine.connect() as conn:
+        result = conn.execute(text(query))
+
+        columns = list(result.keys())
+        rows = [
+            dict(row._mapping)
+            for row in result.fetchall()
+        ]
+
+    return {
+        "columns": columns,
+        "rows": rows,
+        "row_count": len(rows),
+        "error": None,
+    }
+
+
+def _as_tool_payload(payload: dict[str, Any]) -> str:
+    """
+    Serialize the tool result.
+
+    sql_node json-decodes tool content, so returning JSON keeps the rows
+    structured all the way into state instead of stringifying them.
+    """
+    return json.dumps(payload, default=str)
+
+
+def _error_payload(message: str) -> str:
+    return _as_tool_payload(
+        {
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "error": message,
+        }
+    )
 
 
 @tool
@@ -118,15 +170,18 @@ def execute_sql_query(sql_query: str, question: str = ""):
     query = validate_sql_query.invoke(sql_query)
 
     if query.startswith("Error:"):
-        return f"Query validation failed: {query}"
+        return _error_payload(
+            f"Query validation failed: {query}"
+        )
 
     try:
-        result = db.run(query)
+        payload = _run_select(query)
 
-        if result:
-            return f"Query Results: {result}"
-
-        return "Query executed successfully but no result was found."
+        logger.info(
+            "[SQL_EXECUTOR] Returned %s rows",
+            payload["row_count"],
+        )
+        return _as_tool_payload(payload)
 
     except Exception as e:
         logger.error(f"[SQL_EXECUTOR] SQL execution failed: {e}")
@@ -140,20 +195,23 @@ def execute_sql_query(sql_query: str, question: str = ""):
         fixed_query = validate_sql_query.invoke(fixed_query)
 
         if fixed_query.startswith("Error:"):
-            return f"Fixed query validation failed: {fixed_query}"
+            return _error_payload(
+                f"Fixed query validation failed: {fixed_query}"
+            )
 
         try:
-            result = db.run(fixed_query)
+            payload = _run_select(fixed_query)
 
-            if result:
-                return f"Query Results: {result}"
-
-            return "Fixed query executed successfully but no result was found."
+            logger.info(
+                "[SQL_EXECUTOR] Auto-fixed query returned %s rows",
+                payload["row_count"],
+            )
+            return _as_tool_payload(payload)
 
         except Exception as final_error:
             logger.error(f"[SQL_EXECUTOR] Fixed SQL also failed: {final_error}")
 
-            return (
+            return _error_payload(
                 "SQL execution failed after auto-fix. "
                 f"Original error: {str(e)}. "
                 f"Final error: {str(final_error)}."

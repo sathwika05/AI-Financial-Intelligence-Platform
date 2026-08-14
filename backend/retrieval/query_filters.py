@@ -11,7 +11,7 @@ from typing import List
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langsmith import traceable
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from backend.llm.llm_context import get_llm_client
 from backend.llm.llm_tiers import LLMTier
@@ -24,9 +24,12 @@ logger = logging.getLogger(__name__)
 # ── Pydantic Schemas ───────────────────────────────────────
 
 class DocumentFilters(BaseModel):
-    company_name: str | None = None
-    doc_type:     str | None = None
-    source:       str | None = None
+    # A comparison query names several companies. Extracting only one of
+    # them filters the other's documents out at the database level, so
+    # the report ends up with no evidence for it.
+    company_names: List[str] = Field(default_factory=list)
+    doc_type:      str | None = None
+    source:        str | None = None
 
 class RankingKeywords(BaseModel):
     keywords: List[str]
@@ -110,32 +113,40 @@ async def extract_filters(query: str,config: RunnableConfig) -> dict:
                         - alpha vantage -> alphavantage
 
                     RULES:
-                        - Extract company_name ONLY if a specific company is mentioned
+                        - Extract EVERY company mentioned into company_names
+                        - A comparison mentions two or more companies —
+                          list ALL of them, never just the first
+                        - Return an empty list if no specific company is mentioned
                         - Extract source ONLY if a specific source is mentioned
                         - Do NOT extract doc_type — all documents are the same type
                         - Return None for any field not explicitly mentioned
 
                     EXAMPLES:
                             "What did Apple say in earnings calls?"
-                            → company_name: "Apple Inc.", source: None
+                            → company_names: ["Apple Inc."], source: None
 
                             "NVIDIA news about AI chips"
-                            → company_name: "NVIDIA Corporation", source: None
+                            → company_names: ["NVIDIA Corporation"], source: None
 
-                            "Microsoft filings revenue growth"
-                            → company_name: "Microsoft Corporation", source: None
+                            "Compare NVDA and AMD on valuation and sentiment"
+                            → company_names: ["NVIDIA Corporation",
+                              "Advanced Micro Devices, Inc."], source: None
+
+                            "Microsoft vs Google cloud growth"
+                            → company_names: ["Microsoft Corporation",
+                              "Alphabet Inc."], source: None
 
                             "Bloomberg news about Tesla"
-                            → company_name: "Tesla Inc.", source: "bloomberg"
+                            → company_names: ["Tesla Inc."], source: "bloomberg"
 
                             "Reuters article about Amazon AI"
-                            → company_name: "Amazon.com Inc.", source: "reuters"
+                            → company_names: ["Amazon.com Inc."], source: "reuters"
 
                             "AI growth sentiment across all companies"
-                            → company_name: None, source: None
+                            → company_names: [], source: None
 
                             "What are analysts saying about the tech sector?"
-                            → company_name: None, source: None
+                            → company_names: [], source: None
 
                     Extract filters:
 
@@ -144,13 +155,27 @@ async def extract_filters(query: str,config: RunnableConfig) -> dict:
         result = llm_structured.invoke(prompt)
         logger.info(f"[FILTERS] Result: {result}")
         filters = result.model_dump(exclude_none=True)
-       
-        # map company_name -> company_id
-        if "company_name" in filters:
-            company_id = await get_company_id(filters["company_name"])
-            if company_id:
-                filters["company_id"] = company_id
-            del filters["company_name"]
+
+        # map company_names -> company_ids
+        company_names = filters.pop("company_names", []) or []
+
+        company_ids: list[int] = []
+
+        for company_name in company_names:
+            company_id = await get_company_id(company_name)
+
+            if company_id and company_id not in company_ids:
+                company_ids.append(company_id)
+
+        if company_ids:
+            filters["company_ids"] = company_ids
+
+        if company_names and not company_ids:
+            logger.warning(
+                "[FILTERS] None of %s resolved to a company_id; "
+                "searching without a company filter",
+                company_names,
+            )
 
         logger.info(f"[FILTERS] Extracted: {filters}")
         return filters

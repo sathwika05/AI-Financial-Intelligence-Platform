@@ -17,8 +17,34 @@ from langsmith import traceable
 
 from backend.llm.llm_context import get_llm_client
 from backend.llm.llm_tiers import LLMTier
+from backend.scoring.evidence_builder import extract_sql_rows
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_sql_tickers(sql_result: dict | None) -> list[str]:
+    """
+    Tickers the SQL branch actually returned, in result order.
+
+    Without these the candidate fallback below orders by revenue growth
+    no matter what was asked, so a "lowest PE ratio" question gets
+    answered with the fastest-growing companies instead.
+    """
+    if not sql_result:
+        return []
+
+    tickers: list[str] = []
+
+    for row in extract_sql_rows(sql_result.get("db_result")):
+        if not isinstance(row, dict):
+            continue
+
+        ticker = str(row.get("ticker") or "").strip().upper()
+
+        if ticker and ticker not in tickers:
+            tickers.append(ticker)
+
+    return tickers
 
 
 # ── Normalization ──────────────────────────────────────────
@@ -448,8 +474,28 @@ async def rerank(
         market_result.get("market_data", {}).keys()
     ) if market_result else []
 
+    # Rank every company either branch found, so the report answers the
+    # question that was asked and no company is dropped just because one
+    # branch missed it. Union rather than `market or sql`: the latter
+    # short-circuits, so partial market data would discard the companies
+    # only SQL returned. Market order first, duplicates removed. Only
+    # when both are empty does the DB ordering decide.
+    sql_tickers = _extract_sql_tickers(sql_result)
+
+    candidate_tickers = list(
+        dict.fromkeys(market_tickers + sql_tickers)
+    )
+
+    logger.info(
+        "[RANKER] Candidates: %s (market=%s sql=%s union=%s)",
+        candidate_tickers or "db_default",
+        len(market_tickers),
+        len(sql_tickers),
+        len(candidate_tickers),
+    )
+
     companies = await get_companies_from_db(
-        market_tickers if market_tickers else None
+        candidate_tickers or None
     )
 
     if not companies:
@@ -523,6 +569,8 @@ async def rerank(
             )
 
         ranked.append({
+            # Evidence matching joins reranked records on company_id.
+            "company_id":   company.get("id"),
             "name":         name,
             "ticker":       ticker,
             "sector":       company.get("sector"),

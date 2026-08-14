@@ -401,9 +401,10 @@ async def run_reviewer(
         *hallucination_flags,
     ]
 
+    # Rate only. ORing in `bool(hallucination_flags)` made the threshold
+    # dead code: a single flagged claim out of twenty forced a retry.
     has_hallucinations = (
         hallucination_rate > HALLUCINATION_THRESHOLD
-        or bool(hallucination_flags)
     )
     has_missing_evidence = bool(
         evidence_flags
@@ -630,7 +631,6 @@ async def reviewer_node(
                 )
             ),
         )
-
     return {
         **state,
         "review_result": review_result,

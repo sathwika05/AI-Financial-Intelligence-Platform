@@ -9,6 +9,7 @@ import logging
 import operator
 from typing import Annotated, Any, Optional, TypedDict
 
+from backend.nodes.reranker_node import reranker_node
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph, add_messages
@@ -87,6 +88,20 @@ def route_after_intent(state: FinancialState) -> str:
 def route_after_planner(state: FinancialState) -> str:
     return "retrieval"
 
+def route_after_scoring(state: dict[str, Any],) -> str:
+    """
+    MIXED detours through the evidence reranker, which runs after
+    scoring so it can target the companies that were actually ranked.
+    """
+    intent = str(
+        state.get("intent") or ""
+    ).strip().upper()
+
+    if intent == "MIXED":
+        return "reranker"
+
+    return "analysis"
+
 # ── Graph ───────────────────────────────────────────────────
 
 def build_financial_graph():
@@ -95,6 +110,7 @@ def build_financial_graph():
     graph.add_node("intent",    intent_node)
     graph.add_node("planner",   planner_node)
     graph.add_node("retrieval", retrieval_node)
+    graph.add_node("reranker", reranker_node)
     graph.add_node("scoring",   scoring_node) 
     graph.add_node("analysis", analysis_node)
     graph.add_node("reviewer",reviewer_node)
@@ -110,11 +126,21 @@ def build_financial_graph():
        "planner",
        route_after_planner,
        {"retrieval": "retrieval"}
-   )
+    )
 
-    graph.add_edge("retrieval", "scoring") 
-    graph.add_edge("scoring",   "analysis")
-    graph.add_edge("analysis","reviewer") 
+    graph.add_edge("retrieval", "scoring")
+
+    graph.add_conditional_edges(
+        "scoring",
+        route_after_scoring,
+        {
+            "reranker": "reranker",
+            "analysis": "analysis",
+        },
+    )
+
+    graph.add_edge("reranker",  "analysis")
+    graph.add_edge("analysis",  "reviewer")
 
     graph.add_conditional_edges(
         "reviewer",

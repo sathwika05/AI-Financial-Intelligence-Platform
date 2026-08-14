@@ -46,11 +46,18 @@ async def search_similar_chunks_raw(query: str, top_k: int = 20, filters: dict =
     }
 
     if filters:
-        if "company_id" in filters:
+        # company_ids is the multi-company form; company_id is still
+        # accepted so single-company callers keep working.
+        company_ids = filters.get("company_ids")
+
+        if not company_ids and filters.get("company_id"):
+            company_ids = [filters["company_id"]]
+
+        if company_ids:
             filter_clauses.append(
-                "d.company_id = :company_id"
+                "d.company_id = ANY(:company_ids)"
             )
-            params["company_id"] = filters["company_id"]
+            params["company_ids"] = list(company_ids)
 
         if "doc_type" in filters:
             filter_clauses.append(

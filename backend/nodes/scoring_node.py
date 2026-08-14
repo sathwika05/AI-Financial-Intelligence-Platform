@@ -31,6 +31,10 @@ async def scoring_node(
     3. Apply intent-specific scoring weights.
     4. Attach evidence and scoring explanations.
     5. Return the top-ranked companies.
+
+    MIXED is the exception to step 4: reranker_node runs after this node
+    and attaches evidence there, so the evidence reranker can target the
+    companies chosen here instead of guessing before they exist.
     """
     try:
         sql_result    = state.get("sql_result")
@@ -52,10 +56,13 @@ async def scoring_node(
             "original_query",
             "",
         )
+        
         intent = state.get(
             "intent",
             "MIXED",
         )
+
+        is_mixed = str(intent).strip().upper() == "MIXED"
 
         logger.info(
             "[SCORING] Scoring query=%r intent=%s",
@@ -85,6 +92,7 @@ async def scoring_node(
                     "total_ranked": 0,
                     "weights_used": {},
                     "intent": intent,
+                    "reranked_context_count": 0,
                 },
             }
 
@@ -93,17 +101,24 @@ async def scoring_node(
         ]
 
         for company in top_companies:
-            evidence = attach_company_evidence(
-                company=company,
-                sql_result=sql_result,
-                vector_result=vector_result,
-                market_result=market_result,
-            )
+            if is_mixed:
+                # reranker_node attaches MIXED evidence downstream.
+                company["evidence"] = []
+                company["evidence_count"] = 0
+                evidence = []
+            else:
+                evidence = attach_company_evidence(
+                    company=company,
+                    intent=intent,
+                    sql_result=sql_result,
+                    vector_result=vector_result,
+                    market_result=market_result,
+                )
 
-            company["evidence"] = evidence
-            company["evidence_count"] = len(
-                evidence
-            )
+                company["evidence"] = evidence
+                company["evidence_count"] = len(
+                    evidence
+                )
 
             scores = company.get(
                 "scores",
@@ -161,6 +176,7 @@ async def scoring_node(
                 {},
             ),
             "intent": intent,
+            "reranked_context_count": 0,
         }
 
         top_company = top_companies[0]

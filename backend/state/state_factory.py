@@ -41,9 +41,12 @@ def build_initial_financial_state(
         "vector_result": {},
         "market_result": {},
 
-        # Evaluation
+        # vector
         "retrieved_contexts": [],
+
+        #reranker
         "reranked_contexts": [],
+        "reranked_context_records": [],
 
         # Scoring
         "scoring_result": None,

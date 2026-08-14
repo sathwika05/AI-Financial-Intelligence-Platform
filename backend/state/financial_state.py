@@ -39,7 +39,10 @@ class FinancialState(TypedDict):
 
     # Evaluation artifacts
     retrieved_contexts: list[str]
+
+    # Reranker - mixed
     reranked_contexts: list[str]
+    reranked_context_records: list[dict[str, Any]]
 
     # Scoring
     scoring_result: Optional[dict[str, Any]]

@@ -245,7 +245,7 @@ def parse_tickers(
 
     for value in ticker_text.split(","):
         ticker = value.strip().upper()
-
+        logging.info("[MARKET_API_SERVICE] ticker = %s",ticker)
         if not ticker:
             continue
 

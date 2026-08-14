@@ -23,6 +23,8 @@ services:
       - postgres
       - redis
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finuser:finpass@postgres:5432/findb
     volumes:
       - .:/code
 

@@ -385,6 +385,10 @@ def combine_results(
         result["sql_result"] = {
             "answer":     sql_result["answer"],
             "confidence": sql_result["confidence"],
+            # Rows and SQL are what the hybrid reranker scores as
+            # SQL evidence; dropping them here leaves it with nothing.
+            "db_result":     sql_result.get("db_result", {}),
+            "generated_sql": sql_result.get("generated_sql", ""),
             "error":      sql_result.get("error")
         }
 
@@ -403,6 +407,8 @@ def combine_results(
             "market_data": market_result["market_data"],
             "confidence": market_result["confidence"],
             "cached":     market_result.get("cached", False),
+            "stale":      market_result.get("stale", False),
+            "degraded":   market_result.get("degraded", False),
             "error":      market_result.get("error")
         }
 

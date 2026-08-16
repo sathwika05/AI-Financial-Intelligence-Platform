@@ -100,6 +100,13 @@ class PipelineExecution(BaseModel):
     generated_sql: str | None = None
     sql_result: Any | None = None
 
+    # The rows the query returned, separate from sql_result's natural-language
+    # `answer`. The SQL evaluator compares tables, so handing it the whole
+    # result dict made it diff a golden table against a paragraph.
+    sql_rows: list[Any] = Field(
+        default_factory=list
+    )
+
     retrieved_contexts: list[str] = Field(
         default_factory=list
     )

@@ -14,6 +14,7 @@ from backend.evaluation.aggregation import (
     finalize_question_result,
 )
 from backend.llm.usage_tracker import UsageTracker
+from backend.scoring.evidence_builder import extract_sql_rows
 from backend.evaluation.datasets.question_sets import (
     get_question_set,
 )
@@ -250,7 +251,7 @@ class BenchmarkRunner:
                             execution.generated_sql
                         ),
                         actual_result=(
-                            execution.sql_result
+                            execution.sql_rows
                         ),
                         expected_result=(
                             question.expected_sql_result
@@ -434,11 +435,19 @@ class BenchmarkRunner:
             actual_intent=final_state.get(
                 "intent"
             ),
-            generated_sql=final_state.get(
-                "sql_query"
+            # `sql_query` is the planner's natural-language sub-query, not
+            # SQL. The executed statement is inside sql_result, which is why
+            # sql_equivalence had nothing to compare and always returned None.
+            generated_sql=(
+                (final_state.get("sql_result") or {}).get("generated_sql")
+                or final_state.get("generated_sql")
+                or None
             ),
             sql_result=final_state.get(
                 "sql_result"
+            ),
+            sql_rows=extract_sql_rows(
+                (final_state.get("sql_result") or {}).get("db_result")
             ),
             retrieved_contexts=(
                 BenchmarkRunner._contexts_to_text(

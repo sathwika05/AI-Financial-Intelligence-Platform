@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import type { RunMetrics } from "../api";
 import {
-  formatCost,
   formatDate,
   formatDateTime,
   formatDuration,
@@ -44,6 +43,7 @@ import {
 } from "../components/primitives";
 import { SERIES } from "../palette";
 import { ROUTE_CARDS, RoutePerformanceCards } from "./RoutePerformance";
+import { NodeLatencyPanel } from "./NodeLatency";
 import { ToolSummaryPanel } from "./ToolSummary";
 
 /**
@@ -290,12 +290,16 @@ export function SummaryView({
           />
         )}
 
-        <UnavailablePanel
-          span={4}
-          icon={Network}
-          title="Latency by Node (All Routes)"
-          reason="Per-node timings are not recorded. The graph measures only end-to-end latency per question, so there is nothing to break down across intent, planner, retrieval, scoring, analysis and reviewer. This needs the graph instrumented to time each node."
-        />
+        {run.node_latency && Object.keys(run.node_latency).length > 0 ? (
+          <NodeLatencyPanel nodeLatency={run.node_latency} />
+        ) : (
+          <UnavailablePanel
+            span={4}
+            icon={Network}
+            title="Latency by Node (All Routes)"
+            reason="This run predates the graph timing instrumentation, so it carries no per-node breakdown. Runs recorded from now on will show one bar per stage."
+          />
+        )}
 
         <Panel
           title="Latency Distribution"
@@ -340,8 +344,8 @@ export function SummaryView({
         </Panel>
 
         <Panel
-          title="Cost Over Time"
-          note="USD per run"
+          title="Cost & Tokens Over Time"
+          note="Per run"
           icon={CircleDollarSign}
           tone="amber"
           span={4}
@@ -355,18 +359,29 @@ export function SummaryView({
               categories={categories}
               series={[
                 {
-                  label: "Total cost",
+                  label: "Cost (USD)",
                   color: SERIES.violet,
                   values: history.map((entry) => entry.total_cost),
                 },
+                {
+                  // Scaled to thousands so it shares an axis with cost
+                  // without flattening it; the legend says so.
+                  label: "Tokens (K)",
+                  color: SERIES.teal,
+                  values: history.map((entry) =>
+                    entry.total_tokens == null
+                      ? null
+                      : entry.total_tokens / 1000,
+                  ),
+                },
               ]}
-              formatValue={(value) => formatCost(value)}
+              formatValue={(value) => value.toFixed(2)}
             />
           ) : (
             <p className="ev-note">
-              Two completed runs are needed before a cost trend means
-              anything. Token counts are not recorded anywhere in the
-              pipeline, so only cost is plotted.
+              Two completed runs are needed before a trend means anything.
+              Runs recorded before usage tracking existed carry no cost or
+              token figures and leave a gap in the line.
             </p>
           )}
         </Panel>

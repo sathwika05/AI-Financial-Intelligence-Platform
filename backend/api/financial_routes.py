@@ -15,6 +15,7 @@ from backend.graph.financial_graph import financial_graph
 from backend.llm.llm_config_service import LLMConfigService
 from backend.services.postgres_service import get_db
 from backend.state.state_factory import build_initial_financial_state
+from backend.llm.usage_tracker import build_usage_config
 
 
 
@@ -37,10 +38,18 @@ async def _run_financial_query(query: str, llm_runtime):
     """Invoke the financial graph as the root span of the trace."""
     initial_state = build_initial_financial_state(query)
 
-    return await financial_graph.ainvoke(
+    # The tracker rides on the config, so every nested LLM call is counted
+    # without any node having to know about it.
+    config, usage = build_usage_config(llm_runtime)
+
+    final_state = await financial_graph.ainvoke(
         initial_state,
-        config={"configurable": {"llm_runtime": llm_runtime}},
+        config=config,
     )
+
+    # Merged in rather than mutated into state: the graph has already
+    # finished, and these are facts about the run, not part of it.
+    return {**final_state, **usage.totals()}
 
 
 @router.post("/api/retrieve/financial")

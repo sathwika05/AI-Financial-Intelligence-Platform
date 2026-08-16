@@ -44,6 +44,7 @@ export type MetricKey = keyof Pick<
   | "p99_latency"
   | "cost_per_request"
   | "total_cost"
+  | "total_tokens"
   | "total_requests"
 >;
 
@@ -207,6 +208,13 @@ const SPECS: MetricSpec[] = [
   },
   { key: "total_cost", label: "Total Cost", kind: "cost", direction: "neutral" },
   {
+    key: "total_tokens",
+    label: "Total Tokens",
+    kind: "count",
+    direction: "neutral",
+    hint: "LLM tokens consumed across every call in this run, measured per call.",
+  },
+  {
     key: "total_requests",
     label: "Total Questions",
     kind: "count",
@@ -307,7 +315,7 @@ export const PANELS: MetricPanelSpec[] = [
     id: "cost",
     title: "Cost",
     note: "USD",
-    keys: ["total_cost", "cost_per_request", "total_requests"],
+    keys: ["total_cost", "cost_per_request", "total_tokens", "total_requests"],
   },
 ];
 

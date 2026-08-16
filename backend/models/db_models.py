@@ -316,6 +316,16 @@ class EvaluationMetric(Base):
         nullable=True,
     )
 
+    # Mean wall-clock time per graph node, for example
+    # {"retrieval": {"avg_latency_ms": 865.2, "executions": 20}}.
+    node_latency = Column(
+        JSON,
+        nullable=True,
+    )
+
+    # Total LLM tokens consumed across the run, measured per call.
+    total_tokens = Column(Integer)
+
     # ------------------------------------------------------------------
     # SQLEvaluator
     # ------------------------------------------------------------------

@@ -122,6 +122,16 @@ class PipelineExecution(BaseModel):
     latency_ms: float = 0.0
     cost_usd: float | None = None
 
+    # One entry per node execution: {"node": ..., "latency_ms": ...}.
+    node_timings: list[dict[str, Any]] = Field(
+        default_factory=list
+    )
+
+    # Token usage measured across every LLM call in this question's run.
+    input_tokens: int = 0
+    output_tokens: int = 0
+    llm_calls: int = 0
+
     # Useful for debugging and future per-question persistence.
     raw_state: dict[str, Any] = Field(
         default_factory=dict

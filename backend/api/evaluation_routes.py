@@ -152,6 +152,9 @@ class MetricsResponse(BaseModel):
     # Invocation counts per tool name.
     tool_summary: dict[str, dict[str, float | int | None]] | None
 
+    # Mean latency and execution count per graph node.
+    node_latency: dict[str, dict[str, float | int | None]] | None
+
     sql_accuracy: float | None
     sql_equivalence: float | None
 
@@ -168,11 +171,56 @@ class MetricsResponse(BaseModel):
     p99_latency: float | None
 
     cost_per_request: float | None
+    total_tokens: int | None
     k: int | None
 
     created_at: str
     completed_at: str | None
     error_message: str | None
+
+
+
+# A run in either of these states is still going to consume the pipeline.
+ACTIVE_RUN_STATUSES = ("queued", "running")
+
+
+async def _find_active_duplicate(
+    *,
+    session: AsyncSession,
+    request: "RunRequest",
+) -> BenchmarkRun | None:
+    """
+    Find an unfinished run with the same configuration.
+
+    Guards the endpoint rather than the UI, because a disabled button stops
+    only the obvious double-click — a second tab, a retried request or a
+    direct API call would still queue a duplicate that competes for the same
+    pipeline and bills the same provider twice.
+
+    Matched on the configuration the run record actually stores. `top_k` is
+    not persisted on the run, so two requests differing only by k are treated
+    as the same run; that is the conservative direction, since the expensive
+    part is identical either way.
+    """
+    result = await session.execute(
+        select(BenchmarkRun)
+        .where(
+            BenchmarkRun.status.in_(
+                ACTIVE_RUN_STATUSES
+            ),
+            BenchmarkRun.provider_id == request.provider_id,
+            BenchmarkRun.dataset == request.dataset,
+            BenchmarkRun.retrieval_mode == request.retrieval_mode,
+            BenchmarkRun.question_set == request.question_set,
+            BenchmarkRun.company_filter == request.company_filter,
+        )
+        .order_by(
+            desc(BenchmarkRun.created_at)
+        )
+        .limit(1)
+    )
+
+    return result.scalar_one_or_none()
 
 
 @router.post(
@@ -189,6 +237,23 @@ async def trigger_benchmark_run(
     Validate the provider, create benchmark_runs, and queue execution.
     """
     run_id = uuid4()
+
+    # Refuse before doing any provider work: an identical run already in
+    # flight makes this one redundant.
+    duplicate = await _find_active_duplicate(
+        session=session,
+        request=request,
+    )
+
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"An identical benchmark is already {duplicate.status} "
+                f"({duplicate.run_id}). Wait for it to finish, or change "
+                f"the configuration."
+            ),
+        )
 
     try:
         llm_config_service = LLMConfigService(
@@ -586,6 +651,9 @@ async def _upsert_evaluation_metrics(
         "tool_summary": aggregate.get(
             "tool_summary"
         ),
+        "node_latency": aggregate.get(
+            "node_latency"
+        ),
 
         # SQLEvaluator
         "sql_accuracy": aggregate.get(
@@ -631,6 +699,9 @@ async def _upsert_evaluation_metrics(
         # Cost
         "cost_per_request": aggregate.get(
             "cost_per_request"
+        ),
+        "total_tokens": aggregate.get(
+            "total_tokens"
         ),
         "total_cost": aggregate.get(
             "total_cost"
@@ -887,6 +958,10 @@ def _build_metrics_response(
             "tool_summary"
         ),
 
+        node_latency=metric_value(
+            "node_latency"
+        ),
+
         sql_accuracy=metric_value(
             "sql_accuracy"
         ),
@@ -926,6 +1001,9 @@ def _build_metrics_response(
 
         cost_per_request=metric_value(
             "cost_per_request"
+        ),
+        total_tokens=metric_value(
+            "total_tokens"
         ),
         k=metric_value("k"),
 

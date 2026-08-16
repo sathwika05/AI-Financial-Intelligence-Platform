@@ -392,6 +392,52 @@ def _safe_extra(
         return {}
 
 
+def build_node_latency(
+    results: list[QuestionEvaluationResult],
+) -> dict[str, dict[str, Any]]:
+    """
+    Mean wall-clock time per graph node across a run.
+
+    Each question contributes one entry per node execution. A node that ran
+    more than once for a question — the reviewer can route back to retrieval
+    or analysis — contributes each pass, so `executions` can exceed the
+    question count and the average reflects real time spent in that stage.
+
+    Nodes appear only if they actually ran; a question routed away from the
+    reranker leaves no reranker entry rather than a zero.
+    """
+    collected: dict[str, list[float]] = {}
+
+    for result in results:
+        for entry in result.execution.node_timings or []:
+            if not isinstance(entry, dict):
+                continue
+
+            name = str(
+                entry.get("node", "")
+            ).strip()
+
+            latency = _to_float(
+                entry.get("latency_ms")
+            )
+
+            if not name or latency is None:
+                continue
+
+            collected.setdefault(
+                name,
+                [],
+            ).append(latency)
+
+    return {
+        name: {
+            "avg_latency_ms": _average(values),
+            "executions": len(values),
+        }
+        for name, values in collected.items()
+    }
+
+
 def build_tool_summary(
     results: list[QuestionEvaluationResult],
 ) -> dict[str, dict[str, Any]]:
@@ -588,6 +634,15 @@ def aggregate_benchmark_run(
         else None
     )
 
+    # Measured, not estimated: the usage tracker reads each call's reported
+    # token counts. Zero across every question means nothing was recorded, so
+    # it reports as unknown rather than as a genuine zero.
+    total_tokens = sum(
+        (result.execution.input_tokens or 0)
+        + (result.execution.output_tokens or 0)
+        for result in completed_results
+    )
+
     # Fallback to 1 - faithfulness only when no dedicated metric exists.
     hallucination_rate = _derive_hallucination_rate(
         canonical
@@ -627,6 +682,13 @@ def aggregate_benchmark_run(
         "tool_summary": _safe_extra(
             "tool_summary",
             build_tool_summary,
+            completed_results,
+        ),
+
+        # Mean time per graph node, for the latency-by-node breakdown.
+        "node_latency": _safe_extra(
+            "node_latency",
+            build_node_latency,
             completed_results,
         ),
 
@@ -690,6 +752,8 @@ def aggregate_benchmark_run(
             and total_questions > 0
             else None
         ),
+
+        "total_tokens": total_tokens or None,
 
         "total_requests": total_questions,
     }
@@ -853,6 +917,7 @@ def _empty_aggregate() -> dict[str, Any]:
         },
         "route_performance": {},
         "tool_summary": {},
+        "node_latency": {},
 
         "intent_accuracy": None,
 
@@ -887,5 +952,6 @@ def _empty_aggregate() -> dict[str, Any]:
 
         "total_cost": None,
         "cost_per_request": None,
+        "total_tokens": None,
         "total_requests": 0,
     }

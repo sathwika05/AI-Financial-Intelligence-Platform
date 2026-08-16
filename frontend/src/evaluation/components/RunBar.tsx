@@ -29,10 +29,14 @@ export function RunBar({
   onLaunched,
   onRefresh,
   isRefreshing,
+  activeRunCount = 0,
 }: {
   onLaunched: (runId: string) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
+  /** Runs still queued or running. The backend rejects a duplicate outright;
+   *  this stops the reader from queuing one in the first place. */
+  activeRunCount?: number;
 }) {
   const { providers, status: providerStatus, error: providerError } =
     useProviders();
@@ -133,6 +137,8 @@ export function RunBar({
     (providerStatus === "ready" && selectableProviders.length === 0
       ? "No enabled LLM provider is configured. Add one before running a benchmark."
       : null);
+
+  const hasActiveRun = activeRunCount > 0;
 
   return (
     <div className="ev-runbar">
@@ -249,10 +255,21 @@ export function RunBar({
           type="button"
           className="ev-btn ev-btn--primary"
           onClick={() => void launch()}
-          disabled={isLaunching || !providerId}
+          disabled={isLaunching || !providerId || hasActiveRun}
+          title={
+            hasActiveRun
+              ? `${activeRunCount} run${
+                  activeRunCount === 1 ? " is" : "s are"
+                } still in progress.`
+              : undefined
+          }
         >
           <PlayCircle size={15} />
-          {isLaunching ? "Queuing…" : "Run Benchmark"}
+          {isLaunching
+            ? "Queuing…"
+            : hasActiveRun
+              ? "Run in progress"
+              : "Run Benchmark"}
         </button>
       </div>
 
@@ -262,7 +279,15 @@ export function RunBar({
         </p>
       )}
 
-      {!blockingError && !launchError && launchNotice && (
+      {!blockingError && !launchError && hasActiveRun && (
+        <p className="ev-runbar__message">
+          {activeRunCount === 1
+            ? "A benchmark is already running. Queuing another would compete for the same pipeline."
+            : `${activeRunCount} benchmarks are already running.`}
+        </p>
+      )}
+
+      {!blockingError && !launchError && !hasActiveRun && launchNotice && (
         <p className="ev-runbar__message">{launchNotice}</p>
       )}
     </div>

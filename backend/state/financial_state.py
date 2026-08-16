@@ -66,3 +66,12 @@ class FinancialState(TypedDict):
         list[str],
         operator.add,
     ]
+
+    # Wall-clock time spent in each graph node, appended by the timing
+    # wrapper in financial_graph. A reducer-backed list rather than a dict
+    # because the reviewer can route back and run a node more than once, and
+    # every pass is worth keeping — the aggregate averages them.
+    node_timings: Annotated[
+        list[dict[str, Any]],
+        operator.add,
+    ]

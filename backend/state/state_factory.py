@@ -65,4 +65,5 @@ def build_initial_financial_state(
 
         # Tool tracing
         "executed_tools": [],
+        "node_timings": [],
     }

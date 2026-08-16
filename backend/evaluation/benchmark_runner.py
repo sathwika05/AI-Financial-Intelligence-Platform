@@ -13,6 +13,7 @@ from backend.evaluation.aggregation import (
     aggregate_benchmark_run,
     finalize_question_result,
 )
+from backend.llm.usage_tracker import UsageTracker
 from backend.evaluation.datasets.question_sets import (
     get_question_set,
 )
@@ -362,9 +363,30 @@ class BenchmarkRunner:
             question.question
         )
 
+        # A tracker per question, not per run: one shared instance would pool
+        # every question's tokens into whichever result read it last. The
+        # incoming config is preserved so tracing tags and any existing
+        # callbacks survive.
+        runtime = (
+            runnable_config.get("configurable") or {}
+        ).get("llm_runtime")
+
+        usage = UsageTracker(runtime)
+
+        question_config = {
+            **runnable_config,
+            "configurable": {
+                **(runnable_config.get("configurable") or {}),
+            },
+            "callbacks": [
+                *(runnable_config.get("callbacks") or []),
+                usage,
+            ],
+        }
+
         final_state = await self.graph.ainvoke(
             initial_state,
-            config=runnable_config,
+            config=question_config,
         )
 
         latency_ms = (
@@ -374,6 +396,7 @@ class BenchmarkRunner:
         return self._extract_execution(
             final_state=final_state,
             latency_ms=latency_ms,
+            usage=usage.totals(),
         )
 
     @staticmethod
@@ -381,6 +404,7 @@ class BenchmarkRunner:
         *,
         final_state: dict[str, Any],
         latency_ms: float,
+        usage: dict[str, Any] | None = None,
     ) -> PipelineExecution:
         """
         Normalize FinancialState fields into PipelineExecution.
@@ -440,6 +464,10 @@ class BenchmarkRunner:
                 "executed_tools",
                 [],
             ),
+            node_timings=final_state.get(
+                "node_timings",
+                [],
+            ),
             final_answer=(
                 final_state.get("final_report")
                 or final_state.get(
@@ -450,8 +478,23 @@ class BenchmarkRunner:
                 latency_ms,
                 3,
             ),
-            cost_usd=final_state.get(
+            # Measured by the usage tracker. The `total_cost_usd` state key
+            # this used to read was never written by any node, which is why
+            # every run reported a cost of zero.
+            cost_usd=(usage or {}).get(
                 "total_cost_usd"
+            ),
+            input_tokens=(usage or {}).get(
+                "input_tokens",
+                0,
+            ),
+            output_tokens=(usage or {}).get(
+                "output_tokens",
+                0,
+            ),
+            llm_calls=(usage or {}).get(
+                "llm_calls",
+                0,
             ),
             raw_state=final_state,
         )

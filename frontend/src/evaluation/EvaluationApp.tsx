@@ -201,6 +201,7 @@ export default function EvaluationApp() {
           }}
           onRefresh={reload}
           isRefreshing={isRefreshing}
+          activeRunCount={inFlight.length}
         />
 
         {hasActiveRun && (

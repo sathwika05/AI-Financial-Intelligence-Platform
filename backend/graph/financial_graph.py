@@ -7,6 +7,7 @@
 import asyncio
 import logging
 import operator
+import time
 from typing import Annotated, Any, Optional, TypedDict
 
 from backend.nodes.reranker_node import reranker_node
@@ -105,18 +106,68 @@ def route_after_scoring(state: dict[str, Any],) -> str:
 
     return "analysis"
 
+# ── Node timing ─────────────────────────────────────────────
+
+
+def timed_node(name: str, node):
+    """
+    Wrap a graph node so its wall-clock time is recorded in state.
+
+    Deliberately transparent: the node is awaited exactly as before and its
+    return value is passed through untouched, with a single `node_timings`
+    entry merged in. A node that returns nothing still contributes its
+    timing, and a node that raises is timed and re-raised so a failure is
+    never hidden by the instrumentation.
+
+    Timings are appended, not assigned, because the reviewer can route back
+    and a node can therefore run more than once per question.
+    """
+
+    async def run(state, config):
+        started = time.perf_counter()
+
+        try:
+            result = await node(state, config)
+        except Exception:
+            # The pipeline's own error handling owns this; the wrapper only
+            # needs to avoid swallowing it.
+            raise
+
+        elapsed_ms = (time.perf_counter() - started) * 1000
+
+        timing = {
+            "node": name,
+            "latency_ms": round(elapsed_ms, 3),
+        }
+
+        if not isinstance(result, dict):
+            # Nodes are expected to return state updates; anything else is
+            # passed straight through rather than reshaped.
+            return result
+
+        return {
+            **result,
+            "node_timings": [timing],
+        }
+
+    return run
+
+
 # ── Graph ───────────────────────────────────────────────────
 
 def build_financial_graph():
     graph = StateGraph(FinancialState)
 
-    graph.add_node("intent",    intent_node)
-    graph.add_node("planner",   planner_node)
-    graph.add_node("retrieval", retrieval_node)
-    graph.add_node("reranker", reranker_node)
-    graph.add_node("scoring",   scoring_node) 
-    graph.add_node("analysis", analysis_node)
-    graph.add_node("reviewer",reviewer_node)
+    # Every node is registered through the timing wrapper so the evaluation
+    # dashboard can break latency down per stage. The wrapper changes no
+    # node's behaviour — see timed_node.
+    graph.add_node("intent",    timed_node("intent", intent_node))
+    graph.add_node("planner",   timed_node("planner", planner_node))
+    graph.add_node("retrieval", timed_node("retrieval", retrieval_node))
+    graph.add_node("reranker",  timed_node("reranker", reranker_node))
+    graph.add_node("scoring",   timed_node("scoring", scoring_node))
+    graph.add_node("analysis",  timed_node("analysis", analysis_node))
+    graph.add_node("reviewer",  timed_node("reviewer", reviewer_node))
 
 
     graph.add_edge(START, "intent")

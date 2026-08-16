@@ -59,6 +59,13 @@ export interface RunMetrics {
     Record<string, number | null | undefined>
   > | null;
 
+  /** Mean latency and execution count per graph node. Null on runs recorded
+   *  before the graph was instrumented. */
+  node_latency: Record<
+    string,
+    Record<string, number | null | undefined>
+  > | null;
+
   sql_accuracy: number | null;
   sql_equivalence: number | null;
 
@@ -75,6 +82,9 @@ export interface RunMetrics {
   p99_latency: number | null;
 
   cost_per_request: number | null;
+  /** Measured LLM tokens across the run. Null on runs recorded before
+   *  usage tracking existed. */
+  total_tokens: number | null;
   k: number | null;
 
   created_at: string;

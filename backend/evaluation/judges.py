@@ -26,10 +26,19 @@ from typing import Any
 
 
 # Override to grade with a different judge; keep it stable across the runs
-# you intend to compare.
+# you intend to compare, because judges do not agree in absolute terms — the
+# same answer scored 0.45 under gpt-4o-mini and 0.61 under gpt-5.4-mini.
+#
+# The default is deliberately a model whose name ragas can parse. ragas 0.4.3
+# picks OpenAI's token-limit parameter by reading the version out of the model
+# name: it strips "gpt-", takes the leading segment and calls int() on it.
+# int("5.4") raises, so it concludes the model is legacy and sends the retired
+# `max_tokens`, which gpt-5.x rejects outright. Every SQLSemanticEquivalence
+# call then errors, and since a question fails when any evaluator errors, no
+# SQL-route question could ever pass. Any decimal-versioned name hits this.
 JUDGE_MODEL = os.getenv(
     "BENCHMARK_JUDGE_MODEL",
-    "gpt-5.4-mini",
+    "gpt-4o-mini",
 )
 
 JUDGE_EMBEDDING_MODEL = os.getenv(

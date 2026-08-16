@@ -23,16 +23,16 @@
 }
 
 .spine--sm .spine__track {
-  height: 9px;
+  height: 7px;
 }
 
 .spine--md .spine__track {
-  height: 12px;
+  height: 10px;
 }
 
 .spine--lg .spine__track {
-  height: 20px;
-  border-radius: 10px;
+  height: 16px;
+  border-radius: 8px;
 }
 
 /* A hairline of track shows between segments, so four colours read as four
@@ -106,7 +106,7 @@
 
 .spine-legend__swatch {
   width: 10px;
-  height: 10px;
+  height: 7px;
   border-radius: 3px;
   background: var(--segment-color);
 }
@@ -118,4 +118,86 @@
     rgba(255, 255, 255, 0.85) 2px 4px
   );
   box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+/* ── Factor readout ──────────────────────────────────────────────
+   Hidden until the enclosing row is hovered or keyboard-focused. Values are
+   the backend's own factor scores; the bar carries the same figures in its
+   aria-label so nothing depends on the popover being seen. */
+
+.spine {
+  position: relative;
+}
+
+.spine__readout {
+  position: absolute;
+  right: 0;
+  /* Above the bar, not below it: the match label and confidence sit directly
+     underneath, and covering them while the reader is inspecting the score
+     hides the very thing they are comparing against. */
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: grid;
+  gap: 3px;
+  min-width: 148px;
+  padding: 8px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px);
+  transition: opacity 120ms var(--ease), transform 120ms var(--ease),
+    visibility 120ms;
+  pointer-events: none;
+}
+
+.row__head:hover .spine__readout,
+.row__head:focus-visible .spine__readout {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.spine__readout-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.spine__readout-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--segment-color);
+}
+
+.spine__readout-label {
+  font-size: var(--fs-meta);
+  color: var(--color-text-secondary);
+}
+
+.spine__readout-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  font-weight: var(--weight-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-data);
+}
+
+/* The breakdown panel shows these figures in a table already. */
+.breakdown .spine__readout {
+  display: none;
+}
+
+/* Below the desktop layout the score block stacks under the metrics, where a
+   right-anchored popover overflows the row and covers the ticker. The same
+   figures are in the expanded Factor breakdown, so the hover readout simply
+   stands down rather than being repositioned into a worse spot. */
+@media (max-width: 1080px) {
+  .row__head .spine__readout {
+    display: none;
+  }
 }

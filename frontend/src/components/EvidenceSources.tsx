@@ -1,3 +1,4 @@
+import { Check, Minus } from "lucide-react";
 import type { SourcesUsed } from "../api/types";
 import { sourceLabel } from "../lib/labels";
 import "./EvidenceSources.css";
@@ -5,10 +6,19 @@ import "./EvidenceSources.css";
 /** Fixed display order; any additional keys returned are appended. */
 const KNOWN_SOURCES = ["sql", "vector", "market", "company_level_evidence"];
 
+/**
+ * System provenance: which retrieval channels this answer actually drew on.
+ *
+ * `details` carries counts derived from the response itself. Nothing is
+ * inferred or estimated — a channel with no countable evidence in the payload
+ * simply shows Used/Not used.
+ */
 export function EvidenceSources({
   sources,
+  details,
 }: {
   sources: SourcesUsed | null | undefined;
+  details?: Record<string, string>;
 }) {
   if (!sources) {
     return null;
@@ -27,6 +37,7 @@ export function EvidenceSources({
     <ul className="sources">
       {keys.map((key) => {
         const used = sources[key] === true;
+        const detail = used ? details?.[key] : undefined;
 
         return (
           <li
@@ -34,10 +45,12 @@ export function EvidenceSources({
             className={`sources__item${used ? " sources__item--used" : ""}`}
           >
             <span className="sources__mark" aria-hidden="true">
-              {used ? "✓" : "—"}
+              {used ? <Check size={11} /> : <Minus size={11} />}
             </span>
             <span className="sources__label">{sourceLabel(key)}</span>
-            <span className="sources__state">{used ? "Used" : "Not used"}</span>
+            <span className="sources__state">
+              {detail ?? (used ? "Used" : "Not used")}
+            </span>
           </li>
         );
       })}

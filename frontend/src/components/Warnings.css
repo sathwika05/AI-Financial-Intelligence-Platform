@@ -1,35 +1,36 @@
+/*
+ * Evidence limitations. Annotations on an analysis, not application errors:
+ * one small amber mark, muted text, no fill.
+ */
+
 .warnings {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 5px;
+  list-style: none;
   margin: 0;
   padding: 0;
-  list-style: none;
 }
 
 .warnings__item {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-2);
-  font-size: 12.5px;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: var(--radius-xs);
+  background: var(--color-warning-soft);
+  font-size: var(--fs-meta);
   line-height: 1.45;
-  color: var(--caution);
+  color: var(--color-warning);
 }
 
-.warnings__mark {
+.warnings__icon {
   flex: none;
-  width: 5px;
-  height: 5px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: var(--caution);
-  opacity: 0.85;
-}
-
-.warnings__text {
-  color: var(--caution);
+  margin-top: 3px;
+  color: var(--color-warning-mark);
 }
 
 .warnings--compact .warnings__item {
-  font-size: 12px;
+  font-size: var(--fs-micro);
 }

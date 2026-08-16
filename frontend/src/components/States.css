@@ -1,106 +1,131 @@
+/*
+ * Pipeline states.
+ *
+ * The loading state shows what the analysis involves without asserting which
+ * stage it has reached — the backend reports no progress, so no stage is
+ * marked complete. Elapsed time is the only live figure and is measured here.
+ */
+
 .state {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-6) var(--space-5);
+  padding: var(--space-4);
+}
+
+.state__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .state__title {
-  font-size: 20px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  max-width: 60ch;
+  font-size: var(--fs-section);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text-strong);
 }
 
-.state__title--error {
-  font-size: 17px;
+.state__elapsed {
+  margin-left: auto;
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.state__spin {
+  color: var(--accent);
+  animation: state-spin 900ms linear infinite;
+}
+
+@keyframes state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.state__icon-error {
   color: var(--negative);
 }
 
-.state__title--empty {
-  font-family: var(--font-serif);
-  font-size: 22px;
-}
-
-.state__caption {
-  font-size: 13.5px;
-  line-height: 1.55;
+.state__icon-empty {
   color: var(--text-dim);
-  max-width: 66ch;
 }
 
 .state__eyebrow {
   color: var(--text-dim);
 }
 
-.state--error {
-  border-color: rgba(194, 59, 78, 0.3);
-  background: linear-gradient(
-    180deg,
-    rgba(194, 59, 78, 0.05),
-    transparent 60%
-  );
-}
-
-/* ── Loading ───────────────────────────────────────────────────── */
-
-.state__pulse {
-  display: flex;
-  gap: 5px;
-}
-
-.state__pulse span {
-  width: 5px;
-  height: 18px;
-  border-radius: 2px;
-  background: var(--accent);
-  opacity: 0.35;
-  animation: pulse-bar 1.15s var(--ease) infinite;
-}
-
-.state__pulse span:nth-child(2) {
-  animation-delay: 0.14s;
-  background: var(--accent-strong);
-}
-
-.state__pulse span:nth-child(3) {
-  animation-delay: 0.28s;
-}
-
-@keyframes pulse-bar {
-  0%,
-  100% {
-    transform: scaleY(0.55);
-    opacity: 0.3;
-  }
-  50% {
-    transform: scaleY(1);
-    opacity: 0.95;
-  }
-}
+/* ── Stage list ───────────────────────────────────────────────
+   Every stage carries the same weight: none is claimed as done. */
 
 .state__stages {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
-  margin: 0;
-  padding: 0;
   list-style: none;
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
 }
 
 .state__stage {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  opacity: 0.55;
-  transition: color 320ms var(--ease), opacity 320ms var(--ease);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
 }
 
-.state__stage--active {
-  color: var(--accent);
-  opacity: 1;
+.state__stage-mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  animation: state-pulse 1.6s var(--ease) infinite;
+}
+
+/* Staggered only to show the pipeline is live, never to imply an order of
+   completion. */
+.state__stage:nth-child(2) .state__stage-mark { animation-delay: 0.16s; }
+.state__stage:nth-child(3) .state__stage-mark { animation-delay: 0.32s; }
+.state__stage:nth-child(4) .state__stage-mark { animation-delay: 0.48s; }
+.state__stage:nth-child(5) .state__stage-mark { animation-delay: 0.64s; }
+
+@keyframes state-pulse {
+  0%, 100% {
+    background: var(--line-strong);
+  }
+  50% {
+    background: var(--accent);
+  }
+}
+
+.state__caption {
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: var(--text-dim);
+  max-width: 64ch;
+}
+
+.state__title--error {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.state--error {
+  border-color: rgba(201, 48, 74, 0.28);
+}
+
+.state--error .btn {
+  align-self: flex-start;
+}
+
+.state__title--empty {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--text);
 }

@@ -1,0 +1,76 @@
+/*
+ * Compact financial data points.
+ *
+ * Label and value share a tight vertical rhythm so a rail of them scans as a
+ * single band of figures rather than four separate objects.
+ */
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.stat__label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label-caps);
+  font-weight: var(--weight-data);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat__value {
+  margin: 0;
+  font-size: var(--fs-metric);
+  font-weight: var(--weight-data);
+  letter-spacing: -0.01em;
+  /* The figure is the point of the row: dark, tabular, and a clear step
+     above its own label. */
+  color: var(--color-text-data);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+
+.stat__value--muted {
+  font-weight: var(--weight-ui);
+  color: var(--color-text-secondary);
+}
+
+.stat__value--positive {
+  color: var(--positive);
+}
+
+.stat__value--caution {
+  color: var(--caution);
+}
+
+/* An unavailable figure must not read as a low one. */
+.stat__value--absent {
+  color: var(--color-text-subtle);
+  font-weight: var(--weight-ui);
+}
+
+.stat-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+}
+
+.stat-rail--fixed {
+  display: grid;
+  grid-template-columns: repeat(var(--stat-columns, 4), minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+@media (max-width: 720px) {
+  .stat-rail--fixed {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

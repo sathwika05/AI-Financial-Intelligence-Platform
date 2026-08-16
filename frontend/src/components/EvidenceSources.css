@@ -1,49 +1,77 @@
+/*
+ * System provenance: which retrieval channels the answer drew on. Reads as a
+ * checklist of aligned rows rather than a set of badges.
+ */
+
 .sources {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  list-style: none;
   margin: 0;
   padding: 0;
-  list-style: none;
 }
 
 .sources__item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
-  padding: 9px var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  font-size: 13px;
-  color: var(--text-dim);
+  gap: var(--space-2);
+  margin-bottom: 4px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  font-size: var(--fs-meta);
+  color: var(--color-text-muted);
 }
 
+.sources__item:last-child {
+  margin-bottom: 0;
+}
+
+/* A used channel is marked by a green edge and tick, not a green fill. */
 .sources__item--used {
-  color: var(--text);
-  border-color: rgba(13, 138, 95, 0.26);
-  background: rgba(13, 138, 95, 0.05);
+  border-color: rgba(22, 163, 106, 0.28);
+  background: var(--green-50);
 }
 
 .sources__mark {
-  width: 14px;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface-3);
   color: var(--text-dim);
 }
 
 .sources__item--used .sources__mark {
-  color: var(--positive);
+  background: var(--color-success);
+  color: #fff;
 }
 
 .sources__label {
-  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sources__item--used .sources__label {
+  color: var(--color-text-primary);
+  font-weight: 500;
 }
 
 .sources__state {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--fs-micro);
+  letter-spacing: var(--tracking-label);
   color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.sources__item--used .sources__state {
+  color: var(--green-700);
+  text-transform: uppercase;
+  font-weight: 600;
 }

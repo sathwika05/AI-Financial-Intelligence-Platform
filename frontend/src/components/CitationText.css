@@ -1,5 +1,5 @@
 .citation-text {
-  font-size: 14px;
+  font-size: var(--fs-body);
   line-height: 1.6;
   color: var(--text-muted);
 }
@@ -8,20 +8,20 @@
   display: inline;
   padding: 1px 5px;
   margin: 0 1px;
-  border: 1px solid rgba(79, 70, 229, 0.28);
+  border: 1px solid var(--line-accent);
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.01em;
   vertical-align: baseline;
   transition: background-color 140ms var(--ease), color 140ms var(--ease);
 }
 
 button.citation:hover {
-  background: rgba(79, 70, 229, 0.16);
-  color: #3730a3;
+  background: var(--blue-100);
+  color: var(--blue-700);
 }
 
 .citation--static {

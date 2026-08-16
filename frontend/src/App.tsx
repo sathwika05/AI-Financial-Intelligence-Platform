@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { Check, Database, Scale } from "lucide-react";
+import { Logo } from "./components/Logo";
 import { FinancialApiError, runFinancialQuery } from "./api/client";
 import type { FinancialQueryResponse } from "./api/types";
 import { buildEntries } from "./lib/entries";
@@ -77,11 +79,65 @@ export default function App() {
   const hasMethodology = Boolean(result?.scoring_result?.weights_used);
   const hasSources = Boolean(report?.sources_used);
 
+  /**
+   * Counts for the provenance list, derived from the payload itself rather
+   * than estimated. Only channels whose evidence the response actually
+   * carries get a count; the rest fall back to Used / Not used.
+   */
+  const sourceDetails = useMemo(() => {
+    const documentItems = rankedCompanies.reduce(
+      (total, company) => total + (company.evidence?.length ?? 0),
+      0,
+    );
+
+    const companiesWithEvidence = rankedCompanies.filter(
+      (company) => (company.evidence?.length ?? 0) > 0,
+    ).length;
+
+    const details: Record<string, string> = {};
+
+    if (documentItems > 0) {
+      details.vector = `${documentItems} item${documentItems === 1 ? "" : "s"}`;
+    }
+
+    if (companiesWithEvidence > 0) {
+      details.company_level_evidence = `${companiesWithEvidence} compan${
+        companiesWithEvidence === 1 ? "y" : "ies"
+      }`;
+    }
+
+    return details;
+  }, [rankedCompanies]);
+
+  /**
+   * A one-line record of what produced this result. Every part is read from
+   * the response — company count, how many retrieval channels reported as
+   * used, and whether a review ran — so the line shrinks rather than
+   * inventing a value when something is absent.
+   */
+  const provenance = useMemo(() => {
+    const parts: string[] = [];
+
+    if (entries.length > 0) {
+      parts.push(`${entries.length} compan${entries.length === 1 ? "y" : "ies"}`);
+    }
+
+    const usedSources = Object.values(report?.sources_used ?? {}).filter(
+      (value) => value === true,
+    ).length;
+
+    if (usedSources > 0) {
+      parts.push(`${usedSources} evidence source${usedSources === 1 ? "" : "s"}`);
+    }
+
+    return parts;
+  }, [entries.length, report]);
+
   return (
     <div className="app">
       <header className="masthead">
         <div className="shell masthead__inner">
-          <span className="masthead__mark" aria-hidden="true" />
+          <Logo size={36} />
 
           <span className="masthead__brand">
             <span className="masthead__title">Financial Intelligence</span>
@@ -100,13 +156,12 @@ export default function App() {
         {status === "idle" && (
           <div className="hero">
             <h1 className="hero__title">
-              Research any <span className="hero__accent">company question</span>
-              .
+              Research companies{" "}
+              <span className="hero__accent">with evidence</span>.
             </h1>
             <p className="hero__lede">
-              Every answer ranks companies against the question you asked, shows
-              the figures behind the ranking, and links each conclusion to the
-              evidence it came from.
+              Ask a financial question and get ranked companies, key metrics,
+              and evidence-backed analysis.
             </p>
           </div>
         )}
@@ -116,6 +171,7 @@ export default function App() {
           onChange={setQuery}
           onSubmit={() => void runQuery(query)}
           isRunning={status === "running"}
+          compact={status === "done"}
         />
 
         {status === "running" && (
@@ -147,6 +203,18 @@ export default function App() {
               </div>
             ) : (
               <div className="app__block">
+                {provenance.length > 0 && (
+                  <p className="app__provenance">
+                    {provenance.join(" · ")}
+                    {report?.review && (
+                      <span className="app__provenance-check">
+                        {" · "}Reviewed
+                        <Check size={11} aria-hidden="true" />
+                      </span>
+                    )}
+                  </p>
+                )}
+
                 <RankedList
                   entries={entries}
                   comparisonCompanies={rankedCompanies}
@@ -158,7 +226,10 @@ export default function App() {
               <div className="app__block app__columns">
                 {hasMethodology && (
                   <section className="panel app__column">
-                    <h2 className="block-title">How ranking works</h2>
+                    <h2 className="block-title">
+                      <Scale size={14} className="block-title__icon" aria-hidden="true" />
+                      Ranking methodology
+                    </h2>
                     <RankingMethodology
                       weights={result?.scoring_result?.weights_used}
                     />
@@ -167,11 +238,17 @@ export default function App() {
 
                 {hasSources && (
                   <section className="panel app__column">
-                    <h2 className="block-title">Evidence sources</h2>
+                    <h2 className="block-title">
+                      <Database size={14} className="block-title__icon" aria-hidden="true" />
+                      Evidence used
+                    </h2>
                     <p className="app__column-note">
-                      What this analysis drew on.
+                      Which retrieval channels contributed to this analysis.
                     </p>
-                    <EvidenceSources sources={report?.sources_used} />
+                    <EvidenceSources
+                      sources={report?.sources_used}
+                      details={sourceDetails}
+                    />
                   </section>
                 )}
               </div>

@@ -93,6 +93,65 @@ export function recommendationTone(
   return "neutral";
 }
 
+/**
+ * How strongly a company matches the research question.
+ *
+ * The backend answers in investment vocabulary — its prompt allows exactly
+ * Strong Buy / Buy / Hold / Sell / Strong Sell — but this product researches
+ * and ranks companies, it does not advise on trades. The same judgement is
+ * therefore read as match strength against the question that was asked.
+ *
+ * Purely a relabelling: the ordering the backend expressed is preserved, and
+ * callers keep the raw value for the tooltip so nothing is hidden.
+ */
+export function matchLabel(
+  recommendation: string | null | undefined,
+): string | null {
+  const value = (recommendation ?? "").trim().toLowerCase();
+
+  if (!value) {
+    return null;
+  }
+
+  if (value.includes("strong") && value.includes("buy")) {
+    return "Strong Match";
+  }
+
+  if (value.includes("buy")) {
+    return "Good Match";
+  }
+
+  if (value.includes("hold")) {
+    return "Moderate Match";
+  }
+
+  if (value.includes("sell") || value.includes("avoid")) {
+    return "Weak Match";
+  }
+
+  // An unrecognised verdict is shown as returned rather than forced into a
+  // match level it may not mean.
+  return titleCase(value);
+}
+
+/** Match strength on a 0–3 scale, for the strength indicator. */
+export function matchStrength(
+  recommendation: string | null | undefined,
+): number | null {
+  switch (matchLabel(recommendation)) {
+    case "Strong Match":
+      return 3;
+    case "Good Match":
+      return 2;
+    case "Moderate Match":
+      return 1;
+    case "Weak Match":
+      return 0;
+    default:
+      return null;
+  }
+}
+
 /** metrics -> "Financial Metrics", sql -> "Structured Financial Data", ... */
 export function sourceLabel(source: string | null | undefined): string {
   const map: Record<string, string> = {

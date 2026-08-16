@@ -25,7 +25,7 @@
 
 .comparison__table th,
 .comparison__table td {
-  padding: 11px var(--space-4);
+  padding: 8px var(--space-4);
   text-align: left;
   border-bottom: 1px solid var(--line);
 }
@@ -49,7 +49,7 @@
 }
 
 .comparison__table td.is-numeric {
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
   color: var(--text);
 }
 
@@ -60,11 +60,11 @@
 
 .comparison__table td {
   color: var(--text-muted);
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }
 
 .comparison__table td.is-absent {
-  color: var(--text-dim);
+  color: var(--color-text-muted);
 }
 
 .comparison__sort {
@@ -75,7 +75,7 @@
   border: none;
   background: none;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -124,7 +124,7 @@
 }
 
 .comparison__hint {
-  padding: 10px var(--space-4);
+  padding: 8px var(--space-4);
   border-top: 1px solid var(--line);
   background: var(--surface-2);
   font-size: 12px;
@@ -133,9 +133,9 @@
 }
 
 .comparison__empty {
-  padding: var(--space-5);
+  padding: var(--space-4);
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-lg);
   color: var(--text-dim);
-  font-size: 13.5px;
+  font-size: var(--fs-meta);
 }

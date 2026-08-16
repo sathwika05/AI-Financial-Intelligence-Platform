@@ -1,0 +1,11 @@
+/*
+ * The brand mark. Seated on the header band with a soft drop so it reads as
+ * an object on the gradient rather than a sticker printed onto it.
+ */
+
+.logo {
+  display: block;
+  flex: none;
+  border-radius: 11px;
+  filter: drop-shadow(0 3px 8px rgba(6, 21, 34, 0.45));
+}

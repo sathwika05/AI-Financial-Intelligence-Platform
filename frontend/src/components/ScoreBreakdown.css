@@ -76,7 +76,7 @@
 .breakdown__caveat {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--caution);
   border: 1px solid rgba(176, 106, 0, 0.32);
@@ -109,13 +109,12 @@
 }
 
 .breakdown__interpretation {
-  font-family: var(--font-serif);
-  font-size: 14px;
-  font-style: italic;
-  color: var(--text-muted);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
 }
 
 .breakdown__empty {
-  font-size: 13px;
-  color: var(--text-dim);
+  font-size: var(--fs-meta);
+  color: var(--color-text-secondary);
 }

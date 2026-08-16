@@ -17,21 +17,18 @@ body {
   background-color: var(--bg);
   /* Two soft washes of brand colour keep the page from reading as grey card
      stock, without any element having to carry a gradient of its own. */
+  /* A single cool wash so the ground reads as blue-grey rather than flat
+     paper. Kept faint: card contrast is what should carry the page. */
   background-image: radial-gradient(
-      900px 520px at 12% -8%,
-      rgba(109, 94, 248, 0.13),
-      transparent 60%
-    ),
-    radial-gradient(
-      760px 460px at 92% 2%,
-      rgba(168, 85, 247, 0.1),
-      transparent 62%
-    );
+    1200px 620px at 18% -12%,
+    rgba(37, 99, 235, 0.05),
+    transparent 64%
+  );
   background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: var(--fs-body);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -52,7 +49,7 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
@@ -83,53 +80,68 @@ button {
 }
 
 .section-head__title {
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: var(--fs-title);
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.015em;
+  color: var(--color-text-primary);
 }
 
 .section-head__note {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label-caps);
+  font-weight: var(--weight-data);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--color-text-muted);
 }
 
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-panel);
+}
+
+/* A panel that frames data rather than prose: flatter, tighter, and seated
+   on the page rather than floating above it. */
+.panel--data {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+
+/* Inset region inside a card, for secondary or supporting content. */
+.sunken {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
 }
 
 /* Section heading with a colour tab, so the eye finds structure at a glance. */
 .block-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  font-weight: 600;
+  gap: var(--space-2);
+  font-size: var(--fs-section);
+  font-weight: var(--weight-strong);
   letter-spacing: -0.01em;
+  color: var(--color-text-primary);
 }
 
-.block-title::before {
-  content: "";
-  width: 3px;
-  height: 16px;
-  border-radius: 2px;
-  background: var(--accent-grad);
+.block-title__icon {
+  color: var(--accent);
+  flex: none;
 }
 
 /* ── Micro-label: the recurring mono eyebrow ───────────────────── */
 
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label-caps);
+  font-weight: var(--weight-data);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--color-text-muted);
 }
 
 /* ── Numbers ───────────────────────────────────────────────────── */
@@ -145,38 +157,63 @@ button {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 5px 10px;
+  gap: 6px;
+  padding: 3px 9px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-xs);
   background: var(--surface-2);
-  font-size: 12.5px;
-  color: var(--text-muted);
+  font-size: var(--fs-meta);
+  font-weight: var(--weight-ui);
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
+.chip__icon {
+  color: var(--text-dim);
+  flex: none;
+}
+
+/* Violet marks what the model itself produced — confidence, intent — so the
+   hue reads as "AI" wherever it appears rather than as decoration. */
+.chip--ai .chip__icon {
+  color: var(--violet-500);
+}
+
+.chip--ai {
+  border-color: rgba(124, 92, 252, 0.26);
+  background: var(--violet-50);
+}
+
 .chip__value {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--text);
+  font-weight: var(--weight-data);
+  color: var(--color-text-data);
 }
 
-.chip--positive {
+/* Semantic tone tints the value and the dot only. A fully coloured chip
+   competes with the ranking for attention. */
+.chip--positive .chip__value {
   color: var(--positive);
-  border-color: rgba(13, 138, 95, 0.28);
-  background: rgba(13, 138, 95, 0.07);
 }
 
-.chip--caution {
+.chip--caution .chip__value {
   color: var(--caution);
-  border-color: rgba(176, 106, 0, 0.28);
-  background: rgba(176, 106, 0, 0.07);
 }
 
-.chip--negative {
+.chip--negative .chip__value {
   color: var(--negative);
-  border-color: rgba(194, 59, 78, 0.28);
-  background: rgba(194, 59, 78, 0.07);
+}
+
+.chip--positive .chip__icon {
+  color: var(--positive);
+}
+
+.chip--caution .chip__icon {
+  color: var(--caution);
+}
+
+.chip--negative .chip__icon {
+  color: var(--negative);
 }
 
 /* ── Buttons ───────────────────────────────────────────────────── */
@@ -185,30 +222,43 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  padding: 10px 18px;
-  border-radius: var(--radius);
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   transition: background-color 140ms var(--ease), border-color 140ms var(--ease),
     color 140ms var(--ease), transform 140ms var(--ease);
 }
 
 .btn--primary {
-  background: var(--accent-grad);
+  /* A short blue-to-teal travel ties the primary action to the brand band
+     without the button ever animating on its own. */
+  background: linear-gradient(
+    118deg,
+    var(--brand-blue) 0%,
+    var(--brand-blue) 55%,
+    #1668b8 100%
+  );
   color: #ffffff;
-  font-weight: 600;
+  font-weight: var(--weight-data);
   box-shadow: var(--shadow-key);
 }
 
 .btn--primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 30px -10px rgba(91, 75, 232, 0.65);
+  background: linear-gradient(
+    118deg,
+    var(--color-primary-hover) 0%,
+    var(--color-primary-hover) 45%,
+    var(--brand-teal) 100%
+  );
+  box-shadow: 0 8px 18px -8px rgba(29, 78, 216, 0.5);
 }
 
 .btn--primary:active:not(:disabled) {
-  transform: translateY(0);
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 .btn--ghost {
@@ -223,9 +273,21 @@ button {
   background: var(--accent-soft);
 }
 
+/* A real desaturated treatment rather than opacity alone, so the difference
+   between "not ready" and "ready" is legible rather than a dimmer version of
+   the same button. */
+.btn--primary:disabled {
+  background: #a8c4ef;
+  color: #f4f8fd;
+  box-shadow: none;
+}
+
 .btn:disabled {
-  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.btn--ghost:disabled {
+  opacity: 0.5;
 }
 
 /* ── Utility ───────────────────────────────────────────────────── */

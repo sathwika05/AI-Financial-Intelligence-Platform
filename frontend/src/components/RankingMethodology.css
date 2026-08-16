@@ -1,58 +1,46 @@
+/*
+ * How the ranking was produced. One compact row per factor so the mix reads
+ * as a single analytical block, with the explanation kept subordinate.
+ */
+
 .methodology {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .methodology__list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  list-style: none;
   margin: 0;
   padding: 0;
-  list-style: none;
 }
 
 .methodology__item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.methodology__item--unused {
-  opacity: 0.5;
-}
-
-.methodology__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.methodology__factor {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 8px minmax(74px, auto) minmax(0, 1fr) 42px;
   align-items: center;
   gap: var(--space-2);
-  font-size: 13.5px;
-  color: var(--text);
 }
 
 .methodology__swatch {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
 }
 
-.methodology__weight {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+.methodology__factor {
+  font-size: var(--fs-meta);
+  font-weight: var(--weight-ui);
+  color: var(--color-text-primary);
+  white-space: nowrap;
 }
 
 .methodology__bar {
   display: block;
-  height: 4px;
+  height: 5px;
   border-radius: 999px;
   background: var(--surface-3);
   overflow: hidden;
@@ -62,29 +50,26 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  transform-origin: left center;
-  animation: bar-grow 620ms var(--ease) backwards;
+  transition: width 320ms var(--ease-out);
 }
 
-@keyframes bar-grow {
-  from {
-    transform: scaleX(0);
-  }
+.methodology__weight {
+  font-size: var(--fs-meta);
+  font-weight: var(--weight-data);
+  color: var(--color-text-data);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
-.methodology__note {
-  font-size: 12px;
-  color: var(--text-dim);
+/* A factor the analysis gave no weight to still appears, but recedes. */
+.methodology__item--unused {
+  opacity: 0.45;
 }
 
-.methodology__caption {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-dim);
-  max-width: 76ch;
-}
-
+.methodology__caption,
 .methodology__empty {
-  font-size: 13px;
-  color: var(--text-dim);
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  max-width: 52ch;
 }

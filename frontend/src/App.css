@@ -1,3 +1,11 @@
+/*
+ * Page shell.
+ *
+ * The masthead is a thin band, the content column is a single stack, and the
+ * rhythm between blocks is deliberately tight — this is a research surface
+ * where more information on screen is the point.
+ */
+
 .app {
   display: flex;
   flex-direction: column;
@@ -6,42 +14,67 @@
 
 /* ── Masthead ──────────────────────────────────────────────────── */
 
-/*
- * A deep indigo band anchors the light page and gives the product a colour of
- * its own. The four factor hues sit in the mark, where they read as a badge
- * rather than as data.
- */
 .masthead {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: linear-gradient(120deg, #1b1450 0%, #2f2178 55%, #4b2a9c 100%);
-  box-shadow: 0 10px 30px -18px rgba(23, 19, 66, 0.7);
+  /* The one rich surface in the product. Navy resolves into blue and then
+     teal across the band, with a soft teal illumination behind the right
+     side for depth. The drift is slow enough that it registers as depth
+     rather than as motion. */
+  background:
+    /* Scrim over the brand block. The drift moves the teal stop across the
+       band, so without this the subtitle would fall to 3.66:1 at some point
+       in the cycle. Fixed in place, it keeps the text side dark at every
+       phase while the right side keeps its teal depth. */
+    linear-gradient(
+      90deg,
+      rgba(6, 21, 34, 0.72) 0%,
+      rgba(6, 21, 34, 0.5) 34%,
+      rgba(6, 21, 34, 0.12) 58%,
+      transparent 72%
+    ),
+    radial-gradient(
+      circle at 78% 50%,
+      rgba(14, 116, 144, 0.22),
+      transparent 42%
+    ),
+    linear-gradient(
+      110deg,
+      var(--brand-navy) 0%,
+      var(--brand-navy-light) 45%,
+      var(--brand-blue-deep) 75%,
+      var(--brand-teal) 100%
+    );
+  background-size: 100% 100%, 100% 100%, 200% 200%;
+  animation: masthead-drift 14s ease-in-out infinite;
+  border-bottom: 1px solid rgba(6, 21, 34, 0.55);
+}
+
+@keyframes masthead-drift {
+  0%,
+  100% {
+    background-position: 0% 50%, 0% 50%, 0% 50%;
+  }
+  50% {
+    background-position: 0% 50%, 0% 50%, 100% 50%;
+  }
+}
+
+/* The gradient stays; only the drift stops. */
+@media (prefers-reduced-motion: reduce) {
+  .masthead {
+    animation: none;
+    background-position: 0% 50%, 0% 50%, 50% 50%;
+  }
 }
 
 .masthead__inner {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding-top: 18px;
-  padding-bottom: 18px;
-  animation: rise 420ms var(--ease) backwards;
-}
-
-.masthead__mark {
-  display: block;
-  width: 30px;
-  height: 30px;
-  flex: none;
-  border-radius: 9px;
-  background: linear-gradient(
-    180deg,
-    var(--factor-valuation) 0 25%,
-    var(--factor-growth) 25% 50%,
-    var(--factor-relevance) 50% 75%,
-    var(--factor-sentiment) 75% 100%
-  );
-  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.55);
+  gap: var(--space-3);
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 .masthead__brand {
@@ -52,29 +85,36 @@
 }
 
 .masthead__title {
-  font-size: 21px;
+  font-size: var(--fs-section);
   font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1.15;
+  letter-spacing: -0.01em;
   color: #ffffff;
+  white-space: nowrap;
 }
 
 .masthead__subtitle {
-  font-size: 13px;
-  line-height: 1.35;
-  color: rgba(233, 230, 255, 0.72);
+  font-size: var(--fs-meta);
+  line-height: 1.3;
+  color: rgba(215, 231, 243, 0.92);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Crossing to the evaluation dashboard. Pushed to the far edge so it reads as
-   a way out of this screen rather than part of the brand. */
+/* Crossing to the evaluation dashboard: a way out of this screen, not part
+   of the brand. */
 .masthead__link {
   margin-left: auto;
   flex: none;
-  padding: 7px 14px;
-  border: 1px solid rgba(233, 230, 255, 0.28);
-  border-radius: 999px;
-  font-size: 13px;
-  color: rgba(233, 230, 255, 0.86);
+  padding: 5px 11px;
+  padding: 6px 12px;
+  border: 1px solid rgba(125, 211, 235, 0.34);
+  border-radius: var(--radius-xs);
+  background: rgba(8, 47, 73, 0.4);
+  backdrop-filter: blur(4px);
+  font-size: var(--fs-meta);
+  font-weight: var(--weight-ui);
+  color: #eaf2f8;
   text-decoration: none;
   white-space: nowrap;
   transition: background-color 140ms var(--ease), border-color 140ms var(--ease),
@@ -82,95 +122,97 @@
 }
 
 .masthead__link:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(233, 230, 255, 0.55);
+  background: rgba(14, 116, 144, 0.34);
+  border-color: rgba(125, 211, 235, 0.6);
   color: #ffffff;
 }
 
 /* ── Hero ──────────────────────────────────────────────────────── */
 
+/* Hero and research card read as one composition: the block is tight inside
+   itself, then separated from the card by a single deliberate step. The extra
+   top padding eases the whole group down the page, which stops the empty
+   state from sitting hard against the header on tall screens. */
 .hero {
-  padding: var(--space-8) 0 var(--space-6);
+  padding: var(--space-8) 0 var(--space-5);
+  max-width: 64ch;
 }
 
 .hero__title {
-  max-width: 16ch;
   font-family: var(--font-serif);
-  font-size: clamp(38px, 6vw, 62px);
-  font-weight: 400;
-  line-height: 1.04;
-  letter-spacing: -0.03em;
-  color: var(--text);
-  animation: rise 520ms var(--ease) 60ms backwards;
+  font-size: var(--fs-display);
+  font-weight: 500;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
 }
 
-/* The verb carries the accent: one coloured word, not a coloured page. */
 .hero__accent {
-  background: var(--accent-grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
+  /* The emphasised phrase is read as a unit; letting it break mid-phrase
+     across lines undercuts the line it is emphasising. */
+  white-space: nowrap;
 }
 
 .hero__lede {
-  margin-top: var(--space-4);
-  max-width: 56ch;
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--text-muted);
-  animation: rise 520ms var(--ease) 130ms backwards;
+  margin-top: 10px;
+  max-width: 52ch;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
 }
 
-/* ── Main ──────────────────────────────────────────────────────── */
+/* ── Content rhythm ────────────────────────────────────────────── */
 
 .app__main {
   flex: 1;
-  width: 100%;
-  padding-bottom: var(--space-8);
-}
-
-/* Console keeps its own top spacing when the hero is gone. */
-.app__main > .console {
-  animation: rise 520ms var(--ease) 190ms backwards;
-}
-
-.status-idle .app__main > .console {
-  margin-top: 0;
-}
-
-.app__main > .console:first-child {
-  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  padding-bottom: var(--space-7);
 }
 
 .app__block {
-  margin-top: var(--space-6);
-  animation: rise 420ms var(--ease) backwards;
+  margin-top: var(--space-4);
+}
+
+/* Analysis provenance: metadata, not a card. Sits directly above the
+   ranking it describes. */
+.app__provenance {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding-left: 2px;
+  font-size: var(--fs-meta);
+  color: var(--color-text-muted);
+}
+
+.app__provenance-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-success);
 }
 
 .app__columns {
   display: grid;
-  grid-template-columns: 1.35fr 1fr;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
 }
 
 .app__column {
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.app__column-title {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  padding: var(--space-4);
 }
 
 .app__column-note {
-  font-size: 12.5px;
-  color: var(--text-dim);
-  margin-top: calc(var(--space-4) * -1 + 2px);
+  margin-top: 1px;
+  margin-bottom: var(--space-3);
+  font-size: var(--fs-meta);
+  color: var(--color-text-secondary);
+}
+
+.app__column .block-title {
+  margin-bottom: var(--space-3);
 }
 
 /* ── Footer ────────────────────────────────────────────────────── */
@@ -178,49 +220,26 @@
 .app__footer {
   border-top: 1px solid var(--line);
   padding: var(--space-4) 0;
+  background: var(--surface);
 }
 
 .app__disclaimer {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--text-dim);
 }
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
-@media (max-width: 900px) {
+@media (max-width: 860px) {
   .app__columns {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@media (max-width: 560px) {
-  .masthead__inner {
-    padding-top: 14px;
-    padding-bottom: 14px;
-  }
-
-  .masthead__mark {
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-  }
-
-  .masthead__title {
-    font-size: 18px;
-  }
-
+@media (max-width: 720px) {
   .masthead__subtitle {
-    font-size: 12px;
+    display: none;
   }
-}
 
-@media (max-width: 560px) {
   .hero {
-    padding: var(--space-6) 0 var(--space-5);
+    padding-top: var(--space-5);
   }
 }

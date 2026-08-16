@@ -1,69 +1,213 @@
 /*
  * Design tokens for the Financial Intelligence workspace.
  *
- * Light, but not bleached: an indigo-tinted ink on soft lavender-white, with
- * one violet-to-indigo accent used for anything the reader acts on. Colour is
- * otherwise reserved for the four ranking factors, so a page of figures keeps
- * its meaning while still having some warmth.
+ * An institutional financial surface: deep navy for brand and structure,
+ * financial blue for anything the reader acts on, crisp white cards on a cool
+ * blue-grey ground. Colour carries meaning and nothing else — green is growth
+ * and success, amber is sentiment and caveats, and violet is reserved for the
+ * AI/relevance dimension so it reads as a signal rather than as the product's
+ * identity.
  *
- * Type roles come from one superfamily: Serif for headlines and the analysis
- * narrative, Sans for interface chrome, Mono for every number and micro-label.
+ * Three layers, in order:
+ *   1. Palette   — raw ramps, referenced only by layer 2.
+ *   2. Semantic  — what a colour means. Components should consume these.
+ *   3. Aliases   — the historical token names, mapped onto layer 2 so the
+ *                  whole system moves from here rather than component by
+ *                  component. `--factor-*` in particular is composed at
+ *                  runtime in JS (`var(--factor-${factor})`) and must keep
+ *                  its shape.
+ *
+ * Type roles come from one superfamily: Serif for the analysis narrative,
+ * Sans for interface chrome, Mono for figures.
  */
 :root {
   color-scheme: light;
+
+  /* ── 1. Palette ─────────────────────────────────────────────── */
+
+  --navy-950: #061522;
+  --navy-900: #0a1d2d;
+  --navy-800: #102a3d;
+  --navy-700: #1b3b52;
+
+  --blue-700: #1d4ed8;
+  --blue-600: #2563eb;
+  --blue-500: #3b82f6;
+  --blue-100: #dbeafe;
+  --blue-50: #eff6ff;
+
+  --green-700: #0f7a50;
+  --green-600: #16a36a;
+  --green-500: #22b573;
+  --green-50: #ecfdf5;
+
+  --violet-600: #6d4bf0;
+  --violet-500: #7c5cfc;
+  --violet-50: #f1edff;
+
+  --amber-700: #b45309;
+  --amber-500: #f59e0b;
+  --amber-100: #fef3c7;
+  --amber-50: #fffbeb;
+
+  --red-600: #dc2626;
+  --red-50: #fef2f2;
+
+  --slate-900: #0f172a;
+  --slate-800: #1e293b;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-200: #dde4ea;
+  --slate-100: #e8edf2;
+  --slate-50: #f8fafc;
 
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
   --font-serif: "IBM Plex Serif", ui-serif, Georgia, "Times New Roman", serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --bg: #f6f6fb;
-  --surface: #ffffff;
-  --surface-2: #f7f6fd;
-  --surface-3: #eeebfa;
+  /* ── 2. Semantic ────────────────────────────────────────────── */
 
-  --line: rgba(23, 19, 66, 0.08);
-  --line-strong: rgba(23, 19, 66, 0.16);
+  --color-background: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-surface-secondary: var(--slate-50);
+  --color-surface-tertiary: #eef2f7;
 
-  --text: #17133f;
-  --text-muted: #5b5680;
-  --text-dim: #8b87a8;
+  --color-border: var(--slate-200);
+  --color-border-subtle: var(--slate-100);
+  --color-border-strong: #c6d2de;
 
-  --accent: #5b4be8;
-  --accent-2: #a855f7;
-  --accent-soft: rgba(91, 75, 232, 0.08);
-  --accent-grad: linear-gradient(135deg, #6d5ef8 0%, #a855f7 100%);
+  /* Five deliberate steps. Each has one job, and nothing that a reader needs
+     in order to decide is set below --color-text-muted. */
+  --color-text-primary: #0b1728;   /* titles, tickers, headings, conclusions */
+  --color-text-data: #111827;      /* financial figures and scores          */
+  --color-text-secondary: #475569; /* descriptions and body copy            */
+  /* #718096 measures 4.02:1 on white — just short of AA for the 10–11px
+     uppercase labels this token carries. #64748b clears it at 4.76:1 and
+     still reads a clear step below --color-text-secondary (7.5:1). */
+  --color-text-muted: #64748b;     /* labels and supporting metadata        */
+  --color-text-subtle: #94a3b8;    /* tertiary annotations only             */
 
-  --positive: #0e9f6e;
-  --caution: #c2740a;
-  --negative: #e0475f;
+  /* Brand band. These drive the header gradient and the logo, and nothing
+     else — the workspace stays flat by design. */
+  --color-brand-navy: var(--navy-950);
+  --brand-navy: #061525;
+  --brand-navy-light: #082f49;
+  --brand-blue-deep: #075985;
+  --brand-blue: var(--blue-600);
+  --brand-blue-light: var(--blue-500);
+  --brand-teal: #0e7490;
+  --brand-green: var(--green-500);
 
-  /* One hue per ranking factor, reused at every scale of the score spine. */
-  --factor-valuation: #4f7bf7;
-  --factor-growth: #10b981;
-  --factor-relevance: #a855f7;
-  --factor-sentiment: #f59e0b;
+  --color-primary: var(--blue-600);
+  --color-primary-hover: var(--blue-700);
+  --color-primary-soft: rgba(37, 99, 235, 0.08);
+  --color-primary-softer: rgba(37, 99, 235, 0.045);
+  --color-primary-ring: rgba(37, 99, 235, 0.18);
 
+  --color-success: var(--green-600);
+  --color-success-soft: var(--green-50);
+  --color-warning: var(--amber-700);
+  --color-warning-mark: var(--amber-500);
+  --color-warning-soft: var(--amber-50);
+  --color-danger: var(--red-600);
+  --color-danger-soft: var(--red-50);
+
+  /* One hue per ranking factor, identical at every scale of the product.
+     Violet is spent here, on the AI/relevance dimension. */
+  --color-valuation: var(--blue-500);
+  --color-growth: var(--green-500);
+  --color-relevance: var(--violet-500);
+  --color-sentiment: var(--amber-500);
+
+  /* ── 3. Aliases ─────────────────────────────────────────────── */
+
+  --bg: var(--color-background);
+  --surface: var(--color-surface);
+  --surface-2: var(--color-surface-secondary);
+  --surface-3: var(--color-surface-tertiary);
+  --surface-sunken: var(--color-surface-secondary);
+
+  --line: var(--color-border);
+  --line-strong: var(--color-border-strong);
+  --line-accent: rgba(37, 99, 235, 0.32);
+
+  --text-strong: var(--color-text-primary);
+  --text: var(--color-text-secondary);
+  --text-muted: var(--color-text-secondary);
+  --text-dim: var(--color-text-muted);
+  /* Reserved for genuinely tertiary marks; never for a figure or a label
+     that carries meaning. */
+  --text-subtle: var(--color-text-subtle);
+
+  --accent: var(--color-primary);
+  --accent-hover: var(--color-primary-hover);
+  --accent-2: var(--violet-500);
+  --accent-soft: var(--color-primary-soft);
+  --accent-softer: var(--color-primary-softer);
+  --accent-grad: linear-gradient(135deg, var(--blue-600) 0%, var(--blue-700) 100%);
+
+  --positive: var(--color-success);
+  --positive-soft: var(--color-success-soft);
+  --caution: var(--color-warning);
+  --caution-soft: var(--color-warning-soft);
+  --negative: var(--color-danger);
+  --negative-soft: var(--color-danger-soft);
+
+  /* Consumed as var(--factor-${factor}) at runtime — see ScoreSpine. */
+  --factor-valuation: var(--color-valuation);
+  --factor-growth: var(--color-growth);
+  --factor-relevance: var(--color-relevance);
+  --factor-sentiment: var(--color-sentiment);
+
+  /* ── Type scale ────────────────────────────────────────────────
+     Hierarchy comes from these steps plus weight and colour, not from
+     making primary information large. */
+  --fs-display: 30px;
+  --fs-title: 19px;
+  --fs-section: 14px;
+  --fs-ticker: 15px;
+  --fs-score: 25px;
+  --fs-metric: 14px;
+  --fs-body: 14px;
+  --fs-label: 12px;
+  --fs-meta: 11.5px;
+  --fs-micro: 10px;
+
+  /* Uppercase labels: tight enough to read as a unit, not as spaced-out
+     decoration. One token so every label in the product matches. */
+  --tracking-label: 0.04em;
+  --fs-label-caps: 11px;
+
+  --weight-body: 400;
+  --weight-ui: 500;
+  --weight-data: 600;
+  --weight-strong: 700;
+
+  --radius-xs: 5px;
   --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 20px;
+  --radius: 11px;
+  --radius-lg: 16px;
 
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 72px;
+  --space-5: 20px;
+  --space-6: 26px;
+  --space-7: 36px;
+  --space-8: 52px;
 
   --shell-max: 1180px;
 
-  --shadow-panel: 0 1px 2px rgba(23, 19, 66, 0.04),
-    0 10px 30px -16px rgba(23, 19, 66, 0.16);
-  --shadow-lift: 0 2px 6px rgba(23, 19, 66, 0.05),
-    0 18px 40px -20px rgba(91, 75, 232, 0.35);
-  --shadow-key: 0 10px 24px -10px rgba(91, 75, 232, 0.55);
+  /* Navy-tinted, never purple. Definition comes from the border; the shadow
+     only seats the card. */
+  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04),
+    0 2px 8px -4px rgba(15, 23, 42, 0.08);
+  --shadow-lift: 0 2px 6px rgba(15, 23, 42, 0.06),
+    0 10px 24px -14px rgba(15, 23, 42, 0.22);
+  --shadow-key: 0 6px 16px -8px rgba(37, 99, 235, 0.4);
 
   --ease: cubic-bezier(0.32, 0.72, 0.24, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }

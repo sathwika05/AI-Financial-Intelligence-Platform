@@ -1,98 +1,158 @@
+/*
+ * The research command surface. Compact by design: the field is the only
+ * large target, and the suggestions read as quiet starting points beneath it.
+ */
+
 .console {
-  padding: var(--space-5);
+  padding: var(--space-4);
 }
 
 .console__form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .console__label {
-  color: var(--text-dim);
+  color: var(--text-muted);
+}
+
+/* The field and its action bar share one bordered surface, so the whole
+   thing reads as a single input rather than a box above a toolbar. */
+.console__field {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+  transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+
+.console__field:focus-within {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 3px var(--color-primary-ring);
 }
 
 .console__input {
+  display: block;
   width: 100%;
-  resize: vertical;
-  min-height: 84px;
-  padding: var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text);
+  padding: 10px var(--space-3) 6px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: var(--fs-body);
   line-height: 1.5;
-  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+  resize: vertical;
+  min-height: 52px;
+}
+
+.console__input:focus {
+  outline: none;
 }
 
 .console__input::placeholder {
   color: var(--text-dim);
 }
 
-.console__input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
-}
-
 .console__input:disabled {
   opacity: 0.6;
 }
 
-.console__foot {
+.console__actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
+  padding: 0 var(--space-2) 6px var(--space-3);
 }
 
 .console__count {
-  font-size: 11px;
+  font-size: var(--fs-micro);
   color: var(--text-dim);
 }
 
+.console__count--near {
+  color: var(--caution);
+}
+
+.console__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-dim);
+}
+
+.console__submit {
+  flex: none;
+}
+
+.console__spin {
+  animation: console-spin 900ms linear infinite;
+}
+
+@keyframes console-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Suggestions ─────────────────────────────────────────────── */
+
 .console__suggestions {
   display: flex;
+  /* Top-aligned so the label sits against the first row of chips rather than
+     drifting to the centre of a two-row block. */
   align-items: flex-start;
   gap: var(--space-3);
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--line);
 }
 
-.console__suggestions .eyebrow {
-  padding-top: 7px;
+.console__suggestions-label {
   flex: none;
+  /* Optical alignment with the first chip's text baseline. */
+  padding-top: 5px;
 }
 
 .console__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: 6px;
+  list-style: none;
   margin: 0;
   padding: 0;
-  list-style: none;
+  min-width: 0;
 }
 
+/* Outlined, never filled: a suggestion must not compete with Analyze. */
 .console__chip {
-  max-width: 100%;
-  padding: 6px 11px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text-muted);
-  font-size: 12.5px;
+  display: block;
+  /* Content-aware up to a ceiling, so a short question stays short and a long
+     one wraps to the next row instead of being cut mid-word. Anything still
+     over the ceiling ellipses, with the full text on the title attribute. */
+  max-width: 33rem;
+  padding: 5px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  color: var(--color-text-body);
+  font-size: var(--fs-meta);
+  font-weight: var(--weight-ui);
   text-align: left;
-  transition: color 140ms var(--ease), border-color 140ms var(--ease),
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color 140ms var(--ease), color 140ms var(--ease),
     background-color 140ms var(--ease);
 }
 
 .console__chip:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--color-primary);
+  background: var(--blue-50);
+  color: var(--blue-700);
 }
 
 .console__chip:disabled {
@@ -100,17 +160,31 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 640px) {
-  .console {
-    padding: var(--space-4);
-  }
-
+@media (max-width: 720px) {
   .console__suggestions {
     flex-direction: column;
-    gap: var(--space-2);
+    align-items: flex-start;
   }
 
-  .console__suggestions .eyebrow {
-    padding-top: 0;
+  .console__hint {
+    display: none;
   }
+}
+
+/* ── Compact state ───────────────────────────────────────────────
+   Applied once results exist: the question stays editable and fully
+   readable, but stops occupying height the ranking needs. */
+
+.console--compact {
+  padding: var(--space-3) var(--space-4);
+}
+
+.console--compact .console__input {
+  min-height: 40px;
+  padding-top: var(--space-2);
+}
+
+.console--compact .console__suggestions {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
 }

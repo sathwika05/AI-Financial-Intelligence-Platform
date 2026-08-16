@@ -12,6 +12,9 @@ export interface ScoreSpineProps {
   /** Factors whose evidence the backend flagged as unsupported. */
   unverifiedFactors?: ReadonlySet<string>;
   showScale?: boolean;
+  /** Per-factor 0–1 scores. Supplying these renders the readout beneath the
+   *  bar; omit them and the bar stays a bar. Never derived here. */
+  scores?: FactorMap | null;
 }
 
 interface Segment {
@@ -58,8 +61,19 @@ export function ScoreSpine({
   size = "md",
   unverifiedFactors = EMPTY_SET,
   showScale = false,
+  scores,
 }: ScoreSpineProps) {
   const segments = buildSegments(contributions, unverifiedFactors);
+
+  // Only factors the backend actually scored appear in the readout.
+  const scoreRows = scores
+    ? orderFactors(Object.keys(scores))
+        .map((factor) => ({ factor, value: scores[factor] }))
+        .filter(
+          (row): row is { factor: string; value: number } =>
+            typeof row.value === "number" && Number.isFinite(row.value),
+        )
+    : [];
 
   if (segments.length === 0) {
     return (
@@ -75,16 +89,19 @@ export function ScoreSpine({
       ? Math.max(0, Math.min(1, finalScore)) * 100
       : null;
 
-  const description = segments
-    .map((segment) => `${factorLabel(segment.factor)} ${segment.value.toFixed(3)}`)
-    .join(", ");
+  const description = (scoreRows.length > 0
+    ? scoreRows.map((row) => `${factorLabel(row.factor)} ${row.value.toFixed(2)}`)
+    : segments.map(
+        (segment) => `${factorLabel(segment.factor)} ${segment.value.toFixed(3)}`,
+      )
+  ).join(", ");
 
   return (
     <div className={`spine spine--${size}`}>
       <div
         className="spine__track"
         role="img"
-        aria-label={`Weighted factor contributions: ${description}`}
+        aria-label={`Factor breakdown: ${description}`}
       >
         {segments.map((segment) => (
           <span
@@ -112,6 +129,34 @@ export function ScoreSpine({
           />
         )}
       </div>
+
+      {/* Readout of the factor scores behind the bar. Revealed by the
+          enclosing row on hover and on keyboard focus — the bar cannot own a
+          focusable trigger of its own because it sits inside the row's
+          expand button. The same figures are in the bar's aria-label, so
+          screen readers get them without the popover. */}
+      {scoreRows.length > 0 && (
+        <span className="spine__readout" role="presentation">
+          {scoreRows.map((row) => (
+            <span key={row.factor} className="spine__readout-row">
+              <span
+                className="spine__readout-swatch"
+                style={
+                  {
+                    "--segment-color": `var(--factor-${row.factor}, var(--accent))`,
+                  } as CSSProperties
+                }
+              />
+              <span className="spine__readout-label">
+                {factorLabel(row.factor)}
+              </span>
+              <span className="spine__readout-value">
+                {row.value.toFixed(2)}
+              </span>
+            </span>
+          ))}
+        </span>
+      )}
 
       {showScale && (
         <div className="spine__scale eyebrow">

@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { readFlag } from "../lib/labels";
 import "./Warnings.css";
 
@@ -32,7 +33,11 @@ export function Warnings({
             key={`${readable.raw}-${index}`}
             title={readable.raw}
           >
-            <span className="warnings__mark" aria-hidden="true" />
+            <AlertTriangle
+              size={11}
+              className="warnings__icon"
+              aria-hidden="true"
+            />
             <span className="warnings__text">{readable.label}</span>
           </li>
         );

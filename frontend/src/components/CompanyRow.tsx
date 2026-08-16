@@ -1,13 +1,28 @@
 import { useId, type CSSProperties } from "react";
+import {
+  AlertTriangle,
+  BarChart3,
+  ChevronDown,
+  FileText,
+  Quote,
+  Table2,
+} from "lucide-react";
 import { buildMetricItems } from "./MetricGrid";
 import { CitationText } from "./CitationText";
 import { CitedClaims, DetailedEvidenceGroups } from "./EvidenceList";
 import { ScoreBreakdown } from "./ScoreBreakdown";
 import { ScoreSpine } from "./ScoreSpine";
+import { Stat, StatRail } from "./Stat";
 import { Warnings } from "./Warnings";
 import { entryCitationIds, entryFacts, type CompanyEntry } from "../lib/entries";
 import { formatRatioAsPercent, formatScore } from "../lib/format";
-import { hasUnsupportedSentiment, readFlag, recommendationTone } from "../lib/labels";
+import {
+  hasUnsupportedSentiment,
+  matchLabel,
+  matchStrength,
+  readFlag,
+  recommendationTone,
+} from "../lib/labels";
 import "./CompanyRow.css";
 
 export interface CompanyRowProps {
@@ -20,10 +35,35 @@ export interface CompanyRowProps {
   onSelectCitation: (citationId: string) => void;
 }
 
+/** Section heading inside the expanded panel. */
+function PanelSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: typeof FileText;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="row__block">
+      <h4 className="row__block-title">
+        <Icon size={13} className="row__block-icon" aria-hidden="true" />
+        {title}
+      </h4>
+      {children}
+    </section>
+  );
+}
+
 /**
  * A single company in the ranking: scannable when collapsed, complete when
  * open. Expanding in place keeps the reader's position in the ranking, which
  * a modal or drawer takes away.
+ *
+ * The collapsed row answers the ranking questions in reading order — who,
+ * on what figures, at what score, how strong a match — with limitations kept
+ * deliberately quiet beneath.
  */
 export function CompanyRow({
   entry,
@@ -37,14 +77,20 @@ export function CompanyRow({
   const facts = entryFacts(entry);
   const metrics = buildMetricItems(facts.metrics);
   const tone = recommendationTone(facts.recommendation);
+  const match = matchLabel(facts.recommendation);
+  const strength = matchStrength(facts.recommendation);
   const flags = facts.flags ?? [];
   const unverified = hasUnsupportedSentiment(flags)
     ? new Set(["sentiment"])
     : undefined;
 
+  const rank = facts.rank ?? null;
+  // Only the top three get emphasis; beyond that the ranking reads as a list.
+  const podium = rank != null && rank <= 3 ? ` row--rank-${rank}` : "";
+
   return (
     <article
-      className={`row${expanded ? " row--open" : ""}`}
+      className={`row${expanded ? " row--open" : ""}${podium}`}
       style={{ "--index": index } as CSSProperties}
     >
       <button
@@ -54,65 +100,89 @@ export function CompanyRow({
         aria-expanded={expanded}
         aria-controls={panelId}
       >
-        <span className="row__rank num">{facts.rank ?? "—"}</span>
+        <span className="row__rank">
+          <span className="row__rank-value num">{rank ?? "—"}</span>
+        </span>
 
         <span className="row__identity">
-          <span className="row__ticker num">{facts.ticker ?? facts.name}</span>
+          <span className="row__ticker">{facts.ticker ?? facts.name}</span>
           <span className="row__name">{facts.name}</span>
         </span>
 
-        <span className="row__score">
-          <span className="row__score-value num">
-            {formatScore(facts.finalScore)}
-          </span>
-          <span className="row__spine">
-            <ScoreSpine
-              contributions={entry.ranked?.explainability?.contributions}
-              finalScore={facts.finalScore}
-              size="sm"
-              unverifiedFactors={unverified}
+        {/* Fixed columns, not a flowing rail: P/E under P/E, EPS under EPS,
+            all the way down the ranking. */}
+        <StatRail columns={4}>
+          {metrics.map((item) => (
+            <Stat
+              key={item.label}
+              label={item.label}
+              value={item.value}
+              absent={item.value === "N/A"}
             />
+          ))}
+        </StatRail>
+
+        <span className="row__score">
+          <span className="row__score-figure">
+            <span className="row__score-value num">
+              {formatScore(facts.finalScore)}
+            </span>
+            <span className="row__score-label">Composite</span>
+          </span>
+
+          <ScoreSpine
+            contributions={entry.ranked?.explainability?.contributions}
+            scores={entry.ranked?.explainability?.scores}
+            finalScore={facts.finalScore}
+            size="sm"
+            unverifiedFactors={unverified}
+          />
+
+          <span className="row__verdict">
+            {match && (
+              <span
+                className={`row__match row__match--${tone}`}
+                title={
+                  facts.recommendation
+                    ? `Model verdict: ${facts.recommendation}`
+                    : undefined
+                }
+              >
+                {strength != null && (
+                  <span className="row__match-pips" aria-hidden="true">
+                    {[0, 1, 2, 3].map((pip) => (
+                      <span
+                        key={pip}
+                        className={`row__match-pip${
+                          pip <= strength ? " row__match-pip--on" : ""
+                        }`}
+                      />
+                    ))}
+                  </span>
+                )}
+                {match}
+              </span>
+            )}
+
+            {facts.confidence != null && (
+              <span className="row__confidence" title="Model confidence in this company's analysis.">
+                <span className="row__confidence-label">Confidence</span>
+                <span className="row__confidence-value num">
+                  {formatRatioAsPercent(facts.confidence)}
+                </span>
+              </span>
+            )}
           </span>
         </span>
 
-        {facts.recommendation && (
-          <span className={`row__assessment row__assessment--${tone}`}>
-            {facts.recommendation}
-          </span>
-        )}
-
-        <span className="row__chevron" aria-hidden="true" />
+        <ChevronDown size={16} className="row__chevron" aria-hidden="true" />
       </button>
 
-      <dl className="row__metrics">
-        {metrics.map((item) => (
-          <div className="row__metric" key={item.label}>
-            <dt className="row__metric-label">{item.label}</dt>
-            <dd
-              className={`row__metric-value num${
-                item.value === "N/A" ? " row__metric-value--absent" : ""
-              }`}
-            >
-              {item.value}
-            </dd>
-          </div>
-        ))}
-
-        {facts.confidence != null && (
-          <div className="row__metric row__metric--end">
-            <dt className="row__metric-label">Confidence</dt>
-            <dd className="row__metric-value row__metric-value--muted num">
-              {formatRatioAsPercent(facts.confidence)}
-            </dd>
-          </div>
-        )}
-      </dl>
-
-      {/* Limitations stay visible when collapsed; the rest opens below. */}
+      {/* One limitation stays visible when collapsed; the rest open below. */}
       {!expanded && flags.length > 0 && (
         <p className="row__caveat">
-          <span className="row__caveat-mark" aria-hidden="true" />
-          {readFlag(flags[0]).label}
+          <AlertTriangle size={11} className="row__caveat-icon" aria-hidden="true" />
+          <span className="row__caveat-text">{readFlag(flags[0]).label}</span>
           {flags.length > 1 && (
             <span className="row__caveat-more">+{flags.length - 1} more</span>
           )}
@@ -123,34 +193,48 @@ export function CompanyRow({
         <div className="row__panel" id={panelId}>
           <div className="row__panel-grid">
             <div className="row__panel-col">
-              {facts.summary && (
-                <CitationText
-                  text={facts.summary}
-                  knownIds={entryCitationIds(entry)}
-                  onSelectCitation={onSelectCitation}
-                />
-              )}
+              <PanelSection icon={Quote} title="Why this company ranked here">
+                {facts.summary ? (
+                  <CitationText
+                    text={facts.summary}
+                    knownIds={entryCitationIds(entry)}
+                    onSelectCitation={onSelectCitation}
+                  />
+                ) : (
+                  <p className="row__note">
+                    The analysis returned no written explanation for this
+                    company.
+                  </p>
+                )}
+              </PanelSection>
 
-              {flags.length > 0 && (
-                <section className="row__block">
-                  <h4 className="row__block-title">Evidence limitations</h4>
-                  <Warnings flags={flags} />
-                </section>
-              )}
+              <PanelSection icon={Table2} title="Financial metrics">
+                <StatRail columns={4}>
+                  {metrics.map((item) => (
+                    <Stat
+                      key={item.label}
+                      label={item.label}
+                      value={item.value}
+                      absent={item.value === "N/A"}
+                    />
+                  ))}
+                </StatRail>
+              </PanelSection>
 
-              <section className="row__block">
-                <h4 className="row__block-title">Cited in this analysis</h4>
+              <PanelSection icon={FileText} title="Supporting evidence">
                 <CitedClaims
                   evidence={entry.report?.evidence}
                   highlightId={highlightCitation}
                 />
-              </section>
+                <DetailedEvidenceGroups
+                  evidence={entry.ranked?.evidence}
+                  highlightId={highlightCitation}
+                />
+              </PanelSection>
             </div>
 
             <div className="row__panel-col">
-              <section className="row__block">
-                <h4 className="row__block-title">Why this ranking</h4>
-
+              <PanelSection icon={BarChart3} title="Factor breakdown">
                 {entry.ranked ? (
                   <ScoreBreakdown
                     explainability={entry.ranked.explainability}
@@ -163,15 +247,13 @@ export function CompanyRow({
                     no factor breakdown is available for it.
                   </p>
                 )}
-              </section>
+              </PanelSection>
 
-              <section className="row__block">
-                <h4 className="row__block-title">Supporting sources</h4>
-                <DetailedEvidenceGroups
-                  evidence={entry.ranked?.evidence}
-                  highlightId={highlightCitation}
-                />
-              </section>
+              {flags.length > 0 && (
+                <PanelSection icon={AlertTriangle} title="Evidence limitations">
+                  <Warnings flags={flags} />
+                </PanelSection>
+              )}
             </div>
           </div>
         </div>

@@ -15,7 +15,8 @@ const FACTOR_NOTES: Record<string, string> = {
  *
  * Weights are decided per question by the backend and have been observed to
  * change between queries, including dropping to zero, so nothing here is
- * hard-coded.
+ * hard-coded. Presented as one compact row per factor — swatch, name, bar,
+ * weight — so the mix reads as a single analytical block.
  */
 export function RankingMethodology({
   weights,
@@ -45,21 +46,17 @@ export function RankingMethodology({
               className={`methodology__item${
                 unused ? " methodology__item--unused" : ""
               }`}
+              title={FACTOR_NOTES[factor]}
             >
-              <div className="methodology__head">
-                <span className="methodology__factor">
-                  <span
-                    className="methodology__swatch"
-                    style={{
-                      background: `var(--factor-${factor}, var(--accent))`,
-                    }}
-                  />
-                  {factorLabel(factor)}
-                </span>
-                <span className="methodology__weight num">
-                  {formatWeight(weight)}
-                </span>
-              </div>
+              <span
+                className="methodology__swatch"
+                style={{
+                  background: `var(--factor-${factor}, var(--accent))`,
+                }}
+                aria-hidden="true"
+              />
+
+              <span className="methodology__factor">{factorLabel(factor)}</span>
 
               <span className="methodology__bar" aria-hidden="true">
                 <span
@@ -71,18 +68,17 @@ export function RankingMethodology({
                 />
               </span>
 
-              {FACTOR_NOTES[factor] && (
-                <span className="methodology__note">{FACTOR_NOTES[factor]}</span>
-              )}
+              <span className="methodology__weight num">
+                {formatWeight(weight)}
+              </span>
             </li>
           );
         })}
       </ul>
 
       <p className="methodology__caption">
-        Each company receives a score from 0 to 1 on every factor. The factors
-        are combined using the weights above, which the analysis sets per
-        question based on the evidence available.
+        Each company scores 0–1 per factor. Factors are combined using these
+        weights, which the analysis sets per question.
       </p>
     </div>
   );

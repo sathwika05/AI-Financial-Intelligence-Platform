@@ -639,7 +639,6 @@ async def reviewer_node(
         }
 
         return {
-            **state,
             "review_result": review_result,
             "final_report": draft_report,
             "should_retry": False,
@@ -690,7 +689,6 @@ async def reviewer_node(
     )
 
     return {
-        **state,
         "review_result": review_result,
         "final_report": final_report,
         "should_retry": should_retry,

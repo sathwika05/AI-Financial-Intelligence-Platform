@@ -12,7 +12,7 @@ VALUATION_QUESTIONS: list[EvalQuestion] = [
             "ratios and positive earnings?"
         ),
         expected_intent=IntentType.VALUATION,
-        expected_tools = ["sql"],
+        expected_tools = ["planner", "sql"],
         expected_keywords = [
             "P/E",
             "earnings",
@@ -29,7 +29,7 @@ GROWTH_QUESTIONS: list[EvalQuestion] =[
             "and EPS growth"
         ),
         expected_intent=IntentType.GROWTH,
-        expected_tools=["sql"],
+        expected_tools=["planner", "sql"],
         expected_keywords=[
             "revenue growth",
             "EPS growth",
@@ -45,7 +45,7 @@ SENTIMENT_QUESTIONS: list[EvalQuestion] = [
             "sentiment in recent earnings reports?"
         ),
         expected_intent=IntentType.SENTIMENT,
-        expected_tools = ["vector"],
+        expected_tools = ["planner", "vector"],
         expected_keywords = [
             "sentiment",
             "earnings",
@@ -66,6 +66,7 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
         ),
         expected_intent=IntentType.MIXED,
         expected_tools=[
+            "planner",
             "sql",
             "vector",
             "market",

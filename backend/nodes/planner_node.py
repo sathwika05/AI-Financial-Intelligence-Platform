@@ -137,14 +137,41 @@ async def plan_query(query: str, intent: str,config: RunnableConfig ) -> dict:
         }
 
 
+def plan_to_tools(plan: dict) -> list[str]:
+    """
+    High level tools this plan commits the pipeline to, recorded before
+    retrieval runs. Names match the golden dataset's expected_tools
+    ("sql", "vector", "market") so ToolEvaluator can compare directly.
+    """
+    tools = ["planner"]
+
+    for key, tool in (
+        ("sql_query",    "sql"),
+        ("vector_query", "vector"),
+        ("market_query", "market"),
+    ):
+        if plan.get(key, "").strip():
+            tools.append(tool)
+
+    return tools
+
+
 async def planner_node(state: FinancialState,config: RunnableConfig) -> dict:
     """LangGraph node for query planning."""
     query  = state["original_query"]
     intent = state["intent"]
     plan   = await plan_query(query, intent,config)
+
+    executed_tools = plan_to_tools(plan)
+
+    logger.info(
+        f"[PLANNER] executed_tools: {executed_tools}"
+    )
+
     return {
         "sql_query":    plan["sql_query"],
         "vector_query": plan["vector_query"],
         "market_query": plan["market_query"],
-        "strategy":     plan["strategy"]
+        "strategy":     plan["strategy"],
+        "executed_tools": executed_tools,
     }

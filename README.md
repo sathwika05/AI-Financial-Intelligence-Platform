@@ -191,8 +191,15 @@ backend/
   observability/  Logging/metrics/tracing — currently empty stubs
 alembic/          DB migrations
 seeds/            Reference data + seeding script
-frontend/         Empty placeholder (no implementation yet)
+frontend/         Vite + React + TypeScript user-facing research workspace
+  src/api/        Typed client + response models for the financial endpoint
+  src/lib/        Formatting, label translation, citation parsing
+  src/components/ Query console, company cards, comparison table, details drawer
 ```
+
+Run it with `npm install && npm run dev` in `frontend/` (dev server on
+`:5173`). It calls `POST /api/retrieve/financial` through a Vite proxy to
+`localhost:8000`, since the API registers no CORS middleware.
 
 ## Known issues
 
@@ -206,4 +213,5 @@ These were found while documenting the codebase and are worth fixing before rely
 - **`embedding_service.py` and all of `backend/observability/*.py` are empty stub files** — not implemented. Embedding logic currently lives inline in `ingestion/indexing_service.py` and `retrieval/vector_search.py`; logging is ad hoc via `logging.getLogger` rather than a shared observability layer.
 - **Several DB tables have no writers** — `retrieval_logs`, `pipeline_traces`, `retrieved_evidence`, `model_costs`, `system_logs`, `alerts`, `human_reviews` are defined in the schema but nothing currently inserts into them (planned dashboard support, not yet wired up).
 - **`question_sets.py` has duplicate dead redefinitions** of `GROWTH_QUESTIONS`, `SENTIMENT_QUESTIONS`, and `MIXED_QUESTIONS` (harmless — the later definition just overwrites the identical earlier one).
-- **`frontend/components` is empty** — no frontend implementation exists yet, despite the evaluation endpoints being shaped for dashboard charts.
+- **No CORS middleware** — `backend/main.py` registers none, so a browser app on another origin cannot call the API directly. The frontend works around this with a dev-server proxy; a deployed frontend would need CORS or a shared origin.
+- **No evaluation/developer dashboard yet** — the evaluation endpoints are shaped for dashboard charts, but only the normal user-facing research experience is implemented in `frontend/`.

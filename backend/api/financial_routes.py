@@ -1,5 +1,6 @@
 
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,7 @@ from langsmith import traceable
 from pydantic import BaseModel, Field
 from requests import session
 from sqlalchemy.ext.asyncio import AsyncSession
+from langchain_core.load import dumps
 
 from backend.graph.financial_graph import financial_graph
 from backend.llm.llm_config_service import LLMConfigService
@@ -83,7 +85,7 @@ async def financial_retrieval(request: FinancialQueryRequest, session: AsyncSess
             request.query,
             llm_runtime,
         )
-
+        print(json.dumps(json.loads(dumps(result)), indent=2))
         return {
             "query":  request.query,
             "provider": llm_runtime.provider_name,

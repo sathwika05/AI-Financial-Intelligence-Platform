@@ -47,7 +47,6 @@ async def scoring_node(
             )
 
             return {
-                **state,
                 "ranked_companies": [],
                 "scoring_result": None,
             }
@@ -85,7 +84,6 @@ async def scoring_node(
             )
 
             return {
-                **state,
                 "ranked_companies": [],
                 "scoring_result": {
                     "top_companies": [],
@@ -204,7 +202,6 @@ async def scoring_node(
         )
 
         return {
-            **state,
             "scoring_result": scoring_result,
             "ranked_companies": top_companies,
         }
@@ -215,7 +212,6 @@ async def scoring_node(
         )
 
         return {
-            **state,
             "ranked_companies": [],
             "scoring_result": None,
         }

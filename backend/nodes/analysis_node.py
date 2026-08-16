@@ -430,7 +430,6 @@ async def analysis_node(
 
     if not ranked:
         return {
-            **state,
             "draft_report": _empty_report(
                 query=query,
                 intent=intent,
@@ -452,7 +451,6 @@ async def analysis_node(
     )
 
     return {
-        **state,
         "draft_report": draft_report,
         # Consumed — a later retry gets the fresh reviewer flags.
         "review_feedback": [],

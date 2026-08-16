@@ -33,7 +33,7 @@ class LLMRuntime:
     models: dict[str,ModelRuntime]
 
     def get_model(self, tier: LLMTier | str,) -> ModelRuntime:
-
+        
         tier_value = (
             tier.value
             if isinstance(tier, LLMTier)
@@ -41,7 +41,7 @@ class LLMRuntime:
         )
 
         model = self.models.get(tier_value)
-
+        
         if model is None:
             available = ", ".join(self.model.keys())
 

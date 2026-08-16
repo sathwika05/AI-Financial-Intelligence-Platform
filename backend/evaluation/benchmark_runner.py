@@ -34,6 +34,10 @@ from backend.evaluation.evaluators.sql_evaluator import (
 from backend.evaluation.evaluators.tool_evaluator import (
     ToolEvaluator,
 )
+from backend.evaluation.judges import (
+    BenchmarkJudges,
+    get_default_judges,
+)
 from backend.evaluation.schemas import (
     BenchmarkConfig,
     BenchmarkRunResult,
@@ -43,6 +47,7 @@ from backend.evaluation.schemas import (
     PipelineExecution,
     QuestionEvaluationResult,
 )
+from backend.retrieval.sql_executor import SCHEMA
 from backend.state.state_factory import (
     build_initial_financial_state,
 )
@@ -61,12 +66,30 @@ class BenchmarkRunner:
         self,
         *,
         graph: Any,
+        judges: BenchmarkJudges | None = None,
     ) -> None:
+        """
+        judges:
+            The fixed LLM judges used by the SQL and RAGAS evaluators.
+            Defaults to the shared judges so that every provider under
+            test is graded identically. Injectable for offline tests.
+        """
         self.graph = graph
+        self.judges = (
+            judges
+            or get_default_judges()
+        )
 
         self.intent_evaluator = IntentEvaluator()
-        self.sql_evaluator = SQLEvaluator()
-        self.ragas_evaluator = RagasEvaluator()
+        self.sql_evaluator = SQLEvaluator(
+            judge_llm=self.judges.sql_llm
+        )
+        self.ragas_evaluator = RagasEvaluator(
+            judge_llm=self.judges.ragas_llm,
+            judge_embeddings=(
+                self.judges.ragas_embeddings
+            ),
+        )
         self.tool_evaluator = ToolEvaluator()
         self.ranking_evaluator = RankingEvaluator()
         self.market_evaluator = MarketEvaluator()
@@ -110,7 +133,7 @@ class BenchmarkRunner:
             for question in questions:
                 question_result = await self._run_question(
                     question=question,
-                    config=config,
+                    benchmark_config=config,
                     runnable_config=runnable_config,
                 )
 
@@ -156,11 +179,15 @@ class BenchmarkRunner:
         self,
         *,
         question: EvalQuestion,
-        config: BenchmarkConfig,
+        benchmark_config: BenchmarkConfig,
         runnable_config: RunnableConfig,
     ) -> QuestionEvaluationResult:
         """
         Execute one question and select evaluators by expected route.
+
+        The benchmark configuration is not named `config` because
+        @traceable treats a `config` argument as a LangChain
+        RunnableConfig and calls .get() on it.
 
         VALUATION/GROWTH:
             intent + SQL + optional tool + optional ranking
@@ -199,12 +226,13 @@ class BenchmarkRunner:
             # Only run ToolEvaluator when golden expected tools exist.
             if question.expected_tools:
                 evaluator_results["tool"] = (
-                    self.tool_evaluator.evaluate(
-                        expected_tools=(
-                            question.expected_tools
-                        ),
-                        executed_tools=(
+                    await self.tool_evaluator.evaluate(
+                        user_query=question.question,
+                        actual_tool_calls=self._to_tool_calls(
                             execution.executed_tools
+                        ),
+                        expected_tool_calls=self._to_tool_calls(
+                            question.expected_tools
                         ),
                     )
                 )
@@ -216,7 +244,7 @@ class BenchmarkRunner:
                 "MIXED",
             }:
                 evaluator_results["sql"] = (
-                    self.sql_evaluator.evaluate(
+                    await self.sql_evaluator.evaluate(
                         generated_sql=(
                             execution.generated_sql
                         ),
@@ -229,6 +257,7 @@ class BenchmarkRunner:
                         expected_sql=(
                             question.expected_sql
                         ),
+                        database_schema=SCHEMA,
                     )
                 )
 
@@ -270,7 +299,7 @@ class BenchmarkRunner:
                         expected_companies=(
                             question.expected_companies
                         ),
-                        k=config.top_k,
+                        k=benchmark_config.top_k,
                     )
                 )
 
@@ -426,6 +455,28 @@ class BenchmarkRunner:
             ),
             raw_state=final_state,
         )
+
+    @staticmethod
+    def _to_tool_calls(
+        tool_names: list[str],
+    ) -> list[dict[str, Any]]:
+        """
+        Convert high-level stage names into the structured tool calls
+        ToolEvaluator expects.
+
+        Tool evaluation is scored at the stage level, the same level the
+        dashboard reports: sql, vector, market, planner. Arguments are left
+        empty on both the expected and the actual side, so the RAGAS
+        metrics compare stage names only.
+        """
+        return [
+            {
+                "name": str(name).strip().lower(),
+                "args": {},
+            }
+            for name in tool_names
+            if name
+        ]
 
     @staticmethod
     def _contexts_to_text(

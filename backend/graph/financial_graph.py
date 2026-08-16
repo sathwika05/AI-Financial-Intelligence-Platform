@@ -66,10 +66,13 @@ async def retrieval_node(state: FinancialState, config: RunnableConfig) -> dict:
     # Spread into the keys FinancialState declares. LangGraph drops any
     # key that is not in the state schema, so a nested "result" blob
     # would silently vanish before the scoring node runs.
+    #
+    # Only the retrieval outputs are returned: echoing the whole state
+    # back would re-append the reducer-backed channels (executed_tools,
+    # messages) on every pass through this node.
     vector_result = result.get("vector_result", {})
 
     return {
-        **state,
         "sql_result":         result.get("sql_result", {}),
         "vector_result":      vector_result,
         "market_result":      result.get("market_result", {}),

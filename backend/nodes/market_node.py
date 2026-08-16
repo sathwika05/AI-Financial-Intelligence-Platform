@@ -287,8 +287,10 @@ async def market_node(
     """
     LangGraph node for market-data retrieval.
 
-    Reads `market_query` from state and adds
-    `market_result` to state.
+    Reads `market_query` from state and returns `market_result`
+    as a partial update. Only the key this node owns is returned:
+    echoing the whole state back would re-append any channel that
+    carries a reducer.
     """
     market_query = state.get(
         "market_query",
@@ -308,7 +310,6 @@ async def market_node(
         )
 
         return {
-            **state,
             "market_result": empty_market_result(),
         }
 
@@ -326,6 +327,5 @@ async def market_node(
     )
 
     return {
-        **state,
         "market_result": market_result,
     }

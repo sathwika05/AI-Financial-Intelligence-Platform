@@ -8,6 +8,10 @@ dependencies = [
     "alembic>=1.18.4",
     "asyncpg>=0.31.0",
     "cryptography>=49.0.0",
+    # Required by the ragas DataCompyScore metric used for SQL accuracy.
+    # Capped below 1.0: ragas imports datacompy.core.Compare, which 1.x
+    # replaced with PandasCompare.
+    "datacompy>=0.17.2,<1.0",
     "datasets>=5.0.0",
     "fastapi>=0.136.1",
     "greenlet>=3.5.0",
@@ -17,14 +21,18 @@ dependencies = [
     "langchain-openai<1.0.0",
     "langchain-text-splitters>=1.1.2",
     "langgraph>=1.2.1",
-    "numpy>=2.4.6",
-    "pandas>=3.0.3",
+    # Capped by datacompy, as with pandas. No project code imports numpy
+    # directly.
+    "numpy>=2.0,<=2.4.3",
+    # Capped below 3.0 by datacompy, which the ragas SQL accuracy metric
+    # needs. No project code imports pandas directly.
+    "pandas>=2.2,<3",
     "pgvector>=0.4.2",
     "psycopg2-binary>=2.9.12",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
     "python-dotenv>=1.2.2",
-    "ragas==0.2.15",
+    "ragas>=0.4.3,<0.5",
     "rank-bm25>=0.2.2",
     "redis>=7.4.0",
     "requests>=2.34.2",

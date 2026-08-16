@@ -1,0 +1,226 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Masthead ──────────────────────────────────────────────────── */
+
+/*
+ * A deep indigo band anchors the light page and gives the product a colour of
+ * its own. The four factor hues sit in the mark, where they read as a badge
+ * rather than as data.
+ */
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(120deg, #1b1450 0%, #2f2178 55%, #4b2a9c 100%);
+  box-shadow: 0 10px 30px -18px rgba(23, 19, 66, 0.7);
+}
+
+.masthead__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-top: 18px;
+  padding-bottom: 18px;
+  animation: rise 420ms var(--ease) backwards;
+}
+
+.masthead__mark {
+  display: block;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  background: linear-gradient(
+    180deg,
+    var(--factor-valuation) 0 25%,
+    var(--factor-growth) 25% 50%,
+    var(--factor-relevance) 50% 75%,
+    var(--factor-sentiment) 75% 100%
+  );
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.55);
+}
+
+.masthead__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.masthead__title {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  color: #ffffff;
+}
+
+.masthead__subtitle {
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(233, 230, 255, 0.72);
+}
+
+/* Crossing to the evaluation dashboard. Pushed to the far edge so it reads as
+   a way out of this screen rather than part of the brand. */
+.masthead__link {
+  margin-left: auto;
+  flex: none;
+  padding: 7px 14px;
+  border: 1px solid rgba(233, 230, 255, 0.28);
+  border-radius: 999px;
+  font-size: 13px;
+  color: rgba(233, 230, 255, 0.86);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 140ms var(--ease), border-color 140ms var(--ease),
+    color 140ms var(--ease);
+}
+
+.masthead__link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(233, 230, 255, 0.55);
+  color: #ffffff;
+}
+
+/* ── Hero ──────────────────────────────────────────────────────── */
+
+.hero {
+  padding: var(--space-8) 0 var(--space-6);
+}
+
+.hero__title {
+  max-width: 16ch;
+  font-family: var(--font-serif);
+  font-size: clamp(38px, 6vw, 62px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  animation: rise 520ms var(--ease) 60ms backwards;
+}
+
+/* The verb carries the accent: one coloured word, not a coloured page. */
+.hero__accent {
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero__lede {
+  margin-top: var(--space-4);
+  max-width: 56ch;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  animation: rise 520ms var(--ease) 130ms backwards;
+}
+
+/* ── Main ──────────────────────────────────────────────────────── */
+
+.app__main {
+  flex: 1;
+  width: 100%;
+  padding-bottom: var(--space-8);
+}
+
+/* Console keeps its own top spacing when the hero is gone. */
+.app__main > .console {
+  animation: rise 520ms var(--ease) 190ms backwards;
+}
+
+.status-idle .app__main > .console {
+  margin-top: 0;
+}
+
+.app__main > .console:first-child {
+  margin-top: var(--space-6);
+}
+
+.app__block {
+  margin-top: var(--space-6);
+  animation: rise 420ms var(--ease) backwards;
+}
+
+.app__columns {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.app__column {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.app__column-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app__column-note {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-top: calc(var(--space-4) * -1 + 2px);
+}
+
+/* ── Footer ────────────────────────────────────────────────────── */
+
+.app__footer {
+  border-top: 1px solid var(--line);
+  padding: var(--space-4) 0;
+}
+
+.app__disclaimer {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (max-width: 900px) {
+  .app__columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .masthead__inner {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .masthead__mark {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+  }
+
+  .masthead__title {
+    font-size: 18px;
+  }
+
+  .masthead__subtitle {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero {
+    padding: var(--space-6) 0 var(--space-5);
+  }
+}

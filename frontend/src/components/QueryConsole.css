@@ -1,0 +1,116 @@
+.console {
+  padding: var(--space-5);
+}
+
+.console__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.console__label {
+  color: var(--text-dim);
+}
+
+.console__input {
+  width: 100%;
+  resize: vertical;
+  min-height: 84px;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+
+.console__input::placeholder {
+  color: var(--text-dim);
+}
+
+.console__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+}
+
+.console__input:disabled {
+  opacity: 0.6;
+}
+
+.console__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.console__count {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.console__suggestions {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.console__suggestions .eyebrow {
+  padding-top: 7px;
+  flex: none;
+}
+
+.console__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console__chip {
+  max-width: 100%;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: left;
+  transition: color 140ms var(--ease), border-color 140ms var(--ease),
+    background-color 140ms var(--ease);
+}
+
+.console__chip:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.console__chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .console {
+    padding: var(--space-4);
+  }
+
+  .console__suggestions {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .console__suggestions .eyebrow {
+    padding-top: 0;
+  }
+}

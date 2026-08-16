@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
 
 from backend.evaluation.schemas import (
     BenchmarkRunResult,
@@ -13,6 +17,464 @@ from backend.evaluation.schemas import (
 # A question passes only when its average evaluator score is at least 0.70
 # and no applicable evaluator explicitly fails or returns errors.
 PASS_THRESHOLD = 0.70
+
+
+# ---------------------------------------------------------------------------
+# Execution routes
+# ---------------------------------------------------------------------------
+
+ROUTE_SQL = "SQL Only"
+ROUTE_VECTOR = "Vector Only"
+ROUTE_HYBRID = "Hybrid"
+
+# Only appears when a question recorded neither retrieval artifacts nor a
+# usable intent, so a miscount is visible rather than folded into a real slice.
+ROUTE_UNCLASSIFIED = "Unclassified"
+
+CANONICAL_ROUTES = (
+    ROUTE_SQL,
+    ROUTE_VECTOR,
+    ROUTE_HYBRID,
+)
+
+# The routes the planner takes per intent. See planner_node's prompt:
+# VALUATION/GROWTH use sql_query alone, SENTIMENT uses vector_query alone,
+# and MIXED combines sql + vector + market.
+_ROUTE_BY_INTENT = {
+    "VALUATION": ROUTE_SQL,
+    "GROWTH": ROUTE_SQL,
+    "SENTIMENT": ROUTE_VECTOR,
+    "MIXED": ROUTE_HYBRID,
+}
+
+
+def classify_execution_route(
+    result: QuestionEvaluationResult,
+) -> str:
+    """
+    Determine which route a question actually took.
+
+    Derived from the artifacts the pipeline produced rather than from the
+    intent it was classified as, so a question that was routed one way but
+    executed another is counted as what it did. The intent is used only as a
+    fallback when no artifacts were recorded at all.
+    """
+    execution = result.execution
+
+    # Truthiness, not `is not None`. combine_results only sets a channel's
+    # key when that channel actually ran, and retrieval_node then fills the
+    # gaps with `.get(key, {})` — so an unused channel arrives as an empty
+    # dict, which is not None. Testing against None marked every question as
+    # having used SQL and the market API, so everything classified as Hybrid.
+    used_sql = bool(
+        execution.generated_sql
+    ) or bool(
+        execution.sql_result
+    )
+
+    used_vector = bool(
+        execution.retrieved_contexts
+        or execution.reranked_contexts
+    )
+
+    used_market = bool(
+        execution.market_result
+    )
+
+    active_channels = sum(
+        [
+            used_sql,
+            used_vector,
+            used_market,
+        ]
+    )
+
+    if active_channels >= 2:
+        return ROUTE_HYBRID
+
+    if used_sql:
+        return ROUTE_SQL
+
+    if used_vector:
+        return ROUTE_VECTOR
+
+    # A live market lookup on its own is still the combined path, since no
+    # intent reaches the market API without also planning SQL and vector.
+    if used_market:
+        return ROUTE_HYBRID
+
+    return _ROUTE_BY_INTENT.get(
+        (result.actual_intent or "").upper(),
+        ROUTE_UNCLASSIFIED,
+    )
+
+
+def build_route_distribution(
+    results: list[QuestionEvaluationResult],
+) -> dict[str, int]:
+    """
+    Count questions per execution route.
+
+    The three canonical routes are always present, at zero if unused, so the
+    dashboard renders a stable set of slices across runs.
+    """
+    distribution: dict[str, int] = {
+        route: 0
+        for route in CANONICAL_ROUTES
+    }
+
+    for result in results:
+        route = classify_execution_route(
+            result
+        )
+
+        distribution[route] = (
+            distribution.get(route, 0) + 1
+        )
+
+    return distribution
+
+
+# Canonical metric name -> the evaluator metric names it can arrive under.
+# Shared by the run-level aggregate and the per-route breakdown so the two
+# can never disagree about what "faithfulness" is called.
+_METRIC_ALIASES: dict[str, tuple[str, ...]] = {
+    "intent_accuracy": ("intent_accuracy",),
+
+    "precision_at_k": ("precision_at_k", "precision@k"),
+    "recall_at_k": ("recall_at_k", "recall@k"),
+    "mrr": ("mrr", "mean_reciprocal_rank"),
+    "ndcg_at_k": ("ndcg_at_k", "ndcg@k"),
+
+    "faithfulness": ("faithfulness",),
+    "response_relevancy": (
+        "response_relevancy",
+        # Compatibility aliases from older code/RAGAS versions:
+        "answer_relevancy",
+        "answer_relevance",
+        "response_relevance",
+    ),
+    "context_precision": ("context_precision",),
+    "context_recall": ("context_recall",),
+    "context_entity_recall": ("context_entity_recall",),
+    "noise_sensitivity": ("noise_sensitivity",),
+
+    "sql_accuracy": ("sql_accuracy", "result_accuracy", "answer_accuracy"),
+    "sql_equivalence": (
+        "sql_equivalence",
+        "sql_semantic_equivalence",
+        "query_equivalence",
+    ),
+
+    "tool_accuracy": ("tool_accuracy", "tool_call_accuracy"),
+    "tool_precision": ("tool_precision",),
+    "tool_recall": ("tool_recall",),
+    "tool_f1": ("tool_f1", "tool_call_f1"),
+
+    "market_accuracy": ("market_accuracy", "market_data_accuracy"),
+
+    "hallucination_rate": ("hallucination_rate",),
+}
+
+
+def _collect_metrics(
+    results: list[QuestionEvaluationResult],
+) -> dict[str, list[float]]:
+    """Gather every applicable evaluator metric across the given questions."""
+    collected: dict[str, list[float]] = {}
+
+    for result in results:
+        for evaluator in result.evaluator_results.values():
+            if not evaluator.applicable:
+                continue
+
+            for metric_name, metric_value in evaluator.metrics.items():
+                numeric_value = _to_float(
+                    metric_value
+                )
+
+                if numeric_value is None:
+                    continue
+
+                collected.setdefault(
+                    metric_name,
+                    [],
+                ).append(
+                    numeric_value
+                )
+
+    return collected
+
+
+def _canonical_averages(
+    collected: dict[str, list[float]],
+) -> dict[str, float | None]:
+    """Average each canonical metric, resolving aliases."""
+    return {
+        canonical_name: _metric_average(
+            collected,
+            *aliases,
+        )
+        for canonical_name, aliases in _METRIC_ALIASES.items()
+    }
+
+
+def _derive_hallucination_rate(
+    canonical: dict[str, float | None],
+) -> float | None:
+    """
+    Prefer an explicit hallucination metric, else fall back to
+    1 - faithfulness.
+    """
+    explicit = canonical.get(
+        "hallucination_rate"
+    )
+
+    if explicit is not None:
+        return explicit
+
+    faithfulness = canonical.get(
+        "faithfulness"
+    )
+
+    if faithfulness is None:
+        return None
+
+    return round(
+        max(
+            0.0,
+            min(
+                1.0,
+                1.0 - faithfulness,
+            ),
+        ),
+        4,
+    )
+
+
+def build_route_performance(
+    results: list[QuestionEvaluationResult],
+) -> dict[str, dict[str, Any]]:
+    """
+    Per-route metric averages.
+
+    Questions are bucketed by the route they actually took, then each bucket
+    is averaged exactly as the whole run is. Every canonical metric is stored,
+    not a hand-picked subset, so the dashboard decides which to show per route
+    without needing another backend change.
+
+    Only routes that ran appear. A route with no questions has nothing to
+    average, and an empty card is worse than an absent one.
+    """
+    buckets: dict[str, list[QuestionEvaluationResult]] = {}
+
+    for result in results:
+        buckets.setdefault(
+            classify_execution_route(result),
+            [],
+        ).append(result)
+
+    performance: dict[str, dict[str, Any]] = {}
+
+    for route, bucket in buckets.items():
+        canonical = _canonical_averages(
+            _collect_metrics(bucket)
+        )
+
+        canonical["hallucination_rate"] = (
+            _derive_hallucination_rate(canonical)
+        )
+
+        latencies = [
+            float(result.execution.latency_ms)
+            for result in bucket
+        ]
+
+        passed = sum(
+            1
+            for result in bucket
+            if result.passed
+        )
+
+        performance[route] = {
+            # Kept alongside the metrics so a card can show what its
+            # averages are based on.
+            "count": len(bucket),
+            "pass_rate": round(
+                passed / len(bucket),
+                4,
+            ),
+            "avg_latency_ms": _average(
+                latencies
+            ),
+
+            # Percentiles are computed per route rather than averaged from
+            # the run-level ones, because a percentile of a percentile is
+            # not a percentile.
+            "p50_latency": _percentile(
+                latencies,
+                50,
+            ),
+            "p95_latency": _percentile(
+                latencies,
+                95,
+            ),
+            "p99_latency": _percentile(
+                latencies,
+                99,
+            ),
+            **{
+                name: value
+                for name, value in canonical.items()
+                if value is not None
+            },
+        }
+
+    return performance
+
+
+def _tool_names(values: Any) -> set[str]:
+    """
+    Reduce a tool list to a set of tool names.
+
+    Tool lists reach this module in two different shapes. The pipeline's
+    `execution.executed_tools` is a list of plain names, but the evaluator's
+    details carry RAGAS-style calls built by `_to_tool_calls`, which are
+    dicts of {"name": ..., "args": {...}}. Dicts are unhashable, so they have
+    to be reduced to names before they can go into a set at all.
+    """
+    names: set[str] = set()
+
+    for value in values or []:
+        if isinstance(value, str):
+            name = value
+        elif isinstance(value, dict):
+            name = str(
+                value.get("name", "")
+            )
+        else:
+            # RAGAS ToolCall objects, and anything else with a name.
+            name = str(
+                getattr(value, "name", "")
+                or ""
+            )
+
+        name = name.strip()
+
+        if name:
+            names.add(name)
+
+    return names
+
+
+def _safe_extra(
+    name: str,
+    builder: Any,
+    results: list[QuestionEvaluationResult],
+) -> dict[str, Any]:
+    """
+    Build one optional dashboard aggregate, never failing the run.
+
+    These feed display panels only, and they are computed after every real
+    metric is already in hand. Losing a whole benchmark — minutes of LLM
+    calls across every question — because a summary panel raised would be
+    the wrong trade, so the failure is logged and the panel goes missing
+    instead.
+    """
+    try:
+        return builder(results)
+    except Exception:
+        logger.exception(
+            "Could not build %s for this run; continuing without it",
+            name,
+        )
+
+        return {}
+
+
+def build_tool_summary(
+    results: list[QuestionEvaluationResult],
+) -> dict[str, dict[str, Any]]:
+    """
+    Per-tool invocation counts across a run.
+
+    `plan_to_tools` records which tools a question committed the pipeline to
+    ("planner", "sql", "vector", "market") and the golden dataset declares
+    which it should have used, so both sides of the comparison exist per
+    question. That yields, per tool:
+
+      calls      - questions where the tool was actually invoked
+      expected   - questions where the dataset expected it
+      hits       - questions where both agree
+      recall     - of the questions expecting it, how many invoked it
+      precision  - of the questions invoking it, how many should have
+
+    Note what is absent: per-tool latency and per-tool success. The pipeline
+    times a question end to end, not each tool, and records no per-tool
+    outcome, so neither can be derived here.
+    """
+    summary: dict[str, dict[str, Any]] = {}
+
+    def bucket(tool: str) -> dict[str, Any]:
+        return summary.setdefault(
+            tool,
+            {
+                "calls": 0,
+                "expected": 0,
+                "hits": 0,
+            },
+        )
+
+    for result in results:
+        actual = _tool_names(
+            result.execution.executed_tools
+        )
+
+        # The dataset's expectation is echoed back by ToolEvaluator's
+        # details, which is the only place it survives onto the result.
+        tool_result = result.evaluator_results.get(
+            "tool"
+        )
+
+        expected: set[str] = set()
+
+        if tool_result is not None:
+            expected = _tool_names(
+                tool_result.details.get(
+                    "expected_tool_calls",
+                    [],
+                )
+            )
+
+        for tool in actual:
+            bucket(tool)["calls"] += 1
+
+        for tool in expected:
+            bucket(tool)["expected"] += 1
+
+        for tool in actual & expected:
+            bucket(tool)["hits"] += 1
+
+    for counts in summary.values():
+        counts["recall"] = (
+            round(
+                counts["hits"] / counts["expected"],
+                4,
+            )
+            if counts["expected"]
+            else None
+        )
+
+        counts["precision"] = (
+            round(
+                counts["hits"] / counts["calls"],
+                4,
+            )
+            if counts["calls"]
+            else None
+        )
+
+    return summary
 
 
 def finalize_question_result(
@@ -92,8 +554,6 @@ def aggregate_benchmark_run(
     latencies: list[float] = []
     costs: list[float] = []
 
-    collected_metrics: dict[str, list[float]] = {}
-
     for result in completed_results:
         expected_intent = (
             result.expected_intent or ""
@@ -118,24 +578,9 @@ def aggregate_benchmark_run(
                 float(result.execution.cost_usd)
             )
 
-        for evaluator in result.evaluator_results.values():
-            if not evaluator.applicable:
-                continue
-
-            for metric_name, metric_value in evaluator.metrics.items():
-                numeric_value = _to_float(
-                    metric_value
-                )
-
-                if numeric_value is None:
-                    continue
-
-                collected_metrics.setdefault(
-                    metric_name,
-                    [],
-                ).append(
-                    numeric_value
-                )
+    canonical = _canonical_averages(
+        _collect_metrics(completed_results)
+    )
 
     total_cost = (
         round(sum(costs), 6)
@@ -143,34 +588,9 @@ def aggregate_benchmark_run(
         else None
     )
 
-    faithfulness = _metric_average(
-        collected_metrics,
-        "faithfulness",
-    )
-
-    explicit_hallucination_rate = _metric_average(
-        collected_metrics,
-        "hallucination_rate",
-    )
-
-    # Fallback only when no dedicated hallucination metric exists.
-    hallucination_rate = (
-        explicit_hallucination_rate
-        if explicit_hallucination_rate is not None
-        else (
-            round(
-                max(
-                    0.0,
-                    min(
-                        1.0,
-                        1.0 - faithfulness,
-                    ),
-                ),
-                4,
-            )
-            if faithfulness is not None
-            else None
-        )
+    # Fallback to 1 - faithfulness only when no dedicated metric exists.
+    hallucination_rate = _derive_hallucination_rate(
+        canonical
     )
 
     return {
@@ -189,103 +609,58 @@ def aggregate_benchmark_run(
             _average(route_matches) or 0.0
         ),
 
-        # Intent
-        "intent_accuracy": _metric_average(
-            collected_metrics,
-            "intent_accuracy",
+        # Counts per actual execution route, for the dashboard's route donut.
+        "route_distribution": _safe_extra(
+            "route_distribution",
+            build_route_distribution,
+            completed_results,
         ),
+
+        # The same buckets, averaged, for the per-route performance cards.
+        "route_performance": _safe_extra(
+            "route_performance",
+            build_route_performance,
+            completed_results,
+        ),
+
+        # Per-tool invocation counts for the tool execution summary.
+        "tool_summary": _safe_extra(
+            "tool_summary",
+            build_tool_summary,
+            completed_results,
+        ),
+
+        # Intent
+        "intent_accuracy": canonical["intent_accuracy"],
 
         # Ranking
-        "precision_at_k": _metric_average(
-            collected_metrics,
-            "precision_at_k",
-            "precision@k",
-        ),
-        "recall_at_k": _metric_average(
-            collected_metrics,
-            "recall_at_k",
-            "recall@k",
-        ),
-        "mrr": _metric_average(
-            collected_metrics,
-            "mrr",
-            "mean_reciprocal_rank",
-        ),
-        "ndcg_at_k": _metric_average(
-            collected_metrics,
-            "ndcg_at_k",
-            "ndcg@k",
-        ),
+        "precision_at_k": canonical["precision_at_k"],
+        "recall_at_k": canonical["recall_at_k"],
+        "mrr": canonical["mrr"],
+        "ndcg_at_k": canonical["ndcg_at_k"],
 
         # Canonical RAGAS names used by the database and dashboard.
-        "faithfulness": faithfulness,
-        "response_relevancy": _metric_average(
-            collected_metrics,
-            "response_relevancy",
-            # Compatibility aliases from older code/RAGAS versions:
-            "answer_relevancy",
-            "answer_relevance",
-            "response_relevance",
-        ),
-        "context_precision": _metric_average(
-            collected_metrics,
-            "context_precision",
-        ),
-        "context_recall": _metric_average(
-            collected_metrics,
-            "context_recall",
-        ),
-        "context_entity_recall": _metric_average(
-            collected_metrics,
-            "context_entity_recall",
-        ),
-        "noise_sensitivity": _metric_average(
-            collected_metrics,
-            "noise_sensitivity",
-        ),
+        "faithfulness": canonical["faithfulness"],
+        "response_relevancy": canonical["response_relevancy"],
+        "context_precision": canonical["context_precision"],
+        "context_recall": canonical["context_recall"],
+        "context_entity_recall": canonical["context_entity_recall"],
+        "noise_sensitivity": canonical["noise_sensitivity"],
 
         "hallucination_rate": hallucination_rate,
 
         # SQL
-        "sql_accuracy": _metric_average(
-            collected_metrics,
-            "sql_accuracy",
-            "result_accuracy",
-            "answer_accuracy",
-        ),
-        "sql_equivalence": _metric_average(
-            collected_metrics,
-            "sql_equivalence",
-            "sql_semantic_equivalence",
-            "query_equivalence",
-        ),
+        "sql_accuracy": canonical["sql_accuracy"],
+        "sql_equivalence": canonical["sql_equivalence"],
 
         # Tools
-        "tool_accuracy": _metric_average(
-            collected_metrics,
-            "tool_accuracy",
-            "tool_call_accuracy",
-        ),
-        "tool_precision": _metric_average(
-            collected_metrics,
-            "tool_precision",
-        ),
-        "tool_recall": _metric_average(
-            collected_metrics,
-            "tool_recall",
-        ),
-        "tool_f1": _metric_average(
-            collected_metrics,
-            "tool_f1",
-            "tool_call_f1",
-        ),
+        "tool_accuracy": canonical["tool_accuracy"],
+        "tool_precision": canonical["tool_precision"],
+        "tool_recall": canonical["tool_recall"],
+        "tool_f1": canonical["tool_f1"],
 
         # Market
-        "market_accuracy": _metric_average(
-            collected_metrics,
-            "market_accuracy",
-            "market_data_accuracy",
-        ),
+        "market_accuracy": canonical["market_accuracy"],
 
         # Latency
         "avg_latency_ms": _average(
@@ -471,6 +846,13 @@ def _empty_aggregate() -> dict[str, Any]:
 
         "overall_pass_rate": 0.0,
         "route_accuracy": 0.0,
+
+        "route_distribution": {
+            route: 0
+            for route in CANONICAL_ROUTES
+        },
+        "route_performance": {},
+        "tool_summary": {},
 
         "intent_accuracy": None,
 

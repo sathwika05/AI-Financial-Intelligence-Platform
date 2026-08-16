@@ -78,6 +78,9 @@ class RunRequest(BaseModel):
         "growth",
         "sentiment",
         "mixed",
+        # Every question across the four sets; defined in question_sets.py
+        # but previously unreachable through this endpoint.
+        "all",
     ] = "valuation"
 
     company_filter: str = "all"
@@ -139,6 +142,16 @@ class MetricsResponse(BaseModel):
     hallucination_rate: float | None
     intent_accuracy: float | None
 
+    # Question counts per actual execution route. None for runs recorded
+    # before this was persisted.
+    route_distribution: dict[str, int] | None
+
+    # Metric averages per route, keyed by the same route names.
+    route_performance: dict[str, dict[str, float | int | None]] | None
+
+    # Invocation counts per tool name.
+    tool_summary: dict[str, dict[str, float | int | None]] | None
+
     sql_accuracy: float | None
     sql_equivalence: float | None
 
@@ -150,6 +163,7 @@ class MetricsResponse(BaseModel):
     market_accuracy: float | None
 
     avg_latency_ms: float | None
+    p50_latency: float | None
     p95_latency: float | None
     p99_latency: float | None
 
@@ -562,6 +576,17 @@ async def _upsert_evaluation_metrics(
             "intent_accuracy"
         ),
 
+        # Route mix
+        "route_distribution": aggregate.get(
+            "route_distribution"
+        ),
+        "route_performance": aggregate.get(
+            "route_performance"
+        ),
+        "tool_summary": aggregate.get(
+            "tool_summary"
+        ),
+
         # SQLEvaluator
         "sql_accuracy": aggregate.get(
             "sql_accuracy"
@@ -592,6 +617,9 @@ async def _upsert_evaluation_metrics(
         # Runtime latency
         "avg_latency_ms": aggregate.get(
             "avg_latency_ms"
+        ),
+        "p50_latency": aggregate.get(
+            "p50_latency"
         ),
         "p95_latency": aggregate.get(
             "p95_latency"
@@ -847,6 +875,18 @@ def _build_metrics_response(
             "intent_accuracy"
         ),
 
+        route_distribution=metric_value(
+            "route_distribution"
+        ),
+
+        route_performance=metric_value(
+            "route_performance"
+        ),
+
+        tool_summary=metric_value(
+            "tool_summary"
+        ),
+
         sql_accuracy=metric_value(
             "sql_accuracy"
         ),
@@ -873,6 +913,9 @@ def _build_metrics_response(
 
         avg_latency_ms=metric_value(
             "avg_latency_ms"
+        ),
+        p50_latency=metric_value(
+            "p50_latency"
         ),
         p95_latency=metric_value(
             "p95_latency"

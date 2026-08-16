@@ -1,0 +1,121 @@
+.spine {
+  width: 100%;
+}
+
+.spine__track {
+  position: relative;
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: 999px;
+  /* The bar draws itself left to right, the direction it is read. */
+  animation: spine-reveal 620ms var(--ease) 120ms backwards;
+}
+
+@keyframes spine-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.spine--sm .spine__track {
+  height: 9px;
+}
+
+.spine--md .spine__track {
+  height: 12px;
+}
+
+.spine--lg .spine__track {
+  height: 20px;
+  border-radius: 10px;
+}
+
+/* A hairline of track shows between segments, so four colours read as four
+   quantities rather than one smear. */
+.spine__segment {
+  height: 100%;
+  background: var(--segment-color);
+  box-shadow: inset -1.5px 0 0 var(--surface);
+  transition: width 420ms var(--ease);
+}
+
+.spine__segment:last-of-type {
+  box-shadow: none;
+}
+
+/*
+ * A hatched segment means the backend flagged that factor's evidence as
+ * unsupported: the score exists, but it is not verified sentiment.
+ */
+.spine__segment--unverified {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--segment-color) 0 3px,
+    rgba(255, 255, 255, 0.72) 3px 6px
+  );
+}
+
+.spine__marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  background: var(--text);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95);
+}
+
+.spine--sm .spine__marker {
+  top: -1px;
+  bottom: -1px;
+}
+
+.spine__scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+}
+
+.spine__fallback {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.spine-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.spine-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.spine-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--segment-color);
+}
+
+.spine-legend__swatch--unverified {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--segment-color) 0 2px,
+    rgba(255, 255, 255, 0.85) 2px 4px
+  );
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}

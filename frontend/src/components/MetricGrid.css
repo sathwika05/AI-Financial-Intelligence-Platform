@@ -1,0 +1,42 @@
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--metric-columns, 4), minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.metric {
+  min-width: 0;
+}
+
+/* Labels wrap rather than truncate; the reserved height keeps every value
+   on the same baseline whether its label runs to one line or two. */
+.metric__label {
+  display: block;
+  margin-bottom: 2px;
+  min-height: 2.6em;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+.metric__value {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+/* Missing data is stated plainly and never dressed up as a figure. */
+.metric__value--absent {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+@media (max-width: 560px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

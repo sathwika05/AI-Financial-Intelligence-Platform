@@ -1,0 +1,69 @@
+/*
+ * Design tokens for the Financial Intelligence workspace.
+ *
+ * Light, but not bleached: an indigo-tinted ink on soft lavender-white, with
+ * one violet-to-indigo accent used for anything the reader acts on. Colour is
+ * otherwise reserved for the four ranking factors, so a page of figures keeps
+ * its meaning while still having some warmth.
+ *
+ * Type roles come from one superfamily: Serif for headlines and the analysis
+ * narrative, Sans for interface chrome, Mono for every number and micro-label.
+ */
+:root {
+  color-scheme: light;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-serif: "IBM Plex Serif", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --bg: #f6f6fb;
+  --surface: #ffffff;
+  --surface-2: #f7f6fd;
+  --surface-3: #eeebfa;
+
+  --line: rgba(23, 19, 66, 0.08);
+  --line-strong: rgba(23, 19, 66, 0.16);
+
+  --text: #17133f;
+  --text-muted: #5b5680;
+  --text-dim: #8b87a8;
+
+  --accent: #5b4be8;
+  --accent-2: #a855f7;
+  --accent-soft: rgba(91, 75, 232, 0.08);
+  --accent-grad: linear-gradient(135deg, #6d5ef8 0%, #a855f7 100%);
+
+  --positive: #0e9f6e;
+  --caution: #c2740a;
+  --negative: #e0475f;
+
+  /* One hue per ranking factor, reused at every scale of the score spine. */
+  --factor-valuation: #4f7bf7;
+  --factor-growth: #10b981;
+  --factor-relevance: #a855f7;
+  --factor-sentiment: #f59e0b;
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 20px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 72px;
+
+  --shell-max: 1180px;
+
+  --shadow-panel: 0 1px 2px rgba(23, 19, 66, 0.04),
+    0 10px 30px -16px rgba(23, 19, 66, 0.16);
+  --shadow-lift: 0 2px 6px rgba(23, 19, 66, 0.05),
+    0 18px 40px -20px rgba(91, 75, 232, 0.35);
+  --shadow-key: 0 10px 24px -10px rgba(91, 75, 232, 0.55);
+
+  --ease: cubic-bezier(0.32, 0.72, 0.24, 1);
+}

@@ -290,6 +290,32 @@ class EvaluationMetric(Base):
 
     intent_accuracy = Column(Float)
 
+    # Question counts per actual execution route, for example
+    # {"SQL Only": 7, "Vector Only": 8, "Hybrid": 5}.
+    # Stored as JSON because the route set is defined by the pipeline, not
+    # by this schema, and a column per route would need a migration each
+    # time a route is added.
+    route_distribution = Column(
+        JSON,
+        nullable=True,
+    )
+
+    # Per-route metric averages keyed by the same route names, for example
+    # {"SQL Only": {"count": 7, "pass_rate": 0.86, "sql_accuracy": 0.94, ...}}.
+    # Every canonical metric is stored so the dashboard can choose which to
+    # show per route without another migration.
+    route_performance = Column(
+        JSON,
+        nullable=True,
+    )
+
+    # Per-tool invocation counts, for example
+    # {"sql": {"calls": 7, "expected": 7, "hits": 7, "recall": 1.0, ...}}.
+    tool_summary = Column(
+        JSON,
+        nullable=True,
+    )
+
     # ------------------------------------------------------------------
     # SQLEvaluator
     # ------------------------------------------------------------------
@@ -317,6 +343,7 @@ class EvaluationMetric(Base):
     # ------------------------------------------------------------------
 
     avg_latency_ms = Column(Float)
+    p50_latency = Column(Float)
     p95_latency = Column(Float)
     p99_latency = Column(Float)
 

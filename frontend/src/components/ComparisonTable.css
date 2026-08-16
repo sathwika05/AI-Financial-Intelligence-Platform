@@ -1,0 +1,141 @@
+/* Rendered inside the ranking panel, which supplies the frame. */
+.comparison {
+  border-top: 1px solid var(--line);
+  animation: view-in 260ms var(--ease);
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* Wide financial tables scroll rather than compress on small screens. */
+.comparison__scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.comparison__table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.comparison__table th,
+.comparison__table td {
+  padding: 11px var(--space-4);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.comparison__table thead th {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.comparison__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.comparison__table tbody tr:hover td {
+  background: rgba(79, 70, 229, 0.035);
+}
+
+.comparison__table .is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.comparison__table td.is-numeric {
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.comparison__table td.is-primary {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.comparison__table td {
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.comparison__table td.is-absent {
+  color: var(--text-dim);
+}
+
+.comparison__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  transition: color 140ms var(--ease);
+}
+
+.comparison__sort:hover,
+.comparison__sort--active {
+  color: var(--text);
+}
+
+.comparison__caret {
+  opacity: 0.5;
+  font-size: 10px;
+}
+
+.comparison__sort--active .comparison__caret {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.comparison__action-head {
+  width: 1%;
+}
+
+.comparison__action-cell {
+  text-align: right;
+}
+
+.comparison__details {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: color 140ms var(--ease), border-color 140ms var(--ease),
+    background-color 140ms var(--ease);
+}
+
+.comparison__details:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.comparison__hint {
+  padding: 10px var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: normal;
+}
+
+.comparison__empty {
+  padding: var(--space-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  color: var(--text-dim);
+  font-size: 13.5px;
+}

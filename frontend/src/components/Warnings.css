@@ -1,0 +1,35 @@
+.warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.warnings__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--caution);
+}
+
+.warnings__mark {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--caution);
+  opacity: 0.85;
+}
+
+.warnings__text {
+  color: var(--caution);
+}
+
+.warnings--compact .warnings__item {
+  font-size: 12px;
+}

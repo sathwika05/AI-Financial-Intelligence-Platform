@@ -1,0 +1,106 @@
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-5);
+}
+
+.state__title {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  max-width: 60ch;
+}
+
+.state__title--error {
+  font-size: 17px;
+  color: var(--negative);
+}
+
+.state__title--empty {
+  font-family: var(--font-serif);
+  font-size: 22px;
+}
+
+.state__caption {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  max-width: 66ch;
+}
+
+.state__eyebrow {
+  color: var(--text-dim);
+}
+
+.state--error {
+  border-color: rgba(194, 59, 78, 0.3);
+  background: linear-gradient(
+    180deg,
+    rgba(194, 59, 78, 0.05),
+    transparent 60%
+  );
+}
+
+/* ── Loading ───────────────────────────────────────────────────── */
+
+.state__pulse {
+  display: flex;
+  gap: 5px;
+}
+
+.state__pulse span {
+  width: 5px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.35;
+  animation: pulse-bar 1.15s var(--ease) infinite;
+}
+
+.state__pulse span:nth-child(2) {
+  animation-delay: 0.14s;
+  background: var(--accent-strong);
+}
+
+.state__pulse span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+@keyframes pulse-bar {
+  0%,
+  100% {
+    transform: scaleY(0.55);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 0.95;
+  }
+}
+
+.state__stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.state__stage {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.55;
+  transition: color 320ms var(--ease), opacity 320ms var(--ease);
+}
+
+.state__stage--active {
+  color: var(--accent);
+  opacity: 1;
+}

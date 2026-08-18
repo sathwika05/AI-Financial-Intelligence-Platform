@@ -23,6 +23,17 @@ Never set `expected_sql_result=[]` as a placeholder. An empty list is not the
 same as leaving it unset: the SQL evaluator skips its comparison only when the
 value is None, and an empty reference scores a spurious sql_accuracy of 1.0.
 Leave the field out until real rows are available.
+
+RESEEDING INVALIDATES EVERYTHING BELOW. The seed pulls live fundamentals from
+Yahoo, so market caps, P/E ratios and EPS all move, and the membership of a
+"top five" can change outright — a reseed on 2026-08-18 dropped NVDA out of
+the smallest-market-cap five and brought CRM in. The pipeline then answers
+correctly and the benchmark marks it wrong, which looks exactly like a
+regression and is not one.
+
+After every reseed, re-run each `expected_sql` against the database and paste
+the rows back in. The queries are written to be runnable as-is for that
+reason.
 """
 
 from backend.evaluation.schemas import EvalQuestion, IntentType
@@ -56,11 +67,11 @@ VALUATION_QUESTIONS: list[EvalQuestion] = [
     #     # Exactly the rows the query above returns against the seed. INTC is
     #     # absent by design: it has a null P/E and negative EPS.
     #     expected_sql_result=[
-    #         {"ticker": "ADBE", "name": "Adobe Inc.", "pe_ratio": 14.749572, "eps": 17.49},
-    #         {"ticker": "CRM", "name": "Salesforce, Inc.", "pe_ratio": 22.348028, "eps": 8.62},
-    #         {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 27.492489, "eps": 17.97},
-    #         {"ticker": "NVDA", "name": "NVIDIA Corporation", "pe_ratio": 34.532207, "eps": 6.52},
-    #         {"ticker": "AAPL", "name": "Apple Inc.", "pe_ratio": 35.082172, "eps": 8.64},
+    #         {"ticker": "ADBE", "name": "Adobe Inc.", "pe_ratio": 15.103448, "eps": 16.82},
+    #         {"ticker": "CRM", "name": "Salesforce, Inc.", "pe_ratio": 22.734526, "eps": 8.4},
+    #         {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 27.622198, "eps": 17.39},
+    #         {"ticker": "NVDA", "name": "NVIDIA Corporation", "pe_ratio": 34.457886, "eps": 6.53},
+    #         {"ticker": "AAPL", "name": "Apple Inc.", "pe_ratio": 35.044724, "eps": 8.72},
     #     ],
     #
     #     # The question defines the order, so this is not a judgement call:
@@ -92,41 +103,41 @@ VALUATION_QUESTIONS: list[EvalQuestion] = [
             {
                 "ticker": "ADBE",
                 "name": "Adobe Inc.",
-                "market_cap": 102543073280,
-                "eps": 17.49,
+                "market_cap": 100980899840,
+                "eps": 16.82,
+            },
+            {
+                "ticker": "CRM",
+                "name": "Salesforce, Inc.",
+                "market_cap": 156404432896,
+                "eps": 8.4,
             },
             {
                 "ticker": "AMD",
                 "name": "Advanced Micro Devices, Inc.",
-                "market_cap": 800222937088,
-                "eps": 3.91,
+                "market_cap": 826032324608,
+                "eps": 3.85,
             },
             {
                 "ticker": "MSFT",
                 "name": "Microsoft Corporation",
-                "market_cap": 3668516798464,
-                "eps": 17.97,
+                "market_cap": 3566861025280,
+                "eps": 17.39,
             },
             {
                 "ticker": "AAPL",
                 "name": "Apple Inc.",
-                "market_cap": 4423641726976,
-                "eps": 8.64,
-            },
-            {
-                "ticker": "NVDA",
-                "name": "NVIDIA Corporation",
-                "market_cap": 5453358039040,
-                "eps": 6.52,
+                "market_cap": 4459835424768,
+                "eps": 8.72,
             },
         ],
-    
+
         expected_ranking=[
             "ADBE",
+            "CRM",
             "AMD",
             "MSFT",
             "AAPL",
-            "NVDA",
         ],
     ),
 ]
@@ -155,11 +166,11 @@ GROWTH_QUESTIONS: list[EvalQuestion] = [
         ),
 
         expected_sql_result=[
-            {"ticker": "NVDA", "name": "NVIDIA Corporation", "revenue_growth": 0.852, "eps": 6.52},
-            {"ticker": "EOG", "name": "EOG Resources, Inc.", "revenue_growth": 0.587, "eps": 12.85},
-            {"ticker": "CVX", "name": "Chevron Corporation", "revenue_growth": 0.535, "eps": 10.38},
-            {"ticker": "AMD", "name": "Advanced Micro Devices, Inc.", "revenue_growth": 0.501, "eps": 3.91},
-            {"ticker": "XOM", "name": "ExxonMobil Holdings Corporation", "revenue_growth": 0.441, "eps": 7.76},
+            {"ticker": "NVDA", "name": "NVIDIA Corporation", "revenue_growth": 0.852, "eps": 6.53},
+            {"ticker": "EOG", "name": "EOG Resources, Inc.", "revenue_growth": 0.587, "eps": 13.17},
+            {"ticker": "CVX", "name": "Chevron Corporation", "revenue_growth": 0.535, "eps": 10.54},
+            {"ticker": "AMD", "name": "Advanced Micro Devices, Inc.", "revenue_growth": 0.501, "eps": 3.85},
+            {"ticker": "XOM", "name": "ExxonMobil Holdings Corporation", "revenue_growth": 0.441, "eps": 7.83},
         ],
 
         expected_ranking=["NVDA", "EOG", "CVX", "AMD", "XOM"],

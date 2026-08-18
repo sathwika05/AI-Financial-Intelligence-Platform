@@ -135,6 +135,25 @@ def _safe_float(
         return default
 
 
+def _format_score(
+    value: Any,
+) -> str:
+    """
+    Render one dimension score for the prompt.
+
+    None means the dimension had no evidence for this company and was left
+    out of the weighted sum, so it is shown as "not measured" instead of a
+    number the report could mistake for a poor result.
+    """
+    if value is None:
+        return "not measured"
+
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return "not measured"
+
+
 def _format_review_feedback(
     review_feedback: list[str] | None,
 ) -> str:
@@ -186,16 +205,20 @@ def _build_user_prompt(
         ticker = company.get("ticker", "UNKNOWN")
         name = company.get("name", ticker)
 
-        valuation_score = _safe_float(
+        # "not measured" is rendered as such rather than as 0.000. A
+        # dimension with no evidence is not a dimension that scored badly,
+        # and formatting it as zero invites the report to explain a weakness
+        # that was never observed.
+        valuation_score = _format_score(
             scores.get("valuation")
         )
-        growth_score = _safe_float(
+        growth_score = _format_score(
             scores.get("growth")
         )
-        relevance_score = _safe_float(
+        relevance_score = _format_score(
             scores.get("relevance")
         )
-        sentiment_score = _safe_float(
+        sentiment_score = _format_score(
             scores.get("sentiment")
         )
 
@@ -209,10 +232,10 @@ def _build_user_prompt(
                     ),
                     (
                         "Scores: "
-                        f"valuation={valuation_score:.3f}, "
-                        f"growth={growth_score:.3f}, "
-                        f"relevance={relevance_score:.3f}, "
-                        f"sentiment={sentiment_score:.3f}"
+                        f"valuation={valuation_score}, "
+                        f"growth={growth_score}, "
+                        f"relevance={relevance_score}, "
+                        f"sentiment={sentiment_score}"
                     ),
                     f"Weights: {company.get('weights', {})}",
                     (

@@ -7,6 +7,7 @@
 
 
 import logging
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from backend.services.postgres_service import engine
@@ -34,17 +35,86 @@ def _extract_sql_tickers(sql_result: dict | None) -> list[str]:
         return []
 
     tickers: list[str] = []
+    row_count = 0
 
     for row in extract_sql_rows(sql_result.get("db_result")):
         if not isinstance(row, dict):
             continue
+
+        row_count += 1
 
         ticker = str(row.get("ticker") or "").strip().upper()
 
         if ticker and ticker not in tickers:
             tickers.append(ticker)
 
+    if row_count and not tickers:
+        # Rows came back but none can be matched to a company, so every one of
+        # them is about to be discarded and the ranking will silently fall back
+        # to the whole database. Loud, because the SQL itself looks fine from
+        # every other angle — the query answered the question and simply left
+        # the identifier out of its SELECT.
+        logger.warning(
+            "[RANKER] SQL returned %d row(s) with no usable ticker column — "
+            "results cannot be matched to companies and will be ignored. "
+            "Columns present: %s",
+            row_count,
+            (sql_result.get("db_result") or {}).get("columns"),
+        )
+
     return tickers
+
+
+# An ORDER BY anywhere in the generated query. Deliberately not parsed any
+# further: the column and direction do not need to be understood here, only
+# the fact that SQL committed to an ordering, which is then trusted as-is.
+_ORDER_BY_PATTERN = re.compile(
+    r"\border\s+by\b",
+    re.IGNORECASE,
+)
+
+
+def _sql_order_is_authoritative(
+    sql_result: dict | None,
+    sql_tickers: list[str],
+    has_sql: bool,
+    has_vector: bool,
+    has_market: bool,
+) -> bool:
+    """
+    True when the SQL row order should decide the final ranking.
+
+    Deterministic questions — "the five lowest P/E ratios", "the smallest
+    market cap" — are already answered by the ORDER BY the SQL layer wrote.
+    The composite score below cannot reproduce that answer: it scores on
+    P/E, revenue growth and EPS only, so a question about market cap gets
+    ranked by quantities it never mentioned, and the sort is hardcoded
+    descending, so "smallest" cannot be expressed by it at all.
+
+    Narrow on purpose. SQL wins only when it is the *only* branch that
+    returned anything. As soon as vector or market data is present the
+    question is fuzzy enough that blending several signals is the whole
+    point, and the composite ranking is left in charge.
+
+    Empty `sql_tickers` is refused rather than treated as "nothing to
+    reorder". Claiming authority there is worse than declining it: the
+    position lookup would be empty, every company would tie, and a stable
+    sort would freeze whatever arbitrary order the candidates arrived in —
+    presenting the database's default listing as though SQL had chosen it.
+    """
+    if not has_sql or has_vector or has_market:
+        return False
+
+    if not sql_tickers:
+        return False
+
+    generated_sql = (sql_result or {}).get(
+        "generated_sql"
+    ) or ""
+
+    return bool(
+        _ORDER_BY_PATTERN.search(generated_sql)
+    )
 
 
 # ── Normalization ──────────────────────────────────────────
@@ -182,19 +252,25 @@ def score_company_growth(company: dict) -> float:
 def score_company_relevance(
     company:       dict,
     vector_result: dict = None
-) -> float:
+) -> float | None:
     """
     Relevance score for one company.
     Reuses cosine similarity scores already computed
     by pgvector during vector retrieval.
     Groups chunks by company → averages their scores.
+
+    Returns None when retrieval found nothing about this company, which the
+    weighted sum treats as "not measured" rather than as a low score. The
+    previous fallback — the mean similarity of every chunk, halved — gave
+    each company an identical number, so the dimension carried its full
+    weight while containing no information to tell them apart.
     """
     if not vector_result:
-        return 0.0
+        return None
 
     chunks = vector_result.get("retrieved_chunks", [])
     if not chunks:
-        return 0.0
+        return None
 
     company_id = company.get("id")
     name       = company.get("name", "").lower()
@@ -209,14 +285,9 @@ def score_company_relevance(
     ]
 
     if not company_chunks:
-        # no specific chunks → use avg of all (lower weight)
-        all_similarities = [
-            c.get("similarity", 0.0) for c in chunks
-        ]
-        return round(
-            sum(all_similarities) / len(all_similarities) * 0.5,
-            3
-        )
+        # Nothing retrieved mentions this company, so there is no relevance
+        # to report. Not measured, rather than measured as poor.
+        return None
 
     similarities = [
         c.get("similarity", 0.0) for c in company_chunks
@@ -227,19 +298,25 @@ def score_company_relevance(
 def score_company_sentiment(
     company:       dict,
     vector_result: dict = None
-) -> float:
+) -> float | None:
     """
     Sentiment score for one company.
     Keyword analysis on chunks mentioning this company.
     positive keywords / total keywords = sentiment score
+
+    Returns None when no retrieved chunk mentions this company. Returning
+    the old neutral 0.5 there ranked an unknown company above one with
+    genuinely negative coverage, because absence of news scored higher than
+    bad news.
     """
     if not vector_result:
-        return 0.5
+        return None
 
     chunks = vector_result.get("retrieved_chunks", [])
     if not chunks:
-        return 0.5
+        return None
 
+    company_id = company.get("id")
     name   = company.get("name",   "").lower()
     ticker = company.get("ticker", "").lower()
 
@@ -261,8 +338,23 @@ def score_company_sentiment(
 
     for chunk in chunks:
         content = chunk.get("content", "").lower()
-        if name not in content and ticker not in content:
+
+        # Ownership is decided the same way score_company_relevance decides
+        # it — company_id first, then the name or ticker appearing in the
+        # text. Matching on the text alone missed chunks the retriever had
+        # already linked to this company, so a chunk could count towards
+        # relevance and be invisible to sentiment. A stored company_id is
+        # also the stronger signal: "NVIDIA" in prose does not contain the
+        # full company name "NVIDIA Corporation".
+        if (
+            company_id is None
+            or chunk.get("company_id") != company_id
+        ) and (
+            name not in content
+            and ticker not in content
+        ):
             continue
+
         positive_count += sum(
             1 for kw in positive_keywords if kw in content
         )
@@ -272,7 +364,9 @@ def score_company_sentiment(
 
     total = positive_count + negative_count
     if total == 0:
-        return 0.5  # neutral
+        # Either nothing mentioned this company, or what did carried no
+        # sentiment-bearing keyword. Nothing was measured either way.
+        return None
 
     return round(positive_count / total, 3)
 
@@ -448,7 +542,12 @@ async def rerank(
        - sentiment  → keyword analysis on chunks
     4. Optional LLM holistic score
     5. Apply weighted sum → final score
-    6. Sort descending → add rank number
+    6. Order the results → add rank number
+
+    Step 6 has two modes. When SQL is the only branch that returned rows and
+    its query carried an ORDER BY, that ordering is the answer and is kept
+    as-is — see _sql_order_is_authoritative. Otherwise the composite score
+    sorts descending, as before.
     """
     has_sql    = (
         sql_result is not None and
@@ -532,19 +631,19 @@ async def rerank(
 
         val_score = score_company_valuation(
             company, market_result
-        ) if has_sql else 0.0
+        ) if has_sql else None
 
         growth_score = score_company_growth(
             company
-        ) if has_sql else 0.0
+        ) if has_sql else None
 
         rel_score = score_company_relevance(
             company, vector_result
-        ) if has_vector else 0.0
+        ) if has_vector else None
 
         sent_score = score_company_sentiment(
             company, vector_result
-        ) if has_vector else 0.0
+        ) if has_vector else None
 
         scores = {
             "valuation":  val_score,
@@ -553,14 +652,34 @@ async def rerank(
             "sentiment":  sent_score
         }
 
-        # weighted sum
-        final_score = round(
-            (scores["valuation"] * weights["valuation"]) +
-            (scores["growth"]    * weights["growth"])    +
-            (scores["relevance"] * weights["relevance"]) +
-            (scores["sentiment"] * weights["sentiment"]),
-            3
+        # Weighted over the dimensions that were actually measured, then
+        # renormalised by their share of the weight. A dimension with no
+        # evidence for this company is dropped rather than folded in at some
+        # default: a constant standing in for missing data still consumes its
+        # full weight, so it moves every company's score by the same amount
+        # while carrying nothing that could separate them.
+        measured = {
+            dimension: value
+            for dimension, value in scores.items()
+            if value is not None
+        }
+
+        effective_weights = {
+            dimension: weights[dimension]
+            for dimension in measured
+        }
+
+        active_weight = sum(
+            effective_weights.values()
         )
+
+        final_score = round(
+            sum(
+                measured[dimension] * weights[dimension]
+                for dimension in measured
+            ) / active_weight,
+            3,
+        ) if active_weight else 0.0
         # blend with LLM score if available
         llm_score = llm_scores.get(ticker)
         if llm_score is not None:
@@ -586,8 +705,38 @@ async def rerank(
             }
         })
 
-    # sort by final score descending
-    ranked.sort(key=lambda x: x["final_score"], reverse=True)
+    if _sql_order_is_authoritative(
+        sql_result,
+        sql_tickers,
+        has_sql,
+        has_vector,
+        has_market,
+    ):
+        # Rank by the position SQL returned rather than by final_score. The
+        # scores stay attached above so the explainability panel is unchanged;
+        # they simply stop deciding the order. Anything SQL did not return
+        # sorts to the end instead of being dropped, so a company can never
+        # disappear because of a ticker mismatch.
+        sql_position = {
+            ticker: index
+            for index, ticker in enumerate(sql_tickers)
+        }
+
+        ranked.sort(
+            key=lambda x: sql_position.get(
+                x["ticker"],
+                len(sql_position),
+            )
+        )
+
+        logger.info(
+            "[RANKER] SQL ORDER BY is authoritative — preserving SQL row "
+            "order for %d company(s)",
+            len(sql_position),
+        )
+    else:
+        # sort by final score descending
+        ranked.sort(key=lambda x: x["final_score"], reverse=True)
 
     # add rank number
     for i, company in enumerate(ranked, 1):

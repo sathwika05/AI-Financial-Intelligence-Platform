@@ -115,10 +115,46 @@ def build_score_breakdown(
     """
     Build explainability breakdown.
     Shows contribution of each dimension to final score.
+
+    A score of None means the dimension had no evidence for this company and
+    was excluded from the weighted sum. Its contribution is reported as None
+    rather than 0.0, so the panel distinguishes "contributed nothing because
+    it scored badly" from "was never measured".
+
+    `effective_weights` are the weights actually applied — the raw weights
+    renormalised over the measured dimensions — so the contributions sum to
+    the final score instead of falling short of it.
     """
+    measured = {
+        dim: value
+        for dim, value in scores.items()
+        if value is not None
+    }
+
+    active_weight = sum(
+        weights.get(dim, 0.0)
+        for dim in measured
+    )
+
+    effective_weights = {
+        dim: (
+            round(weights.get(dim, 0.0) / active_weight, 3)
+            if active_weight and dim in measured
+            else 0.0
+        )
+        for dim in weights
+    }
+
     contributions = {
-        dim: round(scores.get(dim, 0.0) * weight, 3)
-        for dim, weight in weights.items()
+        dim: (
+            round(
+                scores[dim] * weights.get(dim, 0.0) / active_weight,
+                3,
+            )
+            if dim in measured and active_weight
+            else None
+        )
+        for dim in weights
     }
 
     return {
@@ -126,5 +162,11 @@ def build_score_breakdown(
         "interpretation": interpret_score(final_score),
         "scores":        scores,
         "weights":       weights,
-        "contributions": contributions
+        "effective_weights": effective_weights,
+        "contributions": contributions,
+        "unmeasured": [
+            dim
+            for dim in weights
+            if dim not in measured
+        ],
     }

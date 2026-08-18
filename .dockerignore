@@ -1,0 +1,20 @@
+# Keep the host's virtualenv out of the image.
+#
+# The Dockerfile runs `uv sync --frozen` to build a Linux venv at /code/.venv,
+# and the `COPY . .` that follows would copy the developer's macOS venv
+# straight over it. A virtualenv pins an absolute interpreter path and holds
+# platform-compiled packages, so the result is an image whose .venv cannot
+# run — every console script in it points at a path that does not exist here.
+.venv/
+
+# Build artefacts and caches: large, machine-specific, and regenerated.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Not needed to run the API, and node_modules is both huge and
+# platform-specific for the same reason .venv is.
+frontend/node_modules/
+.git/

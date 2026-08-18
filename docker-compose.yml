@@ -27,6 +27,19 @@ services:
       DATABASE_URL: postgresql+asyncpg://finuser:finpass@postgres:5432/findb
     volumes:
       - .:/code
+      # Give the container its own virtualenv.
+      #
+      # The bind mount above makes the project directory the same directory
+      # on both sides, and .venv lives inside it — so host and container were
+      # sharing one virtualenv. They cannot: a virtualenv pins an absolute
+      # interpreter path and holds platform-compiled packages, so whichever
+      # side built it last broke the other. Running `uv` on the host left the
+      # container reinstalling every package on its next start, and left the
+      # host's own scripts pointing at /code, which exists only in here.
+      #
+      # This anonymous volume shadows .venv inside the container, so the
+      # image's Linux virtualenv is used there and the host keeps its own.
+      - /code/.venv
 
 volumes:
   postgres_data:

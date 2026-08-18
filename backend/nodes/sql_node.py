@@ -1,5 +1,6 @@
 
 import json
+import logging
 import operator
 from typing import Annotated, Any, TypedDict
 
@@ -12,13 +13,81 @@ from backend.llm.llm_tiers import LLMTier
 from backend.retrieval.sql_executor import SCHEMA, sql_tools
 
 
+logger = logging.getLogger(__name__)
+
+
 MAX_SQL_RETRIES = 3
+
+
+# Tools whose `question` argument has to carry the caller's exact wording.
+QUESTION_BEARING_TOOLS = {
+    "generate_sql_query",
+    "fix_sql_error",
+}
+
+
+def _restore_sql_question(
+    response: BaseMessage,
+    sql_question: str,
+) -> None:
+    """
+    Overwrite the `question` argument of outgoing SQL tool calls, in place.
+
+    The agent composes that argument itself, and a model rewriting a question
+    to make it "clearer" is free to drop constraints from it. That is not
+    hypothetical: "Which five profitable technology companies have the
+    smallest market capitalizations?" reached generate_sql_query as "Find
+    profitable technology companies with the smallest market
+    capitalization...". The ordering survived, the row count did not, so the
+    generator saw a question naming no count and applied its LIMIT 10 default
+    — correctly, for the question it was actually given. No prompt rule
+    downstream can recover a constraint that is already gone.
+
+    So the wording is restored from state rather than requested in a prompt:
+    a constraint that must not be lost should not depend on a model choosing
+    not to lose it.
+
+    Mutating the entries of `response.tool_calls` is what reaches the tool —
+    langgraph's ToolNode resolves calls with
+    `tool_calls = list(latest_ai_message.tool_calls)`, so the parsed field is
+    the one that matters, not the provider's raw arguments blob.
+    """
+    if not sql_question:
+        return
+
+    for tool_call in getattr(response, "tool_calls", None) or []:
+        if tool_call.get("name") not in QUESTION_BEARING_TOOLS:
+            continue
+
+        args = tool_call.get("args")
+
+        if not isinstance(args, dict):
+            continue
+
+        agent_question = args.get("question")
+
+        if agent_question == sql_question:
+            continue
+
+        logger.info(
+            "[SQL_NODE] Restored question for %s: %.60r -> %.60r",
+            tool_call.get("name"),
+            str(agent_question or ""),
+            sql_question,
+        )
+
+        args["question"] = sql_question
 
 
 class SQLAgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     retry_count: int
     original_question: str
+
+    # The exact wording the SQL tools must be asked, set by the caller and
+    # never rewritten inside this graph. See _restore_sql_question.
+    sql_question: str
+
     last_sql: str
     db_result: dict[str, Any]
 
@@ -61,21 +130,17 @@ async def sql_agent_node(
     llm_with_tools = llm.bind_tools(sql_tools)
 
     system_prompt = f"""
-You are an expert SQL analyst for a financial intelligence database.
-
-Database schema:
-{SCHEMA}
+You are the SQL workflow controller for a financial intelligence database.
 
 Workflow:
 1. Use get_database_schema when schema clarification is needed.
-2. Use generate_sql_query to create a SQL query.
-3. Use execute_sql_query to execute the validated query.
+2. Use generate_sql_query to generate SQL from the user's question.
+3. Use execute_sql_query to execute the generated query.
 4. If execution fails, use fix_sql_error.
 5. Retry failed SQL queries no more than {MAX_SQL_RETRIES} times.
 
 Rules:
-- Only SELECT queries are allowed.
-- Use only tables and columns available in the schema.
+- Only execute SELECT queries.
 - Never modify or delete database data.
 - Base the final answer only on returned query results.
 - Provide a clear and concise final answer.
@@ -105,10 +170,25 @@ Rules:
             else str(first_message_content)
         )
 
+    # Set by the caller: the user's own words for a SQL-only intent, the
+    # planner's SQL subquestion for MIXED, where the full question also
+    # covers branches SQL cannot answer. Falls back to the seeded message
+    # so the graph still works when invoked without it.
+    sql_question = (
+        state.get("sql_question")
+        or original_question
+    )
+
+    _restore_sql_question(
+        response,
+        sql_question,
+    )
+
     return {
         "messages": [response],
         "retry_count": retry_count,
         "original_question": original_question,
+        "sql_question": sql_question,
     }
 
 

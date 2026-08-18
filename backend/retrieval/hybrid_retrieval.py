@@ -45,16 +45,28 @@ SQL_TOOL_NAMES = {
     run_type="chain",
     tags=["retrieval", "sql"],
 )
-async def run_sql_retrieval(query: str, config: RunnableConfig) -> dict[str, Any]:
+async def run_sql_retrieval(
+    query: str,
+    config: RunnableConfig,
+    sql_question: str | None = None,
+) -> dict[str, Any]:
     """
     Run SQL retrieval using the existing sql_graph.
     Returns structured results with confidence score.
+
+    `sql_question` is the exact wording the SQL tools should be asked, and
+    it is kept separate from `query` on purpose. `query` is the planner's
+    subquery — keyword-shaped, written to steer retrieval — while the SQL
+    generator needs the constraints the user actually stated, such as how
+    many rows they asked for. Defaults to `query` when the caller has
+    nothing better, which is the previous behaviour.
     """
     try:
         result = await sql_graph.ainvoke({
             "messages":          [HumanMessage(content=query)],
             "retry_count":       0,
             'original_question': '',
+            'sql_question': sql_question or query,
             'last_sql': '',
             'db_result': {},
             'sql_executed_tools': []
@@ -200,7 +212,11 @@ async def run_vector_retrieval( query: str, config:RunnableConfig,top_k: int = 5
     tags=["retrieval", "sql", "branch"],
 )
 @node_span("sql")
-async def run_sql_retrieval_async(query: str, config: RunnableConfig) -> dict:
+async def run_sql_retrieval_async(
+    query: str,
+    config: RunnableConfig,
+    sql_question: str | None = None,
+) -> dict:
     """
     Async SQL retrieval with timeout.
 
@@ -225,7 +241,11 @@ async def run_sql_retrieval_async(query: str, config: RunnableConfig) -> dict:
         # to run_in_executor would return the un-awaited coroutine and
         # detach the trace.
         result = await asyncio.wait_for(
-            run_sql_retrieval(query, config),
+            run_sql_retrieval(
+                query,
+                config,
+                sql_question=sql_question,
+            ),
             timeout=SQL_TIMEOUT
         )
 
@@ -512,6 +532,21 @@ async def hybrid_retrieve_async(
     vector_q = vector_query or query
     market_q = market_query or ""
 
+    # The wording the SQL generator is asked, as opposed to `sql_q`, which
+    # steers retrieval. The planner rewrites the question into a keyword
+    # subquery — "technology companies low PE ratio undervalued market cap" —
+    # which is right for search and wrong for SQL generation, because the
+    # constraints the user stated do not survive it. A question asking for
+    # five companies becomes one asking for none, and the generator then
+    # defaults to LIMIT 10.
+    #
+    # SQL-only intents therefore ask the user's own question, which is
+    # entirely about the metrics SQL owns. MIXED keeps the planner's subquery,
+    # because there the full question also covers news and market data that
+    # SQL cannot answer, and handing all of it to the SQL generator would be
+    # worse than losing the count.
+    sql_question = query if intent in SQL_INTENTS else sql_q
+
     logger.info(
         f"[HYBRID] Intent: {intent}, "
         f"sql_q: {sql_q[:50]}, "
@@ -521,7 +556,11 @@ async def hybrid_retrieve_async(
 
     if intent in SQL_INTENTS:
         # VALUATION or GROWTH → SQL only
-        sql_result = await run_sql_retrieval(sql_q,config)
+        sql_result = await run_sql_retrieval(
+            sql_q,
+            config,
+            sql_question=sql_question,
+        )
         return combine_results(
             query      = query,
             intent     = intent,
@@ -545,7 +584,11 @@ async def hybrid_retrieve_async(
         )
 
         tasks = [
-            run_sql_retrieval_async(sql_q,config),
+            run_sql_retrieval_async(
+                sql_q,
+                config,
+                sql_question=sql_question,
+            ),
             run_vector_retrieval_async(vector_q,config),
         ]
 

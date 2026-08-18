@@ -26,43 +26,108 @@ Leave the field out until real rows are available.
 """
 
 from backend.evaluation.schemas import EvalQuestion, IntentType
+from backend.observability.logging import log_span
 
 
 VALUATION_QUESTIONS: list[EvalQuestion] = [
+    # valuation_001 is disabled. Its ground truth is still valid against the
+    # seed — re-enable by uncommenting, no re-verification needed.
+    # EvalQuestion(
+    #     question_id="valuation_001",
+    #     question=(
+    #         "Which five technology companies have the lowest P/E ratios "
+    #         "while also having positive EPS? Rank them from lowest to "
+    #         "highest P/E ratio."
+    #     ),
+    #     expected_intent=IntentType.VALUATION,
+    #     expected_tools=["planner", "sql"],
+    #
+    #     expected_sql=(
+    #         "SELECT c.ticker, c.name, fm.pe_ratio, fm.eps "
+    #         "FROM companies c "
+    #         "JOIN financial_metrics fm ON fm.company_id = c.id "
+    #         "WHERE c.sector = 'Technology' "
+    #         "AND fm.pe_ratio > 0 "
+    #         "AND fm.eps > 0 "
+    #         "ORDER BY fm.pe_ratio ASC "
+    #         "LIMIT 5"
+    #     ),
+    #
+    #     # Exactly the rows the query above returns against the seed. INTC is
+    #     # absent by design: it has a null P/E and negative EPS.
+    #     expected_sql_result=[
+    #         {"ticker": "ADBE", "name": "Adobe Inc.", "pe_ratio": 14.749572, "eps": 17.49},
+    #         {"ticker": "CRM", "name": "Salesforce, Inc.", "pe_ratio": 22.348028, "eps": 8.62},
+    #         {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 27.492489, "eps": 17.97},
+    #         {"ticker": "NVDA", "name": "NVIDIA Corporation", "pe_ratio": 34.532207, "eps": 6.52},
+    #         {"ticker": "AAPL", "name": "Apple Inc.", "pe_ratio": 35.082172, "eps": 8.64},
+    #     ],
+    #
+    #     # The question defines the order, so this is not a judgement call:
+    #     # ascending P/E.
+    #     expected_ranking=["ADBE", "CRM", "MSFT", "NVDA", "AAPL"],
+    # ),
     EvalQuestion(
-        question_id="valuation_001",
+        question_id="valuation_002",
         question=(
-            "Which five technology companies have the lowest P/E ratios "
-            "while also having positive EPS? Rank them from lowest to "
-            "highest P/E ratio."
+            "Which five profitable technology companies have the smallest "
+            "market capitalizations? Rank them from smallest to largest market cap."
         ),
         expected_intent=IntentType.VALUATION,
         expected_tools=["planner", "sql"],
-
+    
         expected_sql=(
-            "SELECT c.ticker, c.name, fm.pe_ratio, fm.eps "
+            "SELECT c.ticker, c.name, c.market_cap, fm.eps "
             "FROM companies c "
             "JOIN financial_metrics fm ON fm.company_id = c.id "
             "WHERE c.sector = 'Technology' "
-            "AND fm.pe_ratio > 0 "
             "AND fm.eps > 0 "
-            "ORDER BY fm.pe_ratio ASC "
+            "AND c.market_cap IS NOT NULL "
+            "AND c.market_cap > 0 "
+            "ORDER BY c.market_cap ASC "
             "LIMIT 5"
         ),
-
-        # Exactly the rows the query above returns against the seed. INTC is
-        # absent by design: it has a null P/E and negative EPS.
+    
         expected_sql_result=[
-            {"ticker": "ADBE", "name": "Adobe Inc.", "pe_ratio": 14.749572, "eps": 17.49},
-            {"ticker": "CRM", "name": "Salesforce, Inc.", "pe_ratio": 22.348028, "eps": 8.62},
-            {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 27.492489, "eps": 17.97},
-            {"ticker": "NVDA", "name": "NVIDIA Corporation", "pe_ratio": 34.532207, "eps": 6.52},
-            {"ticker": "AAPL", "name": "Apple Inc.", "pe_ratio": 35.082172, "eps": 8.64},
+            {
+                "ticker": "ADBE",
+                "name": "Adobe Inc.",
+                "market_cap": 102543073280,
+                "eps": 17.49,
+            },
+            {
+                "ticker": "AMD",
+                "name": "Advanced Micro Devices, Inc.",
+                "market_cap": 800222937088,
+                "eps": 3.91,
+            },
+            {
+                "ticker": "MSFT",
+                "name": "Microsoft Corporation",
+                "market_cap": 3668516798464,
+                "eps": 17.97,
+            },
+            {
+                "ticker": "AAPL",
+                "name": "Apple Inc.",
+                "market_cap": 4423641726976,
+                "eps": 8.64,
+            },
+            {
+                "ticker": "NVDA",
+                "name": "NVIDIA Corporation",
+                "market_cap": 5453358039040,
+                "eps": 6.52,
+            },
         ],
-
-        # The question defines the order, so this is not a judgement call:
-        # ascending P/E.
-        expected_ranking=["ADBE", "CRM", "MSFT", "NVDA", "AAPL"],
+    
+        expected_ranking=[
+            "ADBE",
+            "AMD",
+            "MSFT",
+            "AAPL",
+            "NVDA",
+        ],
     ),
 ]
 
@@ -98,7 +163,7 @@ GROWTH_QUESTIONS: list[EvalQuestion] = [
         ],
 
         expected_ranking=["NVDA", "EOG", "CVX", "AMD", "XOM"],
-    ),
+    ), 
 ]
 
 
@@ -228,6 +293,7 @@ QUESTION_SETS: dict[str, list[EvalQuestion]] = {
 }
 
 
+@log_span("name")
 def get_question_set(name: str) -> list[EvalQuestion]:
     normalized = name.strip().lower()
 

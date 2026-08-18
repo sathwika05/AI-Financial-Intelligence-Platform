@@ -38,6 +38,91 @@ class Company(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class Theme(Base):
+    """
+    A category a company can belong to — "AI", "Semiconductors", "Cloud".
+
+    `sector` is the only categorical column the database had, and it holds
+    eight broad values that cannot express any of these. Asked for
+    "AI-related stocks", the SQL generator had nothing to filter on and
+    invented one, ending up with
+
+        WHERE EXISTS (SELECT 1 FROM documents d
+                      WHERE d.company_id = c.id AND d.content ILIKE '%AI%')
+
+    which selected 35 of 50 companies, because '%AI%' matches the letters
+    "ai" inside words like "maintains". A theme is the structured fact that
+    makes the question answerable instead of guessable.
+    """
+
+    __tablename__ = "themes"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Display form, e.g. "Cloud Computing".
+    name = Column(String, nullable=False)
+
+    # Canonical lookup key, e.g. "cloud". Queries match on this so that
+    # wording differences in the question never reach the database.
+    slug = Column(String, nullable=False, unique=True)
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now(),
+    )
+
+
+class CompanyTheme(Base):
+    """
+    Membership of a company in a theme.
+
+    Many-to-many on purpose: NVDA is both AI and Semiconductors, and AI
+    contains many companies. A `theme` column on `companies` would allow
+    only one, and adding a boolean column per theme would need a migration
+    for every new category.
+
+    Curated rather than derived. A news article mentioning a topic does not
+    place the company it is filed under in that category, which is the
+    mistake this table exists to stop being repeated at query time.
+    """
+
+    __tablename__ = "company_themes"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    company_id = Column(
+        Integer,
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    theme_id = Column(
+        Integer,
+        ForeignKey("themes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        # One row per pair; re-running the theme seed must not accumulate
+        # duplicates.
+        UniqueConstraint(
+            "company_id",
+            "theme_id",
+            name="uq_company_themes_company_theme",
+        ),
+        # Resolving a theme to its companies is the read this table exists
+        # for, and it filters on theme_id.
+        Index(
+            "ix_company_themes_theme_id",
+            "theme_id",
+        ),
+    )
+
+
 class FinancialMetric(Base):
     __tablename__ = "financial_metrics"
 

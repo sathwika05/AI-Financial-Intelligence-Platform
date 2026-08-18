@@ -69,6 +69,16 @@ TABLES: dict[str, list[str]] = {
         "sector",
         "market_cap",
     ],
+    "themes": [
+        "id",
+        "name",
+        "slug",
+    ],
+    "company_themes": [
+        "id",
+        "company_id",
+        "theme_id",
+    ],
     "financial_metrics": [
         "id",
         "company_id",

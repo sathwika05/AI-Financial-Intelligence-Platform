@@ -885,6 +885,19 @@ async def seed():
                 # blocking the event loop.
                 await asyncio.sleep(12)
 
+            # Reapply the curated theme taxonomy. It is keyed by ticker
+            # rather than company_id precisely so it can be rebuilt here:
+            # the TRUNCATE above resets the id sequence, so every
+            # company_id from the previous run is now meaningless.
+            from seeds.themes import seed_themes
+
+            theme_counts = await seed_themes(db)
+
+            print(
+                f"\n  Themes: {theme_counts['themes']} | "
+                f"memberships: {theme_counts['memberships_created']}"
+            )
+
             # Commit the TRUNCATE plus all Company, FinancialMetric,
             # and Document inserts together only after the full seed succeeds.
             await db.commit()

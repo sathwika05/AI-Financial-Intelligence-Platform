@@ -351,6 +351,85 @@
       "market_cap": 100980899840.0
     }
   ],
+  "themes": [
+    {
+      "id": 1,
+      "name": "AI",
+      "slug": "ai"
+    },
+    {
+      "id": 2,
+      "name": "Semiconductors",
+      "slug": "semiconductors"
+    },
+    {
+      "id": 3,
+      "name": "Cloud Computing",
+      "slug": "cloud"
+    }
+  ],
+  "company_themes": [
+    {
+      "id": 1,
+      "company_id": 4,
+      "theme_id": 1
+    },
+    {
+      "id": 2,
+      "company_id": 4,
+      "theme_id": 2
+    },
+    {
+      "id": 3,
+      "company_id": 8,
+      "theme_id": 1
+    },
+    {
+      "id": 4,
+      "company_id": 8,
+      "theme_id": 2
+    },
+    {
+      "id": 5,
+      "company_id": 2,
+      "theme_id": 1
+    },
+    {
+      "id": 6,
+      "company_id": 2,
+      "theme_id": 3
+    },
+    {
+      "id": 7,
+      "company_id": 3,
+      "theme_id": 1
+    },
+    {
+      "id": 8,
+      "company_id": 3,
+      "theme_id": 3
+    },
+    {
+      "id": 9,
+      "company_id": 5,
+      "theme_id": 1
+    },
+    {
+      "id": 10,
+      "company_id": 9,
+      "theme_id": 2
+    },
+    {
+      "id": 11,
+      "company_id": 6,
+      "theme_id": 3
+    },
+    {
+      "id": 12,
+      "company_id": 10,
+      "theme_id": 3
+    }
+  ],
   "financial_metrics": [
     {
       "id": 1,

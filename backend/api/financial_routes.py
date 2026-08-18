@@ -13,6 +13,7 @@ from langchain_core.load import dumps
 
 from backend.graph.financial_graph import financial_graph
 from backend.llm.llm_config_service import LLMConfigService
+from backend.observability.logging import query_run
 from backend.services.postgres_service import get_db
 from backend.state.state_factory import build_initial_financial_state
 from backend.llm.usage_tracker import build_usage_config
@@ -74,51 +75,55 @@ async def financial_retrieval(request: FinancialQueryRequest, session: AsyncSess
     5. Nodes reuse the same runtime without DB calls.
     """
 
-    try:
-        logger.info("[FINANCIAL_ROUTES] Query: %s", request.query,)
+    # Opened around the whole handler, error paths included, so every line
+    # this request produces — here and in every node below it — is tagged
+    # apart from a benchmark running concurrently in the background.
+    with query_run():
+        try:
+            logger.info("[FINANCIAL_ROUTES] Query: %s", request.query,)
 
-        llm_config_service = LLMConfigService(session)
+            llm_config_service = LLMConfigService(session)
 
-        # UI does not send a provider for regular requests.
-        # The backend loads the enabled default provider.
-        llm_runtime = (
-            await llm_config_service.load_default_runtime()
-        )
+            # UI does not send a provider for regular requests.
+            # The backend loads the enabled default provider.
+            llm_runtime = (
+                await llm_config_service.load_default_runtime()
+            )
 
-        logger.info("[FINANCIAL_ROUTES] LLM runtime loaded: provider=%s, models=%s",
-                    llm_runtime.provider_name,
-                    llm_runtime.models,
-                    )
-        
-        result = await _run_financial_query(
-            request.query,
-            llm_runtime,
-        )
-        print(json.dumps(json.loads(dumps(result)), indent=2))
-        return {
-            "query":  request.query,
-            "provider": llm_runtime.provider_name,
-            "final_report": result.get("final_report"),
-            "ranked_companies": result.get("ranked_companies", []),
-            "scoring_result": result.get("scoring_result"),
-        }
+            logger.info("[FINANCIAL_ROUTES] LLM runtime loaded: provider=%s, models=%s",
+                        llm_runtime.provider_name,
+                        llm_runtime.models,
+                        )
 
-    except RuntimeError as exc:
-        logger.exception(
-            "[FINANCIAL_ROUTES] LLM configuration failed"
-        )
+            result = await _run_financial_query(
+                request.query,
+                llm_runtime,
+            )
+            print(json.dumps(json.loads(dumps(result)), indent=2))
+            return {
+                "query":  request.query,
+                "provider": llm_runtime.provider_name,
+                "final_report": result.get("final_report"),
+                "ranked_companies": result.get("ranked_companies", []),
+                "scoring_result": result.get("scoring_result"),
+            }
 
-        raise HTTPException(
-            status_code=503,
-            detail=str(exc),
-        ) from exc
+        except RuntimeError as exc:
+            logger.exception(
+                "[FINANCIAL_ROUTES] LLM configuration failed"
+            )
 
-    except Exception as exc:
-        logger.exception(
-            "[FINANCIAL_ROUTES] Retrieval failed"
-        )
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc),
+            ) from exc
 
-        raise HTTPException(
-            status_code=500,
-            detail="Retrieval failed. Please try again.",
-        ) from exc
+        except Exception as exc:
+            logger.exception(
+                "[FINANCIAL_ROUTES] Retrieval failed"
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail="Retrieval failed. Please try again.",
+            ) from exc

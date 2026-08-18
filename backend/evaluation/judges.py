@@ -23,6 +23,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
+from backend.observability.logging import log_span
 
 
 # Override to grade with a different judge; keep it stable across the runs
@@ -57,6 +58,7 @@ class BenchmarkJudges:
 
 
 @lru_cache(maxsize=1)
+@log_span()
 def get_default_judges() -> BenchmarkJudges:
     """
     Build the default judges.

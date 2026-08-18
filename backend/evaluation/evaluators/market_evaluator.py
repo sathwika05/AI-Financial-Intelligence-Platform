@@ -27,6 +27,7 @@ from numbers import Number
 from typing import Any
 
 from backend.evaluation.schemas import EvaluatorResult
+from backend.observability.logging import log_span
 
 
 class MarketEvaluator:
@@ -51,6 +52,7 @@ class MarketEvaluator:
         """
         self.numeric_tolerance = numeric_tolerance
 
+    @log_span("expected_companies")
     def evaluate(
         self,
         *,

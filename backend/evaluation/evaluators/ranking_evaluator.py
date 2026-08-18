@@ -31,11 +31,13 @@ import math
 from typing import Any
 
 from backend.evaluation.schemas import EvaluatorResult
+from backend.observability.logging import log_span
 
 
 class RankingEvaluator:
     """Compare returned company ordering with the golden ranking."""
 
+    @log_span("expected_companies", "k")
     def evaluate(
         self,
         *,

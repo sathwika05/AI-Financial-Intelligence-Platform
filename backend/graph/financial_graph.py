@@ -7,7 +7,6 @@
 import asyncio
 import logging
 import operator
-import time
 from typing import Annotated, Any, Optional, TypedDict
 
 from backend.nodes.reranker_node import reranker_node
@@ -20,6 +19,7 @@ from backend.nodes.intent_node import intent_node
 from backend.nodes.planner_node import planner_node
 from backend.nodes.reviewer_node import reviewer_node, route_after_review
 from backend.nodes.scoring_node import scoring_node
+from backend.observability.tracing import timed_node
 from backend.retrieval.hybrid_retrieval import hybrid_retrieve_async
 from backend.state.financial_state import FinancialState
 
@@ -105,53 +105,6 @@ def route_after_scoring(state: dict[str, Any],) -> str:
         return "reranker"
 
     return "analysis"
-
-# ── Node timing ─────────────────────────────────────────────
-
-
-def timed_node(name: str, node):
-    """
-    Wrap a graph node so its wall-clock time is recorded in state.
-
-    Deliberately transparent: the node is awaited exactly as before and its
-    return value is passed through untouched, with a single `node_timings`
-    entry merged in. A node that returns nothing still contributes its
-    timing, and a node that raises is timed and re-raised so a failure is
-    never hidden by the instrumentation.
-
-    Timings are appended, not assigned, because the reviewer can route back
-    and a node can therefore run more than once per question.
-    """
-
-    async def run(state, config):
-        started = time.perf_counter()
-
-        try:
-            result = await node(state, config)
-        except Exception:
-            # The pipeline's own error handling owns this; the wrapper only
-            # needs to avoid swallowing it.
-            raise
-
-        elapsed_ms = (time.perf_counter() - started) * 1000
-
-        timing = {
-            "node": name,
-            "latency_ms": round(elapsed_ms, 3),
-        }
-
-        if not isinstance(result, dict):
-            # Nodes are expected to return state updates; anything else is
-            # passed straight through rather than reshaped.
-            return result
-
-        return {
-            **result,
-            "node_timings": [timing],
-        }
-
-    return run
-
 
 # ── Graph ───────────────────────────────────────────────────
 

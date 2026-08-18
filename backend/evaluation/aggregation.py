@@ -12,6 +12,7 @@ from backend.evaluation.schemas import (
     EvaluatorResult,
     QuestionEvaluationResult,
 )
+from backend.observability.logging import log_span
 
 
 # A question passes only when its average evaluator score is at least 0.70
@@ -109,6 +110,7 @@ def classify_execution_route(
     )
 
 
+@log_span("results")
 def build_route_distribution(
     results: list[QuestionEvaluationResult],
 ) -> dict[str, int]:
@@ -252,6 +254,7 @@ def _derive_hallucination_rate(
     )
 
 
+@log_span("results")
 def build_route_performance(
     results: list[QuestionEvaluationResult],
 ) -> dict[str, dict[str, Any]]:
@@ -392,6 +395,7 @@ def _safe_extra(
         return {}
 
 
+@log_span("results")
 def build_node_latency(
     results: list[QuestionEvaluationResult],
 ) -> dict[str, dict[str, Any]]:
@@ -438,6 +442,7 @@ def build_node_latency(
     }
 
 
+@log_span("results")
 def build_tool_summary(
     results: list[QuestionEvaluationResult],
 ) -> dict[str, dict[str, Any]]:
@@ -523,6 +528,7 @@ def build_tool_summary(
     return summary
 
 
+@log_span("result.question_id")
 def finalize_question_result(
     result: QuestionEvaluationResult,
 ) -> QuestionEvaluationResult:
@@ -570,6 +576,7 @@ def finalize_question_result(
     return result
 
 
+@log_span("run.run_id")
 def aggregate_benchmark_run(
     run: BenchmarkRunResult,
 ) -> dict[str, Any]:

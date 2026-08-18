@@ -23,11 +23,13 @@ intent_accuracy
 from __future__ import annotations
 
 from backend.evaluation.schemas import EvaluatorResult
+from backend.observability.logging import log_span
 
 
 class IntentEvaluator:
     """Evaluate whether the pipeline selected the correct financial route."""
 
+    @log_span("expected_intent", "actual_intent")
     def evaluate(
         self,
         *,

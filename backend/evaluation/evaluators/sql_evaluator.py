@@ -44,6 +44,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from backend.evaluation.schemas import EvaluatorResult
+from backend.observability.logging import log_span
 
 
 class SQLEvaluator:
@@ -70,6 +71,7 @@ class SQLEvaluator:
         self.datacompy_mode = datacompy_mode
         self.datacompy_metric = datacompy_metric
 
+    @log_span("generated_sql")
     async def evaluate(
         self,
         *,

@@ -34,6 +34,7 @@ import json
 from typing import Any
 
 from backend.evaluation.schemas import EvaluatorResult
+from backend.observability.logging import log_span
 
 
 class ToolEvaluator:
@@ -47,6 +48,7 @@ class ToolEvaluator:
         # Use False for tools that may execute in parallel.
         self.strict_order = strict_order
 
+    @log_span("expected_tool_calls")
     async def evaluate(
         self,
         *,

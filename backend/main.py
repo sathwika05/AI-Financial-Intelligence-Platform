@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from backend.observability.langsmith_setup import setup_langsmith
+from backend.observability.logging import RunTagFilter
 
 
 
@@ -19,8 +20,13 @@ import logging
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(message)s"
+    format="%(run_tag)s %(message)s"
 )
+
+# On the handler, so records from every logger — ours and third-party — carry
+# the attribute the format string above requires.
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(RunTagFilter())
 
 setup_langsmith()
 

@@ -37,6 +37,7 @@ import math
 from typing import Any
 
 from backend.evaluation.schemas import EvaluatorResult
+from backend.observability.logging import log_span
 
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class RagasEvaluator:
         self.judge_llm = judge_llm
         self.judge_embeddings = judge_embeddings
 
+    @log_span("contexts")
     async def evaluate(
         self,
         *,

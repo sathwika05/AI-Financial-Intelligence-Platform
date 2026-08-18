@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -8,6 +9,7 @@ from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
+from langchain_core.load import dumps
 
 from backend.evaluation.aggregation import (
     aggregate_benchmark_run,
@@ -49,6 +51,7 @@ from backend.evaluation.schemas import (
     PipelineExecution,
     QuestionEvaluationResult,
 )
+from backend.observability.logging import log_span
 from backend.retrieval.sql_executor import SCHEMA
 from backend.state.state_factory import (
     build_initial_financial_state,
@@ -96,6 +99,7 @@ class BenchmarkRunner:
         self.ranking_evaluator = RankingEvaluator()
         self.market_evaluator = MarketEvaluator()
 
+    @log_span("run_id")
     async def run(
         self,
         *,
@@ -177,6 +181,7 @@ class BenchmarkRunner:
         run_type="chain",
         tags=["eval"],
     )
+    @log_span("question.question_id", "question.expected_intent")
     async def _run_question(
         self,
         *,
@@ -205,6 +210,9 @@ class BenchmarkRunner:
                 question=question,
                 runnable_config=runnable_config,
             )
+
+            print(json.dumps(json.loads(dumps(execution)), indent=2))
+            
 
             evaluator_results: dict[
                 str,
@@ -327,6 +335,8 @@ class BenchmarkRunner:
                 evaluator_results=evaluator_results,
             )
 
+            print(question_result.model_dump_json(indent=2))
+
             return finalize_question_result(
                 question_result
             )
@@ -349,6 +359,7 @@ class BenchmarkRunner:
                 error=str(exc),
             )
 
+    @log_span()
     async def _execute_pipeline(
         self,
         *,

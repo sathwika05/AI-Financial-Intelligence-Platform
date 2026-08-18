@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -13,6 +14,8 @@ from backend.retrieval.query_filters import (
     generate_ranking_keywords
 )
 from backend.retrieval.vector_search import search_similar_chunks
+from backend.observability.tracing import node_span
+from backend.scoring.evidence_builder import extract_sql_rows
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +103,12 @@ async def run_sql_retrieval(query: str, config: RunnableConfig) -> dict[str, Any
             "generated_sql": "",
             "db_result": {},
             "sql_executed_tools": [],
-            "error":      str(e)
+            "error":      str(e),
+            # The exception class, kept alongside the message so the SQL
+            # boundary can log a short, low-cardinality label. Database
+            # error *messages* can carry connection details, so they are
+            # not what gets logged there.
+            "error_type": type(e).__name__,
         }
 
 
@@ -191,11 +199,27 @@ async def run_vector_retrieval( query: str, config:RunnableConfig,top_k: int = 5
     run_type="chain",
     tags=["retrieval", "sql", "branch"],
 )
+@node_span("sql")
 async def run_sql_retrieval_async(query: str, config: RunnableConfig) -> dict:
-    """Async SQL retrieval with timeout."""
-    try:
-        logger.info("[HYBRID] SQL task started")
+    """
+    Async SQL retrieval with timeout.
 
+    This function is the semantic SQL boundary: it is the last place that
+    knows whether SQL retrieval actually produced usable rows. It keeps
+    returning an error payload rather than raising, so a SQL failure still
+    leaves vector and market retrieval to complete — which means the
+    surrounding `node_span("sql")` correctly reports `ok` even when SQL did
+    not succeed. The `[SQL] retrieval` lines below carry that distinction,
+    since a span status alone cannot.
+    """
+    started = time.perf_counter()
+
+    def elapsed_ms() -> float:
+        return (time.perf_counter() - started) * 1000
+
+    logger.info("[SQL] retrieval -> start")
+
+    try:
         # run_sql_retrieval is a coroutine — awaiting it directly keeps
         # the LangSmith run context (a contextvar) attached. Handing it
         # to run_in_executor would return the un-awaited coroutine and
@@ -205,24 +229,57 @@ async def run_sql_retrieval_async(query: str, config: RunnableConfig) -> dict:
             timeout=SQL_TIMEOUT
         )
 
-        logger.info("[HYBRID] SQL task complete")
-        return result
     except asyncio.TimeoutError:
-        logger.error(f"[HYBRID] SQL timed out after {SQL_TIMEOUT}s")
+        # Not an error for the pipeline — retrieval degrades and continues —
+        # so this is a warning, and there is no traceback worth printing for
+        # a timeout.
+        logger.warning(
+            "[SQL] retrieval <- timeout %.0fms timeout_ms=%d",
+            elapsed_ms(),
+            SQL_TIMEOUT * 1000,
+        )
         return {
             "source": "sql",
             "answer": "",
             "confidence": 0.0,
             "error": "timeout"
         }
+
     except Exception as e:
-        logger.error(f"[HYBRID] SQL async failed: {e}", exc_info=True)
+        # The only place this exception is seen, so it keeps its traceback.
+        logger.error(
+            "[SQL] retrieval <- failed %.0fms error=%s",
+            elapsed_ms(),
+            type(e).__name__,
+            exc_info=True,
+        )
         return {
             "source": "sql",
             "answer": "",
             "confidence": 0.0,
             "error": str(e)
         }
+
+    # A failure inside run_sql_retrieval was already converted into an error
+    # payload there, so it arrives as a normal return. Without this check the
+    # boundary would report `ok` for a run that retrieved nothing.
+    if result.get("error"):
+        # Already logged with its message one level down; a concise status is
+        # enough here, and the class name avoids putting a driver's error
+        # text — which can include connection details — on this line.
+        logger.warning(
+            "[SQL] retrieval <- failed %.0fms error=%s",
+            elapsed_ms(),
+            result.get("error_type") or "SQLRetrievalError",
+        )
+        return result
+
+    logger.info(
+        "[SQL] retrieval <- ok %.0fms rows=%d",
+        elapsed_ms(),
+        len(extract_sql_rows(result.get("db_result"))),
+    )
+    return result
     
 
 @traceable(
@@ -230,6 +287,7 @@ async def run_sql_retrieval_async(query: str, config: RunnableConfig) -> dict:
     run_type="chain",
     tags=["retrieval", "vector", "branch"],
 )
+@node_span("vector")
 async def run_vector_retrieval_async(query: str,config: RunnableConfig) -> dict:
     """Async vector retrieval with timeout."""
     try:
@@ -267,6 +325,7 @@ async def run_vector_retrieval_async(query: str,config: RunnableConfig) -> dict:
     run_type="chain",
     tags=["retrieval", "market", "branch"],
 )
+@node_span("market")
 async def run_market_retrieval_async(market_query: str,config:RunnableConfig) -> dict:
     """Async market retrieval with timeout."""
     try:

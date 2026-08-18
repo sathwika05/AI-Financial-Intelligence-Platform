@@ -25,7 +25,20 @@ sql_accuracy
 
 sql_equivalence
     Computed with SQLSemanticEquivalence using an independent
-    LLM (Large Language Model) judge and the database schema.
+    LLM (Large Language Model) judge and the database schema. Binary: 1.0
+    or 0.0, with no partial credit for a near miss.
+
+sql_column_coverage
+    Fraction of the reference's columns present in the result. Diagnostic
+    only — it exists because DataCompyScore compares shared columns and
+    cannot see a dropped one.
+
+Scoring
+-------
+The two scored metrics are weighted, not averaged as equals — see
+ACCURACY_WEIGHT. Pass/fail turns on execution accuracy whenever golden rows
+exist, and falls back to equivalence only when there is nothing to execute
+against.
 
 Full forms
 ----------
@@ -45,6 +58,26 @@ from typing import Any
 
 from backend.evaluation.schemas import EvaluatorResult
 from backend.observability.logging import log_span
+
+
+# Execution correctness is the ground truth, and semantic equivalence is a
+# secondary signal, so they are not averaged as equals.
+#
+# One question has many correct SQL queries. Equivalence asks whether the
+# generated query matches one particular reference *phrasing*, and it is
+# binary — a query differing only by an unselected filter column scores the
+# same 0.0 as a query that answers a different question entirely. Execution
+# accuracy asks whether the right rows came back, which is what the pipeline
+# is actually judged on, and it is what text-to-SQL benchmarks headline for
+# exactly this reason.
+#
+# Equivalence still earns a quarter of the score: a query returning the right
+# rows by accident, or one that would diverge on different data, is worth
+# knowing about.
+ACCURACY_WEIGHT = 0.75
+EQUIVALENCE_WEIGHT = 0.25
+
+PASS_THRESHOLD = 0.70
 
 
 class SQLEvaluator:
@@ -166,28 +199,61 @@ class SQLEvaluator:
                     f"SQLSemanticEquivalence failed: {exc}"
                 )
 
-        # Use only metrics that were actually computable.
-        available_scores = [
-            score
-            for score in (
-                sql_accuracy,
-                sql_equivalence,
+        # Diagnostic only. Records which reference columns the result is
+        # missing, because DataCompyScore compares the columns the two sides
+        # share and is therefore blind to a dropped one — it scored a perfect
+        # 1.0 on a result missing two columns while printing "df1 does not
+        # match df2". Reported rather than scored: a missing column that
+        # actually breaks something shows up in the evaluator that depends on
+        # it, and failing here as well would double-count it.
+        column_coverage = self._column_coverage(
+            actual_result,
+            expected_result,
+        )
+
+        # Weighted, using only the metrics that were computable. Weights are
+        # renormalised over what is present, so a question with no golden rows
+        # is still scored out of 1.0 on equivalence alone rather than being
+        # capped at 0.25.
+        weighted = [
+            (score, weight)
+            for score, weight in (
+                (sql_accuracy, ACCURACY_WEIGHT),
+                (sql_equivalence, EQUIVALENCE_WEIGHT),
             )
             if score is not None
         ]
 
+        total_weight = sum(
+            weight for _, weight in weighted
+        )
+
         overall_score = (
-            sum(available_scores)
-            / len(available_scores)
-            if available_scores
+            sum(
+                score * weight
+                for score, weight in weighted
+            )
+            / total_weight
+            if total_weight
             else 0.0
+        )
+
+        # Pass/fail turns on the strongest signal available, not on the blend.
+        # Execution accuracy is that signal whenever golden rows exist: a query
+        # returning exactly the expected rows has answered the question, and a
+        # disagreement with the reference phrasing should not overturn that.
+        # Equivalence only decides when there is nothing to execute against.
+        primary_signal = (
+            sql_accuracy
+            if sql_accuracy is not None
+            else sql_equivalence
         )
 
         # Safety is mandatory even when quality metrics are high.
         passed = (
             read_only
-            and bool(available_scores)
-            and overall_score >= 0.70
+            and primary_signal is not None
+            and primary_signal >= PASS_THRESHOLD
             and not errors
         )
 
@@ -202,6 +268,12 @@ class SQLEvaluator:
         if sql_equivalence is not None:
             metrics["sql_equivalence"] = round(
                 sql_equivalence,
+                4,
+            )
+
+        if column_coverage is not None:
+            metrics["sql_column_coverage"] = round(
+                column_coverage,
                 4,
             )
 
@@ -220,9 +292,99 @@ class SQLEvaluator:
                 "read_only": read_only,
                 "datacompy_mode": self.datacompy_mode,
                 "datacompy_metric": self.datacompy_metric,
+                # Which signal decided pass/fail, so a result that passes on
+                # accuracy while equivalence reads 0.0 is self-explaining.
+                "primary_signal": (
+                    "sql_accuracy"
+                    if sql_accuracy is not None
+                    else "sql_equivalence"
+                ),
+                "weights": {
+                    "sql_accuracy": ACCURACY_WEIGHT,
+                    "sql_equivalence": EQUIVALENCE_WEIGHT,
+                },
             },
             errors=errors,
         )
+
+    @classmethod
+    def _column_coverage(
+        cls,
+        actual_result: Any,
+        expected_result: Any,
+    ) -> float | None:
+        """
+        Fraction of the reference's columns that the result also has.
+
+        Returns None when either side has no identifiable columns, so a
+        question without golden rows reports nothing rather than a
+        misleading zero.
+        """
+        expected_columns = cls._column_names(
+            expected_result
+        )
+
+        if not expected_columns:
+            return None
+
+        actual_columns = cls._column_names(
+            actual_result
+        )
+
+        if not actual_columns:
+            return 0.0
+
+        present = sum(
+            1
+            for column in expected_columns
+            if column in actual_columns
+        )
+
+        return present / len(expected_columns)
+
+    @classmethod
+    def _column_names(
+        cls,
+        result: Any,
+    ) -> set[str]:
+        """Column names of a result, in any of the shapes seen upstream."""
+        if result is None:
+            return set()
+
+        # An executor payload carries its own column list.
+        if isinstance(result, Mapping):
+            columns = result.get("columns")
+
+            if isinstance(columns, (list, tuple)):
+                return {
+                    str(column).strip().lower()
+                    for column in columns
+                }
+
+        # pandas DataFrame.
+        if hasattr(result, "columns") and not isinstance(
+            result,
+            Mapping,
+        ):
+            try:
+                return {
+                    str(column).strip().lower()
+                    for column in result.columns
+                }
+            except TypeError:
+                return set()
+
+        # Otherwise take the union of the keys the rows carry.
+        names: set[str] = set()
+
+        for row in cls._extract_rows(result):
+            if isinstance(row, Mapping):
+                names.update(
+                    str(key).strip().lower()
+                    for key in row.keys()
+                )
+
+        return names
 
     @staticmethod
     def _is_read_only_query(

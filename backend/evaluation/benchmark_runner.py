@@ -335,11 +335,17 @@ class BenchmarkRunner:
                 evaluator_results=evaluator_results,
             )
 
-            print(question_result.model_dump_json(indent=2))
-
-            return finalize_question_result(
+            question_result = finalize_question_result(
                 question_result
             )
+
+            # Dumped after finalization: overall_score, passed and
+            # aggregate_metrics are computed there, so printing earlier
+            # always showed the schema defaults (0.0 / False / {}) no matter
+            # how the question actually scored.
+            print(question_result.model_dump_json(indent=2))
+
+            return question_result
 
         except Exception as exc:
             logger.exception(

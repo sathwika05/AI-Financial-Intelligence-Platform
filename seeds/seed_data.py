@@ -1,6 +1,10 @@
 import asyncio
 import csv
+import hashlib
+import logging
+import re
 from datetime import date, timedelta
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import yfinance as yf
 import requests
@@ -10,7 +14,7 @@ from pathlib import Path
 
 from backend.models.db_models import Company, Document, DocumentChunk, FinancialMetric
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from backend.services.postgres_service import AsyncSessionLocal
 from dotenv import load_dotenv
 
@@ -55,6 +59,226 @@ print("Finnhub key loaded =", bool(FINNHUB_API_KEY))
 # After that, remaining companies skip Alpha Vantage and immediately use
 # Finnhub instead of repeatedly making requests that we know will fail.
 ALPHA_VANTAGE_AVAILABLE = True
+
+
+logger = logging.getLogger(__name__)
+
+
+# Minimum Alpha Vantage relevance for an article to be owned by the ticker
+# that was queried for it.
+#
+# NEWS_SENTIMENT returns market news *related to* a ticker, not news *about*
+# it, and the association can be very loose: one AMD bond-sale article came
+# back for JPM, BAC, MS and C as well, presumably because banks underwrite
+# such sales. Alpha Vantage grades each association in the article's
+# `ticker_sentiment` list, which is exactly the signal needed to tell the
+# real subject from an incidental mention.
+#
+# Set from the 2026-08-18 seed, not from the documentation. Measuring each
+# stored article against whether its text actually names the company it was
+# filed under showed the score is close to bimodal rather than a smooth
+# gradient:
+#
+#     relevance    docs   names its company
+#     0.56-0.59      5    40%
+#     0.60-0.69     30    27%
+#     0.71-0.73      3    33%
+#     0.83           1    100%
+#     0.91-1.00     20    100%
+#
+# Every article at 0.83 or above was genuinely about its company; below 0.73
+# roughly seven in ten were not. The first threshold here was 0.35, chosen
+# from the documented 0.0-1.0 range with no data to hand, and it let almost
+# all of the topically-adjacent articles through — an article about Fabrinet
+# filed under AMD, one about Netflix under GOOGL, one about Nike under META.
+#
+# 0.75 sits in the empty band between the two clusters, so it is not a knife
+# edge: no observed article scored between 0.73 and 0.83.
+MIN_NEWS_RELEVANCE = 0.75
+
+
+# Query parameters that identify a marketing campaign rather than a
+# document. Two URLs differing only by these point at the same article.
+TRACKING_QUERY_PARAMS = frozenset(
+    {
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "fbclid",
+        "gclid",
+    }
+)
+
+
+def canonicalize_url(url: str | None) -> str | None:
+    """
+    Reduce a URL to a stable identity for duplicate detection only.
+
+    Deliberately conservative — this value is stored and compared, never
+    fetched, so it only has to be consistent. Parameters that are not known
+    tracking junk are preserved, because a query string frequently *is* the
+    document (`?id=123`), and dropping it would collapse distinct articles
+    into one.
+    """
+    if not url:
+        return None
+
+    cleaned = url.strip()
+
+    if not cleaned:
+        return None
+
+    try:
+        parts = urlsplit(cleaned)
+    except ValueError:
+        # Unparseable: fall back to the trimmed string so the article still
+        # has some identity rather than none.
+        return cleaned
+
+    # Case-insensitive per RFC 3986; the path is left alone because it is
+    # case-sensitive on most servers.
+    scheme = parts.scheme.lower()
+    netloc = parts.netloc.lower()
+
+    kept_params = [
+        (key, value)
+        for key, value in parse_qsl(
+            parts.query,
+            keep_blank_values=True,
+        )
+        if key.lower() not in TRACKING_QUERY_PARAMS
+    ]
+
+    query = urlencode(kept_params)
+
+    # "example.com/a/" and "example.com/a" are the same article. The bare
+    # root is left as-is, since "" and "/" both mean the root already.
+    path = parts.path
+
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/")
+
+    # The fragment is a position within a page, not a different page.
+    return urlunsplit((scheme, netloc, path, query, ""))
+
+
+def normalize_content(content: str | None) -> str:
+    """
+    Collapse a body of text to the form that gets hashed.
+
+    Whitespace differences — re-wrapping, a stray tab, a trailing newline —
+    are not editorial differences, so they must not produce a second copy of
+    the same article.
+    """
+    if not content:
+        return ""
+
+    return re.sub(r"\s+", " ", content).strip()
+
+
+def hash_content(content: str | None) -> str | None:
+    """
+    SHA-256 of the normalised content, or None when there is no content.
+
+    The second duplicate identity, which catches the same article
+    republished under a different URL — common with syndicated newswire
+    copy, which is most of this corpus.
+    """
+    normalized = normalize_content(content)
+
+    if not normalized:
+        return None
+
+    return hashlib.sha256(
+        normalized.encode("utf-8")
+    ).hexdigest()
+
+
+def get_ticker_relevance(
+    ticker_sentiment: object,
+    ticker: str,
+) -> float | None:
+    """
+    Alpha Vantage's relevance for one ticker within one article.
+
+    Returns None when the ticker is absent from the list, which is itself
+    meaningful: the provider returned the article for this ticker but does
+    not associate the two, so the article is not about this company.
+
+    Alpha Vantage sends the score as a string, so it is parsed rather than
+    compared directly; anything unparseable is treated as absent instead of
+    being coerced to zero, keeping "no opinion" distinct from "no relevance".
+    """
+    if not isinstance(ticker_sentiment, list):
+        return None
+
+    wanted = (ticker or "").strip().upper()
+
+    if not wanted:
+        return None
+
+    for entry in ticker_sentiment:
+        if not isinstance(entry, dict):
+            continue
+
+        entry_ticker = str(
+            entry.get("ticker") or ""
+        ).strip().upper()
+
+        if entry_ticker != wanted:
+            continue
+
+        raw_score = entry.get("relevance_score")
+
+        try:
+            return float(raw_score)
+        except (TypeError, ValueError):
+            return None
+
+    return None
+
+
+async def find_duplicate_document(
+    db,
+    canonical_url: str | None,
+    content_hash: str | None,
+) -> str | None:
+    """
+    Why this article is a duplicate, or None if it is new.
+
+    Returns "url" or "content_hash" so the caller can say which identity
+    matched.
+
+    Queried against the database rather than an in-process set, because the
+    unique constraints live there and a set would only be authoritative for
+    one run of one process. Inside the seed's single transaction this also
+    sees rows added earlier in the same run, since they are flushed on
+    insert — so an article fetched again under a later ticker is recognised
+    without waiting for the commit.
+    """
+    if canonical_url:
+        existing = await db.execute(
+            select(Document.id)
+            .where(Document.source_url == canonical_url)
+            .limit(1)
+        )
+
+        if existing.scalar_one_or_none() is not None:
+            return "url"
+
+    if content_hash:
+        existing = await db.execute(
+            select(Document.id)
+            .where(Document.content_hash == content_hash)
+            .limit(1)
+        )
+
+        if existing.scalar_one_or_none() is not None:
+            return "content_hash"
+
+    return None
 
 
 def fetch_yahoo_data(ticker: str) -> dict | None:
@@ -225,14 +449,60 @@ def fetch_alpha_vantage_news(ticker: str) -> list[dict]:
 
             # Do not create an empty Document row.
             if not content.strip():
+                logger.info(
+                    "[SEED_NEWS] provider=alpha_vantage ticker=%s "
+                    "skipped reason=empty_content",
+                    ticker,
+                )
                 continue
 
+            # The article is only owned by the queried ticker if Alpha
+            # Vantage says it is about that ticker. Without this check the
+            # query ticker silently becomes the subject, which is how one
+            # AMD article ended up filed under four banks.
+            relevance = get_ticker_relevance(
+                item.get("ticker_sentiment"),
+                ticker,
+            )
+
+            if relevance is None:
+                logger.info(
+                    "[SEED_NEWS] provider=alpha_vantage ticker=%s "
+                    "skipped reason=ticker_not_found",
+                    ticker,
+                )
+                continue
+
+            if relevance < MIN_NEWS_RELEVANCE:
+                logger.info(
+                    "[SEED_NEWS] provider=alpha_vantage ticker=%s "
+                    "skipped reason=low_relevance relevance=%.4f",
+                    ticker,
+                    relevance,
+                )
+                continue
+
+            logger.info(
+                "[SEED_NEWS] provider=alpha_vantage ticker=%s "
+                "accepted relevance=%.4f",
+                ticker,
+                relevance,
+            )
+
             articles.append({
+                "title": item.get("title") or None,
                 "content": content,
                 "doc_type": "news",
 
                 # Store the original publisher/source when available.
                 "source": item.get("source") or "Alpha Vantage",
+
+                # Kept for duplicate detection; canonicalised at insert.
+                "url": item.get("url") or None,
+
+                # Recorded so the accepted association is auditable and the
+                # threshold above can be retuned from real data.
+                "relevance_score": relevance,
             })
 
         return articles
@@ -319,14 +589,36 @@ def fetch_finnhub_news(ticker: str) -> list[dict]:
 
             # Do not create an empty Document row.
             if not content.strip():
+                logger.info(
+                    "[SEED_NEWS] provider=finnhub ticker=%s "
+                    "skipped reason=empty_content",
+                    ticker,
+                )
                 continue
 
+            # No relevance gate here, deliberately. Finnhub is queried
+            # through company-news?symbol=<ticker>, which is scoped to the
+            # company by the endpoint itself, so there is no cross-ticker
+            # association to second-guess and no relevance field to read.
+            logger.info(
+                "[SEED_NEWS] provider=finnhub ticker=%s accepted",
+                ticker,
+            )
+
             articles.append({
+                "title": item.get("headline") or None,
                 "content": content,
                 "doc_type": "news",
 
                 # Preserve the publisher/source when available.
                 "source": item.get("source") or "Finnhub",
+
+                # Kept for duplicate detection; canonicalised at insert.
+                "url": item.get("url") or None,
+
+                # Finnhub reports no per-ticker relevance, and the endpoint
+                # makes one unnecessary.
+                "relevance_score": None,
             })
 
         return articles
@@ -508,27 +800,82 @@ async def seed():
                     ticker,
                 )
 
-                # Create one Document database record for each news article.
+                # Create one Document database record for each news article
+                # that survives duplicate detection.
+                #
+                # Ownership is assigned here and only here — after the
+                # provider-specific validation above has established that
+                # the article really belongs to this company.
+                stored = 0
+
                 for article in articles:
+
+                    canonical_url = canonicalize_url(
+                        article.get("url")
+                    )
+                    content_hash = hash_content(
+                        article.get("content")
+                    )
+
+                    # Normalisation can empty an article that looked
+                    # non-empty (whitespace only), leaving nothing to hash
+                    # and nothing worth storing.
+                    if not content_hash:
+                        print(
+                            "  [SEED_NEWS] skipped reason=empty_content"
+                        )
+                        continue
+
+                    duplicate_reason = await find_duplicate_document(
+                        db,
+                        canonical_url,
+                        content_hash,
+                    )
+
+                    if duplicate_reason:
+                        # Not inserted, so it is never picked up by
+                        # load_unindexed_documents() and therefore never
+                        # chunked or embedded either.
+                        print(
+                            "  [SEED_NEWS] skipped duplicate "
+                            f"reason={duplicate_reason}"
+                        )
+                        continue
 
                     doc = Document(
                         # Connect this document to the company
                         # using the company's primary key.
                         company_id=company.id,
 
+                        title=article.get("title"),
                         content=article["content"],
                         doc_type=article["doc_type"],
                         source=article["source"],
+                        source_url=canonical_url,
+                        content_hash=content_hash,
+                        relevance_score=article.get("relevance_score"),
                     )
 
                     # Mark the Document object for insertion.
                     db.add(doc)
 
+                    # Flush so this row is visible to the duplicate lookup
+                    # for the very next article, including articles fetched
+                    # later for a different ticker in the same run.
+                    await db.flush()
+
+                    stored += 1
+
                 print(
                     f"  {data['name']} | "
                     f"PE: {data['pe_ratio']} | "
                     f"EPS: {data['eps']} | "
-                    f"Docs: {len(articles)}"
+                    f"Docs: {stored}"
+                    + (
+                        f" ({len(articles) - stored} duplicate)"
+                        if stored != len(articles)
+                        else ""
+                    )
                 )
 
                 # Pause before processing the next ticker.

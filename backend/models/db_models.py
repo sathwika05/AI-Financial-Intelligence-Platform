@@ -66,13 +66,42 @@ class Document(Base):
         ForeignKey("companies.id"),
     )
 
+    title = Column(String)
     content = Column(Text)
     doc_type = Column(String)
     source = Column(String)
 
+    # Canonical article URL — tracking parameters stripped — used as the
+    # primary duplicate identity. Nullable because a provider may omit it,
+    # and Postgres allows repeated NULLs in a unique index, so articles
+    # without a URL fall back to content_hash alone.
+    source_url = Column(String)
+
+    # SHA-256 of the whitespace-normalised content. The second duplicate
+    # identity, for the same article republished under different URLs.
+    content_hash = Column(String(64))
+
+    # How strongly the provider associated this article with the owning
+    # company. Alpha Vantage supplies it per ticker; Finnhub is already
+    # company-scoped and leaves it null.
+    relevance_score = Column(Float)
+
     created_at = Column(
         DateTime,
         server_default=func.now(),
+    )
+
+    __table_args__ = (
+        # Enforced in the database rather than only in the seed, so a
+        # duplicate cannot be introduced by any other writer.
+        UniqueConstraint(
+            "source_url",
+            name="uq_documents_source_url",
+        ),
+        UniqueConstraint(
+            "content_hash",
+            name="uq_documents_content_hash",
+        ),
     )
 
 

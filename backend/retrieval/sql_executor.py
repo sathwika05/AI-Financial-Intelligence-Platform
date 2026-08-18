@@ -1,5 +1,6 @@
 import json
 import re
+from functools import lru_cache
 from typing import Any
 
 from langchain_community.utilities import SQLDatabase
@@ -56,6 +57,83 @@ def _run_select(query: str) -> dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=1)
+def get_sector_vocabulary() -> str:
+    """
+    The exact values `companies.sector` can hold, as prompt text.
+
+    SCHEMA is built with sample_rows_in_table_info=2, so the generator sees
+    two example rows and never learns the sector vocabulary. Left to guess,
+    it invents categories the question implies — a request for AI stocks
+    produced `WHERE c.sector ILIKE '%AI%'`, which is syntactically valid,
+    semantically empty, and returned zero rows.
+
+    There are only eight sectors, so the fix is to state them rather than
+    instruct the model to be careful. Cached: the vocabulary changes only
+    when companies are reseeded, and this is read on every generation.
+    """
+    try:
+        with _engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT DISTINCT sector FROM companies "
+                    "WHERE sector IS NOT NULL ORDER BY sector"
+                )
+            )
+            sectors = [row[0] for row in rows]
+
+    except Exception as e:
+        # Never block SQL generation on this. Without it the model is only
+        # as uninformed as it was before.
+        logger.warning(
+            "[SQL_EXECUTOR] Could not read sector vocabulary: %s",
+            e,
+        )
+        return ""
+
+    if not sectors:
+        return ""
+
+    return (
+        "ALLOWED VALUES:\n"
+        "companies.sector holds exactly these "
+        f"{len(sectors)} values, and nothing else:\n"
+        + "\n".join(f"  - {sector}" for sector in sectors)
+        + (
+            "\n\nThere is no industry column, no theme column, and no other\n"
+            "classification anywhere in this database. `sector` above is the\n"
+            "ONLY categorical fact about a company.\n"
+            "\n"
+            "A category that is not in that list — \"AI\", \"semiconductor\",\n"
+            "\"biotech\", \"cloud\", \"fintech\" — is NOT DERIVABLE. You cannot\n"
+            "compute it from any column, and you must not try.\n"
+            "\n"
+            "In particular, NEVER decide category membership by matching text.\n"
+            "All of these are forbidden:\n"
+            "  WHERE c.sector ILIKE '%AI%'\n"
+            "  WHERE c.name ILIKE '%AI%'\n"
+            "  WHERE EXISTS (SELECT 1 FROM documents d\n"
+            "                WHERE d.company_id = c.id\n"
+            "                  AND d.content ILIKE '%AI%')\n"
+            "\n"
+            "A news article mentioning a topic does not make the company it is\n"
+            "filed under a member of that category, and a LIKE pattern matches\n"
+            "letters, not meaning: '%AI%' matches \"maintains\", \"details\" and\n"
+            "\"aiming\", so an oil producer qualifies as an AI company because\n"
+            "one of its articles used the word \"maintains\". This is not a\n"
+            "hypothetical — it selected 35 of 50 companies.\n"
+            "\n"
+            "When the question names a category that is not a sector above:\n"
+            "  - if the question names specific companies, filter on those\n"
+            "    tickers with c.ticker IN (...)\n"
+            "  - otherwise omit the category filter entirely and return the\n"
+            "    metrics that were asked for\n"
+            "An unfiltered answer over real companies is far better than a\n"
+            "filter that silently admits the wrong ones."
+        )
+    )
+
+
 def _as_tool_payload(payload: dict[str, Any]) -> str:
     """
     Serialize the tool result.
@@ -93,7 +171,11 @@ def get_database_schema(table_name: str = None)-> str:
 
 
 @tool
-def generate_sql_query(question: str, config: RunnableConfig, schema_info: str = None):
+def generate_sql_query(
+    question: str,
+    config: RunnableConfig,
+    schema_info: str = None,
+):
     """Generate a safe PostgreSQL SELECT query from a user question."""
 
     llm = get_llm_client(
@@ -101,35 +183,127 @@ def generate_sql_query(question: str, config: RunnableConfig, schema_info: str =
         LLMTier.MEDIUM,
     )
 
+    logger.info(
+    f"[SQL_EXECUTOR] Question received by generate_sql_query: {question}"
+)
+
     schema_to_use = schema_info if schema_info else SCHEMA
 
     prompt = f"""
-    Based on this database schema:
+You are an expert PostgreSQL query generator.
 
-    {schema_to_use}
+DATABASE SCHEMA:
+{schema_to_use}
 
-    Generate a SQL query to answer this question:
-    {question}
+{get_sector_vocabulary()}
 
-    Rules:
-    - Use only SELECT statements
-    - Use only existing tables and columns
-    - Add WHERE, GROUP BY, ORDER BY clauses when needed
-    - Limit results to 10 rows unless specified otherwise
-    - If using ANY aggregate function (STRING_AGG, COUNT, SUM, AVG, MAX, MIN),
-      you MUST add GROUP BY for every non-aggregated column in SELECT
-    - Use PostgreSQL syntax
-    - Prefer simple queries without STRING_AGG unless document snippets are explicitly needed
-    - When using PostgreSQL functions, use explicit casts when column types may be integer, numeric, or double precision.
-    - Return only the SQL query, nothing else
-    """
+USER QUESTION:
+{question}
 
-    response = llm.invoke(prompt, config=config,)
+Generate exactly one PostgreSQL SELECT query that answers the question.
+
+CRITICAL RULES:
+
+1. ROW COUNT
+- If the user specifies the number of requested results, LIMIT must exactly
+  match that number.
+- "five companies" -> LIMIT 5
+- "top 3 companies" -> LIMIT 3
+- "10 largest companies" -> LIMIT 10
+- Never replace a user-specified count with another default.
+- Use LIMIT 10 only when the user specifies no result count.
+
+2. ORDERING
+- "lowest", "smallest", "cheapest" -> ORDER BY ... ASC
+- "highest", "largest", "biggest" -> ORDER BY ... DESC
+- Order by exactly the metric named in the question.
+- Example:
+  "smallest market cap" -> ORDER BY market_cap ASC
+
+3. RANKING FIELD VALIDITY
+- When ordering or ranking by a numeric field, exclude NULL values for that
+  ranking field.
+- If zero or negative values would make the ranking meaningless, exclude them.
+
+Examples:
+- smallest market cap:
+    market_cap IS NOT NULL
+    AND market_cap > 0
+
+- lowest P/E ratio:
+    pe_ratio IS NOT NULL
+    AND pe_ratio > 0
+
+4. POSITIVE CONDITIONS
+- "positive earnings" -> eps > 0
+- "positive EPS" -> eps > 0
+- "positive revenue growth" -> revenue_growth > 0
+
+5. REQUIRED IDENTIFIER COLUMNS
+- Whenever the query returns companies, the SELECT list MUST include
+  c.ticker and c.name, even when the user did not ask for them.
+- ticker is not output for the reader — it is the key later stages use to
+  match a row to a company. A result without it cannot be matched at all,
+  so the row is silently discarded no matter how correct it is.
+- This rule outranks rule 6. "Only necessary columns" never removes ticker.
+
+6. SELECT ONLY NECESSARY COLUMNS
+- Beyond the identifier columns required by rule 5, select only the columns
+  needed to answer the user's question.
+- Do not SELECT every column from the tables.
+- Do not include unrelated metrics unless needed.
+
+7. NEVER INFER A CATEGORY FROM TEXT
+- See ALLOWED VALUES above for the only categorical column that exists.
+- Do not decide whether a company belongs to a category by pattern-matching
+  any free-text column — not c.name, not c.sector, and above all not
+  documents.content.
+- A company's news mentioning a topic does not place the company in that
+  category, and LIKE matches letters rather than meaning.
+- If the question's category is not a listed sector, filter on named tickers
+  or do not filter by category at all.
+
+8. SQL SAFETY
+- SELECT statements only.
+- Use only tables and columns available in the schema.
+- Never use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or CREATE.
+
+9. AGGREGATION
+- If using COUNT, SUM, AVG, MIN, MAX, STRING_AGG, or another aggregate,
+  every non-aggregated selected column must appear in GROUP BY.
+
+10. QUERY SIMPLICITY
+- Prefer simple joins and filters.
+- Do not use STRING_AGG unless document snippets are explicitly required.
+- Use PostgreSQL syntax.
+- Use explicit casts where PostgreSQL type ambiguity may occur.
+
+Before returning the query, verify:
+- requested LIMIT is correct
+- ranking column is correct
+- ASC/DESC direction is correct
+- required NULL/positive filters are present
+- c.ticker is in the SELECT list whenever companies are returned
+- no category is inferred by matching text in any column
+- selected columns are necessary
+- query is SELECT-only
+
+Return only the SQL query.
+Do not return markdown.
+Do not explain the query.
+""".strip()
+
+    response = llm.invoke(
+        prompt,
+        config=config,
+    )
+
     sql_query = response.content.strip()
 
     logger.info(
-    f"[SQL_EXECUTOR] Generated SQL: {sql_query[:80]}..."
+        f"[SQL_EXECUTOR] Generated SQL: {sql_query[:80]}..."
     )
+
     return sql_query
 
 

@@ -11,10 +11,12 @@ Endpoints:
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID, uuid4
+from langchain_core.load import dumps
 
 from fastapi import (
     APIRouter,
@@ -26,7 +28,7 @@ from fastapi import (
 )
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.evaluation.benchmark_runner import (
@@ -44,6 +46,12 @@ from backend.llm.llm_config_service import (
 from backend.models.db_models import (
     BenchmarkRun,
     EvaluationMetric,
+)
+# Aliased: `benchmark_run` is already used as a local variable for the ORM
+# row inside _execute_benchmark, which would shadow the import.
+from backend.observability.logging import (
+    benchmark_run as benchmark_run_tag,
+    log_span,
 )
 from backend.services.postgres_service import (
     AsyncSessionLocal,
@@ -184,6 +192,64 @@ class MetricsResponse(BaseModel):
 ACTIVE_RUN_STATUSES = ("queued", "running")
 
 
+# Recorded on runs the sweep below closes out, so a stalled dashboard row is
+# distinguishable from a benchmark that genuinely raised.
+ORPHANED_RUN_MESSAGE = (
+    "Orphaned: the API process exited while this run was in flight."
+)
+
+
+async def fail_orphaned_runs() -> list[UUID]:
+    """
+    Fail every run left active by a previous process, and return their ids.
+
+    A benchmark executes as a FastAPI BackgroundTask inside the API process,
+    and `_execute_benchmark` is the only thing that ever advances `status`.
+    So a process that dies mid-run — a container recreated by `compose up`,
+    a crash, a redeploy — strands its row at "running" permanently: the task
+    that was going to update it no longer exists, and no later request looks
+    at it. The dashboard then polls that row forever, and the duplicate guard
+    in `_find_active_duplicate` refuses every rerun of the same
+    configuration with a 409.
+
+    A dying task cannot clean up after itself, so the sweep has to run on the
+    startup side instead. This holds because runs are in-process and no
+    surviving peer can own them: any row still active when the app boots is
+    necessarily abandoned. Running more than one API replica against this
+    database would break that assumption — a booting replica would fail runs
+    belonging to a live sibling — and this would need an owner/heartbeat
+    column to stay correct.
+    """
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            update(BenchmarkRun)
+            .where(
+                BenchmarkRun.status.in_(
+                    ACTIVE_RUN_STATUSES
+                )
+            )
+            .values(
+                status="failed",
+                completed_at=_utcnow_naive(),
+                error_message=(
+                    ORPHANED_RUN_MESSAGE
+                ),
+            )
+            .returning(
+                BenchmarkRun.run_id
+            )
+        )
+
+        orphaned = list(
+            result.scalars().all()
+        )
+
+        await session.commit()
+
+    return orphaned
+
+
+@log_span("request.provider_id")
 async def _find_active_duplicate(
     *,
     session: AsyncSession,
@@ -228,6 +294,7 @@ async def _find_active_duplicate(
     response_model=RunResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@log_span("request.question_set", "request.provider_id")
 async def trigger_benchmark_run(
     request: RunRequest,
     background_tasks: BackgroundTasks,
@@ -376,6 +443,7 @@ async def trigger_benchmark_run(
         ) from exc
 
 
+@log_span("run_id", "question_set", "top_k")
 async def _execute_benchmark(
     *,
     run_id: UUID,
@@ -396,180 +464,186 @@ async def _execute_benchmark(
     """
     Background execution using its own AsyncSession.
     """
-    async with AsyncSessionLocal() as session:
-        try:
-            benchmark_run = await _get_run_record(
-                session=session,
-                run_id=run_id,
-            )
-
-            if benchmark_run is None:
-                logger.error(
-                    "[EVALUATION] Run not found "
-                    "run_id=%s",
-                    run_id,
+    # Tags every log line this benchmark produces — here and in every
+    # node, retriever and scorer below it — so they can be told apart
+    # from a user query running at the same time.
+    with benchmark_run_tag(run_id):
+        async with AsyncSessionLocal() as session:
+            try:
+                benchmark_run = await _get_run_record(
+                    session=session,
+                    run_id=run_id,
                 )
-                return
 
-            benchmark_run.status = "running"
-            await session.commit()
+                if benchmark_run is None:
+                    logger.error(
+                        "[EVALUATION] Run not found "
+                        "run_id=%s",
+                        run_id,
+                    )
+                    return
 
-            llm_config_service = LLMConfigService(
-                session
-            )
+                benchmark_run.status = "running"
+                await session.commit()
 
-            # Re-resolve the runtime in this background task because
-            # the original request-scoped session is no longer used.
-            llm_runtime = (
-                await llm_config_service
-                .load_provider_runtime(
-                    provider_id=provider_id
+                llm_config_service = LLMConfigService(
+                    session
                 )
-            )
 
-            # Passed into every LangGraph node. Nodes read llm_runtime
-            # from config["configurable"] through get_llm_client(...).
-            runnable_config: RunnableConfig = {
-                "configurable": {
-                    "llm_runtime": llm_runtime,
-                    "request_type": "benchmark",
-                    "benchmark_run_id": str(
-                        run_id
-                    ),
-                },
-
-                # These values are propagated to LangSmith traces.
-                "tags": [
-                    "benchmark",
-                    question_set,
-                    retrieval_mode,
-                    llm_runtime.provider_name,
-                ],
-
-                "metadata": {
-                    "request_type": "benchmark",
-                    "benchmark_run_id": str(
-                        run_id
-                    ),
-                    "provider_id": str(
-                        provider_id
-                    ),
-                    "provider": llm_runtime.provider_name,
-                    "models": llm_runtime.describe(),
-                    "dataset": dataset,
-                    "question_set": question_set,
-                    "retrieval_mode": retrieval_mode,
-                },
-            }
-
-            # Internal config includes the backend-resolved model snapshot.
-            benchmark_config = BenchmarkConfig(
-                dataset=dataset,
-                question_set=question_set,
-
-                model=model_snapshot,
-                retrieval_strategy=retrieval_mode,
-
-                company_filter=company_filter,
-                top_k=top_k,
-
-                benchmark_version=benchmark_version,
-                dataset_version=dataset_version,
-            )
-
-            runner = BenchmarkRunner(
-                graph=financial_graph
-            )
-
-            benchmark_result = await runner.run(
-                config=benchmark_config,
-                runnable_config=runnable_config,
-                run_id=run_id,
-            )
-
-            aggregate = (
-                benchmark_result.aggregate_metrics
-                or {}
-            )
-
-            # Persist run-level fields.
-            benchmark_run.status = (
-                benchmark_result.status.value
-            )
-            benchmark_run.total_requests = (
-                benchmark_result.total_questions
-            )
-            benchmark_run.total_cost = (
-                aggregate.get("total_cost")
-                or 0.0
-            )
-            benchmark_run.pass_rate = (
-                aggregate.get(
-                    "overall_pass_rate"
+                # Re-resolve the runtime in this background task because
+                # the original request-scoped session is no longer used.
+                llm_runtime = (
+                    await llm_config_service
+                    .load_provider_runtime(
+                        provider_id=provider_id
+                    )
                 )
-            )
-            benchmark_run.route_accuracy = (
-                aggregate.get(
-                    "route_accuracy"
+
+                # Passed into every LangGraph node. Nodes read llm_runtime
+                # from config["configurable"] through get_llm_client(...).
+                runnable_config: RunnableConfig = {
+                    "configurable": {
+                        "llm_runtime": llm_runtime,
+                        "request_type": "benchmark",
+                        "benchmark_run_id": str(
+                            run_id
+                        ),
+                    },
+
+                    # These values are propagated to LangSmith traces.
+                    "tags": [
+                        "benchmark",
+                        question_set,
+                        retrieval_mode,
+                        llm_runtime.provider_name,
+                    ],
+
+                    "metadata": {
+                        "request_type": "benchmark",
+                        "benchmark_run_id": str(
+                            run_id
+                        ),
+                        "provider_id": str(
+                            provider_id
+                        ),
+                        "provider": llm_runtime.provider_name,
+                        "models": llm_runtime.describe(),
+                        "dataset": dataset,
+                        "question_set": question_set,
+                        "retrieval_mode": retrieval_mode,
+                    },
+                }
+
+                # Internal config includes the backend-resolved model snapshot.
+                benchmark_config = BenchmarkConfig(
+                    dataset=dataset,
+                    question_set=question_set,
+
+                    model=model_snapshot,
+                    retrieval_strategy=retrieval_mode,
+
+                    company_filter=company_filter,
+                    top_k=top_k,
+
+                    benchmark_version=benchmark_version,
+                    dataset_version=dataset_version,
                 )
-            )
-            benchmark_run.completed_at = (
-                _utcnow_naive()
-            )
-            benchmark_run.error_message = (
-                benchmark_result.error
-            )
 
-            # Persist evaluator/latency/cost aggregates.
-            await _upsert_evaluation_metrics(
-                session=session,
-
-                run_id=run_id,
-
-                dataset=dataset,
-                model=model_snapshot,
-                retrieval_mode=retrieval_mode,
-                question_set=question_set,
-
-                top_k=top_k,
-                aggregate=aggregate,
-            )
-
-            await session.commit()
-
-            logger.info(
-                "[EVALUATION] Benchmark finished "
-                "run_id=%s status=%s",
-                run_id,
-                benchmark_result.status.value,
-            )
-
-        except Exception as exc:
-            await session.rollback()
-
-            logger.exception(
-                "[EVALUATION] Benchmark failed "
-                "run_id=%s",
-                run_id,
-            )
-
-            failed_run = await _get_run_record(
-                session=session,
-                run_id=run_id,
-            )
-
-            if failed_run is not None:
-                failed_run.status = "failed"
-                failed_run.error_message = str(
-                    exc
+                runner = BenchmarkRunner(
+                    graph=financial_graph
                 )
-                failed_run.completed_at = (
+
+                benchmark_result = await runner.run(
+                    config=benchmark_config,
+                    runnable_config=runnable_config,
+                    run_id=run_id,
+                )
+
+                
+                aggregate = (
+                    benchmark_result.aggregate_metrics
+                    or {}
+                )
+
+                # Persist run-level fields.
+                benchmark_run.status = (
+                    benchmark_result.status.value
+                )
+                benchmark_run.total_requests = (
+                    benchmark_result.total_questions
+                )
+                benchmark_run.total_cost = (
+                    aggregate.get("total_cost")
+                    or 0.0
+                )
+                benchmark_run.pass_rate = (
+                    aggregate.get(
+                        "overall_pass_rate"
+                    )
+                )
+                benchmark_run.route_accuracy = (
+                    aggregate.get(
+                        "route_accuracy"
+                    )
+                )
+                benchmark_run.completed_at = (
                     _utcnow_naive()
+                )
+                benchmark_run.error_message = (
+                    benchmark_result.error
+                )
+
+                # Persist evaluator/latency/cost aggregates.
+                await _upsert_evaluation_metrics(
+                    session=session,
+
+                    run_id=run_id,
+
+                    dataset=dataset,
+                    model=model_snapshot,
+                    retrieval_mode=retrieval_mode,
+                    question_set=question_set,
+
+                    top_k=top_k,
+                    aggregate=aggregate,
                 )
 
                 await session.commit()
 
+                logger.info(
+                    "[EVALUATION] Benchmark finished "
+                    "run_id=%s status=%s",
+                    run_id,
+                    benchmark_result.status.value,
+                )
 
+            except Exception as exc:
+                await session.rollback()
+
+                logger.exception(
+                    "[EVALUATION] Benchmark failed "
+                    "run_id=%s",
+                    run_id,
+                )
+
+                failed_run = await _get_run_record(
+                    session=session,
+                    run_id=run_id,
+                )
+
+                if failed_run is not None:
+                    failed_run.status = "failed"
+                    failed_run.error_message = str(
+                        exc
+                    )
+                    failed_run.completed_at = (
+                        _utcnow_naive()
+                    )
+
+                    await session.commit()
+
+
+@log_span("run_id")
 async def _upsert_evaluation_metrics(
     *,
     session: AsyncSession,
@@ -736,6 +810,7 @@ async def _upsert_evaluation_metrics(
         )
 
 
+@log_span("run_id")
 async def _get_run_record(
     *,
     session: AsyncSession,
@@ -755,6 +830,7 @@ async def _get_run_record(
     "/runs",
     response_model=list[MetricsResponse],
 )
+@log_span("limit", "offset")
 async def list_runs(
     limit: int = Query(
         default=10,
@@ -798,6 +874,7 @@ async def list_runs(
     "/runs/{run_id}",
     response_model=MetricsResponse,
 )
+@log_span("run_id")
 async def get_run(
     run_id: UUID,
     session: AsyncSession = Depends(get_db),

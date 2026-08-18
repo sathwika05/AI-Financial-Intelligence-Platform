@@ -13,7 +13,10 @@ from backend.models import db_models
 from backend.api.sql_routes import router as sql_router
 from backend.api.vector_routes import router as vector_router
 from backend.api.financial_routes import router as financial_router
-from backend.api.evaluation_routes import router as evaluation_router
+from backend.api.evaluation_routes import (
+    fail_orphaned_runs,
+    router as evaluation_router,
+)
 from backend.api.admin_llm_routes import router as admin_llm_router
 
 import logging
@@ -48,6 +51,19 @@ async def lifespan(app: FastAPI):
 
     logger.info("pgvector extension enabled")
     logger.info("Database tables checked/created")
+
+    # Benchmarks run as in-process background tasks, so any run still marked
+    # active belongs to a process that is already gone and will never be
+    # updated again. Close those out before serving, or the dashboard polls
+    # them forever and the duplicate guard 409s every rerun.
+    orphaned_runs = await fail_orphaned_runs()
+
+    if orphaned_runs:
+        logger.warning(
+            "[EVALUATION] Failed %d run(s) orphaned by a previous process: %s",
+            len(orphaned_runs),
+            ", ".join(str(run_id) for run_id in orphaned_runs),
+        )
 
     # Startup complete — FastAPI begins serving requests
     yield

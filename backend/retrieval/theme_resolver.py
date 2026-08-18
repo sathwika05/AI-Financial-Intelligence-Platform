@@ -79,9 +79,16 @@ def extract_theme_slug(question: str) -> str | None:
     return None
 
 
-async def resolve_theme_tickers(slug: str | None) -> list[str]:
+async def resolve_theme_companies(
+    slug: str | None,
+) -> list[dict]:
     """
-    Tickers belonging to a theme, alphabetically.
+    Companies belonging to a theme, alphabetically by ticker.
+
+    Both the id and the ticker are returned because the branches key on
+    different things: vector search filters `documents.company_id`, while
+    SQL and the market API work in tickers. Resolving once and carrying
+    both is what keeps the three branches on one candidate set.
 
     Empty for an unknown or absent theme. The order is stable so a benchmark
     run is reproducible; ranking happens later and does not depend on it.
@@ -94,7 +101,7 @@ async def resolve_theme_tickers(slug: str | None) -> list[str]:
             result = await conn.execute(
                 text(
                     """
-                    SELECT c.ticker
+                    SELECT c.id, c.ticker
                     FROM companies c
                     JOIN company_themes ct ON ct.company_id = c.id
                     JOIN themes t ON t.id = ct.theme_id
@@ -104,7 +111,10 @@ async def resolve_theme_tickers(slug: str | None) -> list[str]:
                 ),
                 {"slug": slug},
             )
-            tickers = [row[0] for row in result.fetchall()]
+            companies = [
+                {"company_id": row[0], "ticker": row[1]}
+                for row in result.fetchall()
+            ]
 
     except Exception as exc:
         # A resolver failure must degrade to "no theme filter", never take
@@ -117,7 +127,7 @@ async def resolve_theme_tickers(slug: str | None) -> list[str]:
         )
         return []
 
-    if not tickers:
+    if not companies:
         logger.warning(
             "[THEME_RESOLVER] no companies for slug=%s — the question asks "
             "for a category the taxonomy does not define, so no candidate "
@@ -125,7 +135,15 @@ async def resolve_theme_tickers(slug: str | None) -> list[str]:
             slug,
         )
 
-    return tickers
+    return companies
+
+
+async def resolve_theme_tickers(slug: str | None) -> list[str]:
+    """Just the tickers, for callers that do not need the ids."""
+    return [
+        company["ticker"]
+        for company in await resolve_theme_companies(slug)
+    ]
 
 
 async def resolve_candidates(question: str) -> dict:
@@ -139,7 +157,10 @@ async def resolve_candidates(question: str) -> dict:
     is returned.
     """
     slug = extract_theme_slug(question)
-    tickers = await resolve_theme_tickers(slug)
+    companies = await resolve_theme_companies(slug)
+
+    tickers = [company["ticker"] for company in companies]
+    company_ids = [company["company_id"] for company in companies]
 
     logger.info(
         "[THEME_RESOLVER] question_theme=%s tickers=%s",
@@ -150,5 +171,6 @@ async def resolve_candidates(question: str) -> dict:
     return {
         "theme_slug": slug,
         "candidate_tickers": tickers,
+        "candidate_company_ids": company_ids,
         "resolved": bool(tickers),
     }

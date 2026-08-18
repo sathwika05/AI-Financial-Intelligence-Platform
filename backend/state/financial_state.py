@@ -31,6 +31,21 @@ class FinancialState(TypedDict):
     market_query: str
     strategy: str
 
+    # Candidate universe — who is eligible to be ranked, decided once and
+    # shared by every retrieval branch.
+    #
+    # Without this each branch discovered its own set: SQL invented a filter
+    # from document text and returned EOG/JPM/GS, while the market branch
+    # resolved NVDA/MSFT/GOOGL/AMZN/META from the planner's wording. The
+    # scorer then ranked the union, so an energy company could win a query
+    # about AI.
+    #
+    # Empty means no theme was recognised, which is not an error — most
+    # questions name no category and every company stays eligible.
+    theme_slug: Optional[str]
+    candidate_tickers: list[str]
+    candidate_company_ids: list[int]
+
     # Retrieval outputs
     generated_sql: str
     sql_result: dict[str, Any]

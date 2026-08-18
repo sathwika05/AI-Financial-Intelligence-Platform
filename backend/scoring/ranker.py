@@ -528,6 +528,7 @@ async def rerank(
     sql_result: dict | None = None,
     vector_result: dict | None = None,
     market_result: dict | None = None,
+    candidate_tickers: list[str] | None = None,
 ) -> list[dict]:
     """
     Main reranker — scores each company across all dimensions.
@@ -581,17 +582,35 @@ async def rerank(
     # when both are empty does the DB ordering decide.
     sql_tickers = _extract_sql_tickers(sql_result)
 
-    candidate_tickers = list(
-        dict.fromkeys(market_tickers + sql_tickers)
-    )
+    if candidate_tickers:
+        # Eligibility was already decided against the curated taxonomy, so
+        # it is not re-derived from what retrieval happened to return. This
+        # also holds the line when a branch degrades: without it, an empty
+        # union falls through to get_companies_from_db(None), which returns
+        # the top 20 by revenue growth and would rank the whole database
+        # regardless of the theme the question asked for.
+        resolved_candidates = list(candidate_tickers)
 
-    logger.info(
-        "[RANKER] Candidates: %s (market=%s sql=%s union=%s)",
-        candidate_tickers or "db_default",
-        len(market_tickers),
-        len(sql_tickers),
-        len(candidate_tickers),
-    )
+        logger.info(
+            "[RANKER] Candidates: %s (from resolved theme, market=%s sql=%s)",
+            resolved_candidates,
+            len(market_tickers),
+            len(sql_tickers),
+        )
+    else:
+        resolved_candidates = list(
+            dict.fromkeys(market_tickers + sql_tickers)
+        )
+
+        logger.info(
+            "[RANKER] Candidates: %s (market=%s sql=%s union=%s)",
+            resolved_candidates or "db_default",
+            len(market_tickers),
+            len(sql_tickers),
+            len(resolved_candidates),
+        )
+
+    candidate_tickers = resolved_candidates
 
     companies = await get_companies_from_db(
         candidate_tickers or None

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from backend.llm.llm_context import get_llm_client
 from backend.llm.llm_tiers import LLMTier
+from backend.retrieval.theme_resolver import resolve_candidates
 from backend.state.financial_state import FinancialState
 
 
@@ -168,10 +169,26 @@ async def planner_node(state: FinancialState,config: RunnableConfig) -> dict:
         f"[PLANNER] executed_tools: {executed_tools}"
     )
 
+    # Resolved from the user's own words rather than from the plan the
+    # model just produced. Eligibility is a lookup against a curated
+    # taxonomy, and routing it through a rewritten subquery would put a
+    # model back in charge of deciding who qualifies — which is what
+    # produced an oil producer in an AI ranking.
+    candidates = await resolve_candidates(query)
+
+    logger.info(
+        "[PLANNER] theme=%s candidates=%s",
+        candidates["theme_slug"] or "none",
+        ",".join(candidates["candidate_tickers"]) or "all companies",
+    )
+
     return {
         "sql_query":    plan["sql_query"],
         "vector_query": plan["vector_query"],
         "market_query": plan["market_query"],
         "strategy":     plan["strategy"],
         "executed_tools": executed_tools,
+        "theme_slug": candidates["theme_slug"],
+        "candidate_tickers": candidates["candidate_tickers"],
+        "candidate_company_ids": candidates["candidate_company_ids"],
     }

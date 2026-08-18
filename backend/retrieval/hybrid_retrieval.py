@@ -131,7 +131,12 @@ async def run_sql_retrieval(
     run_type="chain",
     tags=["retrieval", "vector"],
 )
-async def run_vector_retrieval( query: str, config:RunnableConfig,top_k: int = 5) -> dict:
+async def run_vector_retrieval(
+    query: str,
+    config: RunnableConfig,
+    top_k: int = 5,
+    candidate_company_ids: list[int] | None = None,
+) -> dict:
     """
     Run vector retrieval pipeline:
     1. Extract metadata filters from query
@@ -139,10 +144,25 @@ async def run_vector_retrieval( query: str, config:RunnableConfig,top_k: int = 5
     3. pgvector cosine similarity search with filters
     4. BM25 reranking by keyword relevance
     Returns structured result with confidence score.
+
+    `candidate_company_ids` restricts the search to documents belonging to
+    the eligible companies. Without it, retrieval for an AI question spent
+    its five slots on Intel, Nike and a pharmaceutical upgrade — none of
+    which belonged to any company being ranked, so relevance and sentiment
+    were unmeasurable for every candidate.
     """
     try:
         filters  = await extract_filters(query,config)
         keywords = generate_ranking_keywords(query,config)
+
+        if candidate_company_ids:
+            # Overrides any company the filter extractor inferred from the
+            # wording: the candidate set was resolved from a curated
+            # taxonomy and is the more reliable of the two.
+            filters = {
+                **(filters or {}),
+                "company_ids": list(candidate_company_ids),
+            }
 
         logger.info(
             f"[VECTOR] Vector filters: {filters}, "
@@ -308,13 +328,21 @@ async def run_sql_retrieval_async(
     tags=["retrieval", "vector", "branch"],
 )
 @node_span("vector")
-async def run_vector_retrieval_async(query: str,config: RunnableConfig) -> dict:
+async def run_vector_retrieval_async(
+    query: str,
+    config: RunnableConfig,
+    candidate_company_ids: list[int] | None = None,
+) -> dict:
     """Async vector retrieval with timeout."""
     try:
         logger.info("[HYBRID] Vector task started")
 
         result = await asyncio.wait_for(
-             run_vector_retrieval(query,config),
+             run_vector_retrieval(
+                 query,
+                 config,
+                 candidate_company_ids=candidate_company_ids,
+             ),
             timeout=VECTOR_TIMEOUT
         )
 
@@ -511,6 +539,8 @@ async def hybrid_retrieve_async(
     vector_query: str = None,
     market_query: str = None,
     config: RunnableConfig | None = None,
+    candidate_tickers: list[str] | None = None,
+    candidate_company_ids: list[int] | None = None,
 ) -> dict:
     """
     Production-grade async hybrid retrieval.
@@ -547,11 +577,38 @@ async def hybrid_retrieve_async(
     # worse than losing the count.
     sql_question = query if intent in SQL_INTENTS else sql_q
 
+    candidate_tickers = candidate_tickers or []
+    candidate_company_ids = candidate_company_ids or []
+
+    # One eligible set for every branch. Previously each discovered its own:
+    # SQL manufactured a filter from document text and returned EOG/JPM/GS
+    # while the market branch resolved NVDA/MSFT/GOOGL/AMZN/META from the
+    # planner's wording, and the scorer ranked the union of the two.
+    if candidate_tickers:
+        # Stated as a constraint on the question rather than by editing the
+        # generated SQL: the generator already has a rule for honouring an
+        # explicit ticker list, and rewriting its output would mean parsing
+        # SQL to find the right place to intervene.
+        sql_question = (
+            f"{sql_question}\n\n"
+            "Restrict the results to exactly these companies, which have "
+            "already been determined to match the category the question "
+            f"asks about: {', '.join(candidate_tickers)}. "
+            "Filter with c.ticker IN (...) and do not widen the set."
+        )
+
+        # The market branch resolves tickers from free text with an LLM
+        # call. Given the candidates it does not need to guess, and cannot
+        # drift onto a different set — it previously answered a question
+        # about AMD with AMZN.
+        market_q = ", ".join(candidate_tickers)
+
     logger.info(
         f"[HYBRID] Intent: {intent}, "
         f"sql_q: {sql_q[:50]}, "
         f"vector_q: {vector_q[:50]}, "
-        f"market_q: {market_q[:50]}"
+        f"market_q: {market_q[:50]}, "
+        f"candidates: {','.join(candidate_tickers) or 'all'}"
     )
 
     if intent in SQL_INTENTS:
@@ -569,7 +626,11 @@ async def hybrid_retrieve_async(
 
     elif intent in VECTOR_INTENTS:
         # SENTIMENT → Vector only
-        vector_result = await run_vector_retrieval(vector_q,config)
+        vector_result = await run_vector_retrieval(
+            vector_q,
+            config,
+            candidate_company_ids=candidate_company_ids,
+        )
         return combine_results(
             query         = query,
             intent        = intent,
@@ -589,7 +650,11 @@ async def hybrid_retrieve_async(
                 config,
                 sql_question=sql_question,
             ),
-            run_vector_retrieval_async(vector_q,config),
+            run_vector_retrieval_async(
+                vector_q,
+                config,
+                candidate_company_ids=candidate_company_ids,
+            ),
         ]
 
         if market_q:

@@ -34,6 +34,9 @@ def build_initial_financial_state(
         "vector_query": "",
         "market_query": "",
         "strategy": "",
+        "theme_slug": None,
+        "candidate_tickers": [],
+        "candidate_company_ids": [],
 
         # Retrieval
         "generated_sql": "",

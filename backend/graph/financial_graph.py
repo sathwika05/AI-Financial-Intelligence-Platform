@@ -61,7 +61,9 @@ async def retrieval_node(state: FinancialState, config: RunnableConfig) -> dict:
             sql_query    = sql_query,
             vector_query = vector_query,
             market_query = market_query,
-            config       = config
+            config       = config,
+            candidate_tickers     = state.get("candidate_tickers") or [],
+            candidate_company_ids = state.get("candidate_company_ids") or [],
     )
 
     # Spread into the keys FinancialState declares. LangGraph drops any

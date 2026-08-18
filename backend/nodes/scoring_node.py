@@ -76,6 +76,10 @@ async def scoring_node(
             vector_result=vector_result,
             market_result=market_result,
             config=config,
+            # Resolved by the planner from the curated taxonomy. Passed
+            # through so eligibility survives a degraded retrieval branch
+            # rather than being re-derived from whatever came back.
+            candidate_tickers=state.get("candidate_tickers") or [],
         )
 
         if not ranked_companies:

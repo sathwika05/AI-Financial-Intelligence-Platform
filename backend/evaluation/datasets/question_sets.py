@@ -189,36 +189,53 @@ SENTIMENT_QUESTIONS: list[EvalQuestion] = [
         expected_intent=IntentType.SENTIMENT,
         expected_tools=["planner", "vector"],
 
+        # UNDER-SUPPORTED BY THE CURRENT CORPUS — read this before trusting
+        # a score from this question.
+        #
+        # The semiconductor cohort is NVDA, AMD and INTC, and after the news
+        # relevance filter the corpus holds exactly one document across all
+        # three of them: the NVIDIA chunk below. A question asking which of
+        # three companies has the most positive sentiment cannot be answered
+        # from coverage of one, so this currently measures a gap in the data
+        # rather than the quality of the pipeline.
+        #
+        # Left in place rather than deleted because the shape of the
+        # question is sound and it will start measuring something real as
+        # soon as the corpus carries semiconductor coverage again. Two ways
+        # to get there: seed more news for these tickers, or lower
+        # MIN_NEWS_RELEVANCE, though the measured distribution says
+        # everything below 0.75 is mostly mislinked.
+        #
+        # Do not "fix" a low score here by adding reference_contexts that
+        # are not in the corpus. That is what the previous version did — it
+        # cited an AMD bond sale and two Intel stories, all of which the
+        # reseed removed, and the pipeline was then graded against evidence
+        # that could not be retrieved at any quality level.
         reference_answer=(
-            "AMD carries the most positive coverage: it is raising up to $5 "
-            "billion in what would be its largest investment-grade bond sale, "
-            "tied to demand from the artificial intelligence boom. Intel's "
-            "coverage is mixed — it posted its strongest revenue growth in "
-            "over fifteen years, but trades more than 30% below its recent "
-            "peak after a stock offering unsettled investors, and it is "
-            "weighing a return to the memory market. NVIDIA's coverage is the "
-            "least company-specific, consisting largely of index movement "
-            "summaries and reporting on other firms."
+            "Only NVIDIA has recent coverage in the corpus, and it is "
+            "positive: ARK's ETFs sold Roblox to buy a substantial NVIDIA "
+            "position, which the coverage frames as continued confidence in "
+            "NVIDIA's growth. AMD and Intel have no documents, so their "
+            "sentiment is unknown rather than neutral, and a ranking that "
+            "places either above NVIDIA is unsupported. The correct answer "
+            "reports the absence rather than inferring a position from it."
         ),
 
-        # Verbatim from document_chunks for these tickers. The corpus is
-        # general market news and several chunks discuss other companies, so
-        # this is what good retrieval can actually return, not an ideal.
+        # Verbatim from document_chunks. The single chunk the semiconductor
+        # cohort currently has.
         reference_contexts=[
-            "Advanced Micro Devices Inc. is planning to raise as much $5 billion "
-            "in what could be the chipmaker's biggest-ever investment-grade bond "
-            "sale, adding to a wave of debt tied to the artificial intelligence boom.",
-
-            "Intel just posted its strongest revenue growth in over 15 years, yet "
-            "shares sit more than 30% below their recent peak after a massive stock "
-            "offering rattled investors.",
-
-            "Intel's CEO said this week that the chip maker may return to the memory "
-            "market, potentially making it a challenger to Micron and SK Hynix.",
+            "Cathie Wood's ARK ETFs have strategically rebalanced their "
+            "portfolio by selling a significant amount of Roblox stock and "
+            "acquiring a substantial number of Nvidia shares. This move "
+            "reflects ARK's continued confidence in Nvidia's growth potential "
+            "within the evolving tech landscape.",
         ],
 
-        # Only three semiconductor companies exist in the seed.
-        expected_ranking=["AMD", "INTC", "NVDA"],
+        # NVDA first because it is the only company with evidence. AMD and
+        # INTC follow in a fixed order so the metric is deterministic, but
+        # nothing in the corpus justifies preferring one over the other —
+        # treat any ranking score here as weak.
+        expected_ranking=["NVDA", "AMD", "INTC"],
     ),
 ]
 
@@ -234,8 +251,15 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
         expected_intent=IntentType.MIXED,
         expected_tools=["planner", "sql", "vector", "market"],
 
-        # The AI cohort is named explicitly: `companies` has no industry
-        # column, so membership cannot be derived in SQL.
+        # The cohort is the `ai` theme in company_themes, and the pipeline
+        # now resolves it there before any branch runs. It is written as an
+        # explicit ticker list rather than a join through themes because
+        # that is what the pipeline produces: the resolver hands the SQL
+        # generator the tickers it already looked up, so the generator never
+        # needs to know the taxonomy exists.
+        #
+        # Keep this list and seeds/themes.py in step. A test pins the `ai`
+        # membership to exactly these five for that reason.
         expected_sql=(
             "SELECT c.ticker, c.name, fm.pe_ratio, fm.eps, fm.revenue_growth "
             "FROM companies c "
@@ -245,40 +269,58 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
         ),
 
         expected_sql_result=[
-            {"ticker": "NVDA", "name": "NVIDIA Corporation", "pe_ratio": 34.532207, "eps": 6.52, "revenue_growth": 0.852},
-            {"ticker": "AMD", "name": "Advanced Micro Devices, Inc.", "pe_ratio": 125.368286, "eps": 3.91, "revenue_growth": 0.501},
-            {"ticker": "META", "name": "Meta Platforms, Inc.", "pe_ratio": 22.17802, "eps": 26.57, "revenue_growth": 0.28},
-            {"ticker": "GOOGL", "name": "Alphabet Inc.", "pe_ratio": 17.369793, "eps": 19.93, "revenue_growth": 0.242},
-            {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 27.492489, "eps": 17.97, "revenue_growth": 0.177},
+            {"ticker": "NVDA", "name": "NVIDIA Corporation", "pe_ratio": 34.457886, "eps": 6.53, "revenue_growth": 0.852},
+            {"ticker": "AMD", "name": "Advanced Micro Devices, Inc.", "pe_ratio": 131.42857, "eps": 3.85, "revenue_growth": 0.501},
+            {"ticker": "META", "name": "Meta Platforms, Inc.", "pe_ratio": 22.22539, "eps": 25.6, "revenue_growth": 0.28},
+            {"ticker": "GOOGL", "name": "Alphabet Inc.", "pe_ratio": 17.364967, "eps": 19.81, "revenue_growth": 0.242},
+            {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 27.622198, "eps": 17.39, "revenue_growth": 0.177},
         ],
 
         reference_answer=(
             "NVIDIA leads on growth with 85.2% revenue growth at a 34.5 P/E, "
             "the strongest growth in the cohort at a moderate multiple. AMD "
-            "grows quickly at 50.1% but is the most expensive on valuation at "
-            "a 125.4 P/E. Meta and Alphabet are the cheapest on earnings at "
-            "22.2 and 17.4 P/E with moderate growth of 28.0% and 24.2%. "
-            "Microsoft is the slowest grower of the five at 17.7%. Every "
-            "conclusion should cite the retrieved financial or document "
-            "evidence for that company."
+            "grows quickly at 50.1% but is by far the most expensive on "
+            "valuation at a 131.4 P/E. Meta and Alphabet are the cheapest on "
+            "earnings at 22.2 and 17.4 P/E with moderate growth of 28.0% and "
+            "24.2%. Microsoft is the slowest grower of the five at 17.7%. "
+            "Document evidence is uneven across the cohort — only NVIDIA, "
+            "Microsoft and Meta have recent coverage in the corpus — so "
+            "sentiment should be reported as unavailable for AMD and "
+            "Alphabet rather than inferred. Every conclusion should cite the "
+            "retrieved financial or document evidence for that company."
         ),
 
-        # Chosen because each chunk carries AI-relevant, company-specific
-        # evidence for a name in the cohort. An earlier draft used a chunk
-        # about CoreWeave, which is filed under NVDA but is not about NVDA —
-        # that mismatch zeroed context precision, recall and entity recall.
+        # Read from the corpus rather than written from memory, and chosen
+        # to be reachable: with candidate resolution in place, vector search
+        # is restricted to documents belonging to the five cohort companies,
+        # so anything outside that set can never be retrieved and would
+        # score zero however well the pipeline performed.
+        #
+        # The previous entries described an AMD bond sale and a Microsoft
+        # IREN data centre. Both were true of the corpus at the time and
+        # neither survived the reseed, which is what drove context
+        # precision, recall and entity recall to 0.0 — the pipeline was
+        # being graded against evidence that no longer existed.
+        #
+        # Each of these carries company-specific AI content for a different
+        # cohort member. AMD and Alphabet are absent because the corpus has
+        # no documents for them, which is a fact about the data and not
+        # something to paper over with a loosely related chunk.
         reference_contexts=[
-            "Advanced Micro Devices Inc. is planning to raise as much $5 billion "
-            "in what could be the chipmaker's biggest-ever investment-grade bond "
-            "sale, adding to a wave of debt tied to the artificial intelligence boom.",
+            "Cathie Wood's ARK ETFs have strategically rebalanced their "
+            "portfolio by selling a significant amount of Roblox stock and "
+            "acquiring a substantial number of Nvidia shares. This move "
+            "reflects ARK's continued confidence in Nvidia's growth potential "
+            "within the evolving tech landscape.",
 
-            "Microsoft just signed off on IREN's first major AI data center, and "
-            "NVIDIA piled on with a rare technical designation, sending shares "
-            "surging.",
+            "The move highlights Microsoft's strategy to position Teams as a "
+            "comprehensive customer interaction platform and signifies the "
+            "growing importance of AI voice agents in contact center "
+            "architectures, creating new opportunities for partners to "
+            "provide integration and managed services.",
 
-            "While its two biggest cloud rivals soared past the market this year, "
-            "one hyperscaler kept beating earnings estimates and still watched its "
-            "stock fall.",
+            "Meta Platforms (META) declined amid legal challenges and AI "
+            "strategy uncertainties.",
         ],
 
         # Ordered by revenue growth, which is the widest spread in this cohort

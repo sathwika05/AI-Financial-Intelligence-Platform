@@ -24,7 +24,16 @@ services:
       - redis
     env_file: .env
     environment:
+      # Both URLs are overridden here so .env can hold the host-facing form
+      # (localhost:5433) and stay usable from a developer's terminal. The
+      # container reaches Postgres by service name instead.
+      #
+      # Without the second line .env had to carry the container's hostname
+      # for the sync URL, which meant `pytest` on the host failed at import:
+      # sql_executor opens a SQLDatabase connection at module scope, and
+      # "postgres" does not resolve outside this network.
       DATABASE_URL: postgresql+asyncpg://finuser:finpass@postgres:5432/findb
+      SYNC_DATABASE_URL: postgresql+psycopg2://finuser:finpass@postgres:5432/findb
     volumes:
       - .:/code
       # Give the container its own virtualenv.

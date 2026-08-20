@@ -99,7 +99,23 @@ async def financial_retrieval(request: FinancialQueryRequest, session: AsyncSess
                 request.query,
                 llm_runtime,
             )
-            print(json.dumps(json.loads(dumps(result)), indent=2))
+            # print(json.dumps(json.loads(dumps(result)), indent=2))
+            #
+            # Logged rather than printed. This handler runs inside
+            # query_run(), so as a log record the dump carries that tag and
+            # stays separable from a benchmark running concurrently —
+            # printing put the whole pipeline state on stdout untagged, in
+            # the middle of everyone else's lines.
+            #
+            # Guarded because dumps() serialises the entire graph state, and
+            # at INFO that cost would be paid on every user query and then
+            # thrown away.
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[FINANCIAL_ROUTES] pipeline state %s",
+                    dumps(result),
+                )
+
             return {
                 "query":  request.query,
                 "provider": llm_runtime.provider_name,

@@ -234,10 +234,27 @@ Examples:
     pe_ratio IS NOT NULL
     AND pe_ratio > 0
 
-4. POSITIVE CONDITIONS
-- "positive earnings" -> eps > 0
-- "positive EPS" -> eps > 0
-- "positive revenue growth" -> revenue_growth > 0
+4. CONDITIONS ON FINANCIAL MEASURES
+- Interpret what the question MEANS, not the exact words it uses. Ways of
+  describing a company are open-ended; the measures available are not.
+  Map whatever the question expresses onto the measure it refers to:
+
+    profitability, earnings, making money   -> eps
+    growth, expansion, revenue increase     -> revenue_growth
+    valuation, how cheap or expensive       -> pe_ratio
+    size, how large a company is            -> market_cap
+
+- A condition saying a measure is positive becomes `> 0`. "Profitable",
+  "positive earnings", "earning a profit" and "earnings above zero" all
+  mean the same thing: eps > 0.
+- These phrasings are EXAMPLES, not a lookup table. A qualifier does not
+  stop being a qualifier because its exact wording is missing here. If the
+  question narrows which companies it wants, that restriction MUST appear
+  in the WHERE clause.
+- Dropping a qualifier changes the answer. "Which five profitable
+  technology companies have the smallest market caps" is not the same
+  question as "which five technology companies have the smallest market
+  caps", and returning the second is a wrong answer, not a loose one.
 
 5. REQUIRED IDENTIFIER COLUMNS
 - Whenever the query returns companies, the SELECT list MUST include

@@ -71,6 +71,17 @@ async def _run_select(query: str) -> dict[str, Any]:
         "rows": rows,
         "row_count": len(rows),
         "error": None,
+        # The query this result actually came from.
+        #
+        # When the auto-fix path below repairs a failed query, the rows
+        # returned are the repaired query's rows while state still held the
+        # original. The SQL evaluator then graded two different queries at
+        # once: sql_accuracy scored the repaired execution and passed, while
+        # sql_equivalence scored the broken original against the golden and
+        # the LLM judge approved a query that does not parse. valuation_002
+        # scored 1.0 on both while its recorded SQL referenced c.eps, a
+        # column companies does not have.
+        "executed_sql": query,
     }
 
 
@@ -161,13 +172,14 @@ def _as_tool_payload(payload: dict[str, Any]) -> str:
     return json.dumps(payload, default=str)
 
 
-def _error_payload(message: str) -> str:
+def _error_payload(message: str, executed_sql: str = "") -> str:
     return _as_tool_payload(
         {
             "columns": [],
             "rows": [],
             "row_count": 0,
             "error": message,
+            "executed_sql": executed_sql,
         }
     )
 
@@ -427,9 +439,17 @@ async def execute_sql_query(
         try:
             payload = await _run_select(fixed_query)
 
+            # payload["executed_sql"] is fixed_query, so the repair is
+            # visible to state and to the evaluator instead of the caller
+            # keeping a query that never ran.
+            payload["auto_fixed"] = True
+            payload["original_sql"] = query
+
             logger.info(
-                "[SQL_EXECUTOR] Auto-fixed query returned %s rows",
+                "[SQL_EXECUTOR] Auto-fixed query returned %s rows "
+                "(original failed: %s)",
                 payload["row_count"],
+                str(e)[:120],
             )
             return _as_tool_payload(payload)
 

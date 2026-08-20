@@ -262,9 +262,28 @@ def capture_sql_tool_outputs(state: SQLAgentState,)-> dict[str, Any]:
                 updates["last_sql"]=sql
 
         elif tool_name == "execute_sql_query":
-            updates["db_result"]=(
-                _normalize_db_result(content)
-            )
+            db_result = _normalize_db_result(content)
+            updates["db_result"] = db_result
+
+            # Prefer the query the database actually ran.
+            #
+            # execute_sql_query repairs a failed query in place: it calls
+            # fix_sql_error, runs the repaired SQL and returns those rows.
+            # Only the rows came back before, so `last_sql` kept the broken
+            # original while `db_result` held the repaired query's output,
+            # and the evaluator graded the two against each other —
+            # sql_accuracy scored the execution that worked, sql_equivalence
+            # scored a query that does not parse, and both reported 1.0.
+            executed_sql = ""
+
+            if isinstance(db_result, dict):
+                executed_sql = str(
+                    db_result.get("executed_sql") or ""
+                ).strip()
+
+            if executed_sql:
+                updates["last_sql"] = executed_sql
+
     return updates
 
 def _parse_tool_content(content: Any) -> Any:

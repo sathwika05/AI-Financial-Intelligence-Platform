@@ -25,6 +25,23 @@ TOP_K_FLOOR = 8
 EVIDENCE_PER_COMPANY = 3
 MIN_EVIDENCE_PER_COMPANY = 2
 
+# How many retrieved documents each reported company must keep, when the
+# candidate pool actually holds one for it.
+#
+# MIN_EVIDENCE_PER_COMPANY above counts evidence of any source, so a
+# company holding one SQL row and one market row already met the floor and
+# its document was never pulled back in. On mixed_001 the pool offered five
+# documents, one per cohort company, and the LLM reranker kept exactly one:
+# the selection was 5 SQL rows, 5 market rows and 1 document. RAGAS then
+# scored context_precision 1.0 — the single document was relevant — against
+# context_recall 0.1429, because a reference answer covering five companies'
+# coverage cannot be supported by one company's article.
+#
+# The question asks for "sentiment from recent company documents", so a
+# selection that drops four of the five available documents is
+# under-retrieval rather than a ranking preference.
+MIN_DOCUMENTS_PER_COMPANY = 1
+
 
 class RankedEvidenceItem(BaseModel):
     """One evidence item selected by the hybrid reranker"""
@@ -247,6 +264,7 @@ def _backfill_company_coverage(
     candidates: list[dict[str, Any]],
     target_companies: list[dict[str, Any]],
     min_per_company: int,
+    source_type: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Guarantee every reported company keeps some evidence.
@@ -255,6 +273,11 @@ def _backfill_company_coverage(
     company and leave the rest of the reported companies uncited. For
     each company short of the floor, pull its best unselected
     candidates back in, ordered by the source's own score.
+
+    `source_type` narrows both the count and the refill pool to one kind of
+    evidence. Without it a company is covered by any two candidates, which
+    is how a company could hold a SQL row and a market row while its
+    document went unselected — see MIN_DOCUMENTS_PER_COMPANY.
     """
     if not target_companies or min_per_company <= 0:
         return selected
@@ -269,6 +292,10 @@ def _backfill_company_coverage(
             1
             for record in selected
             if record_matches_company(record, company)
+            and (
+                source_type is None
+                or record.get("source_type") == source_type
+            )
         )
 
         shortfall = min_per_company - matched
@@ -282,6 +309,10 @@ def _backfill_company_coverage(
                 for candidate in candidates
                 if candidate["candidate_id"] not in selected_ids
                 and record_matches_company(candidate, company)
+                and (
+                    source_type is None
+                    or candidate.get("source_type") == source_type
+                )
             ),
             key=lambda item: float(
                 item.get("original_score") or 0.0
@@ -302,8 +333,9 @@ def _backfill_company_coverage(
                 candidate.get("original_score") or 0.0
             )
             record["rerank_reason"] = (
-                "Backfilled to keep evidence coverage for "
-                f"{label}."
+                "Backfilled to keep "
+                f"{source_type + ' ' if source_type else ''}"
+                f"evidence coverage for {label}."
             )
             record["backfilled"] = True
 
@@ -318,6 +350,40 @@ def _backfill_company_coverage(
         )
 
     return selected
+
+
+def _apply_coverage_floors(
+    *,
+    selected: list[dict[str, Any]],
+    candidates: list[dict[str, Any]],
+    target_companies: list[dict[str, Any]],
+    min_per_company: int,
+    min_documents_per_company: int,
+) -> list[dict[str, Any]]:
+    """
+    Apply the general evidence floor, then the document-specific one.
+
+    Order matters. The general pass runs first so a company with no
+    evidence at all is filled from the best candidates of any source; the
+    document pass then runs over that result, so a company whose floor was
+    met entirely by SQL and market rows still gets its article back.
+    Running only the general pass is what left mixed_001 with one document
+    out of the five its pool contained.
+    """
+    selected = _backfill_company_coverage(
+        selected=selected,
+        candidates=candidates,
+        target_companies=target_companies,
+        min_per_company=min_per_company,
+    )
+
+    return _backfill_company_coverage(
+        selected=selected,
+        candidates=candidates,
+        target_companies=target_companies,
+        min_per_company=min_documents_per_company,
+        source_type="vector",
+    )
 
 
 def _format_target_companies(
@@ -339,6 +405,7 @@ async def rerank_hybrid_contexts(
     top_k: int = 8,
     target_companies: list[dict[str, Any]] | None = None,
     min_per_company: int = 0,
+    min_documents_per_company: int = 0,
 ) -> list[dict[str, Any]]:
     """
     Rank hybrid SQL, vector, and market evidence by relevance
@@ -384,6 +451,19 @@ async def rerank_hybrid_contexts(
             f"whenever such evidence exists among the candidates.\n"
             f"        - Spread the selection across those companies "
             f"instead of spending every slot on one company."
+        )
+
+    if target_companies and min_documents_per_company > 0:
+        # Without this the model reliably prefers SQL and market rows,
+        # which read as harder evidence, and returns a single document for
+        # a five-company question whose pool held five.
+        coverage_rules += (
+            f"\n        - Retrieved documents (source type \"vector\") "
+            f"carry the only sentiment and narrative evidence available; "
+            f"SQL and market rows cannot substitute for them. Select at "
+            f"least {min_documents_per_company} document for EACH covered "
+            f"company whenever one exists among the candidates, even if "
+            f"its relevance looks lower than another company's numbers."
         )
 
     system_message = SystemMessage(
@@ -467,11 +547,12 @@ async def rerank_hybrid_contexts(
         )
 
         if reranked:
-            return _backfill_company_coverage(
+            return _apply_coverage_floors(
                 selected=reranked[:top_k],
                 candidates=candidates,
                 target_companies=target_companies,
                 min_per_company=min_per_company,
+                min_documents_per_company=min_documents_per_company,
             )
 
         logger.warning(
@@ -483,7 +564,7 @@ async def rerank_hybrid_contexts(
             "[CONTEXT_RERANKER] LLM reranking failed"
         )
 
-    return _backfill_company_coverage(
+    return _apply_coverage_floors(
         selected=_fallback_rerank(
             candidates,
             top_k,
@@ -491,6 +572,7 @@ async def rerank_hybrid_contexts(
         candidates=candidates,
         target_companies=target_companies,
         min_per_company=min_per_company,
+        min_documents_per_company=min_documents_per_company,
     )
 
 async def reranker_node(
@@ -577,6 +659,7 @@ async def reranker_node(
         top_k=top_k,
         target_companies=ranked_companies,
         min_per_company=MIN_EVIDENCE_PER_COMPANY,
+        min_documents_per_company=MIN_DOCUMENTS_PER_COMPANY,
     )
 
     # Exact list[str] passed to Analysis and RAGAS.

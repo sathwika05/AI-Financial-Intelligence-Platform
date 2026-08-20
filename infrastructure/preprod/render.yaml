@@ -1,0 +1,90 @@
+# Render blueprint for the public demo API.
+#
+# Deployed from the repo root: Render reads this file, so `rootDir` and the
+# Dockerfile path below are relative to the repository, not to this folder.
+#
+# Only the API lives here. The frontend goes to Vercel (see vercel.json),
+# and the database is Neon rather than a Render Postgres — Neon's free tier
+# supports pgvector and does not sleep the way a free Render database does.
+
+services:
+  - type: web
+    name: fip-preprod-api
+    runtime: docker
+    plan: free
+    region: oregon
+
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+
+    # A query runs intent -> planner -> retrieval -> scoring -> analysis ->
+    # reviewer and takes roughly 95 seconds. That rules out any serverless
+    # host with a short timeout, which is why the API is here and not a
+    # Vercel function.
+    healthCheckPath: /health
+
+    envVars:
+      # portfolio mode must not mount the evaluation or indexing routers.
+      # This deployment is public and unauthenticated, so those routes have
+      # to be absent rather than merely unlinked from the UI.
+      - key: DEPLOYMENT_MODE
+        value: portfolio
+
+      - key: APP_ENV
+        value: preprod
+
+      # Neon connection strings. Set in the Render dashboard, not here —
+      # this file is committed.
+      #
+      # Neon requires TLS: append ?sslmode=require to the sync URL, and
+      # ?ssl=require to the asyncpg one.
+      - key: DATABASE_URL
+        sync: false
+      - key: SYNC_DATABASE_URL
+        sync: false
+
+      # Groq serves the chat models for the public demo. Its free tier
+      # removes the cost risk of an unauthenticated endpoint; the limit
+      # becomes requests per minute rather than money.
+      - key: GROQ_API_KEY
+        sync: false
+
+      # Still needed, and only for embeddings — Groq has no embeddings API.
+      # Indexing embeddings are precomputed, so this is one embed_query per
+      # request, around $0.00000002. Set a hard spend limit on the key
+      # regardless.
+      - key: OPENAI_API_KEY
+        sync: false
+
+      - key: LLM_KEY_ENCRYPTION_SECRET
+        sync: false
+
+      # Optional. redis_service catches every failure and returns None, so
+      # market lookups degrade to uncached rather than breaking. Point at
+      # Upstash if the rate limiter needs to be shared across instances.
+      - key: REDIS_URL
+        sync: false
+
+      # Per-IP request cap. The free plan runs a single instance, so an
+      # in-process limiter is sufficient and needs no Redis.
+      - key: RATE_LIMIT_PER_HOUR
+        value: "5"
+
+# Notes for standing this up:
+#
+# 1. Create the Neon project, enable pgvector:
+#        CREATE EXTENSION IF NOT EXISTS vector;
+#
+# 2. Apply the schema:
+#        SYNC_DATABASE_URL=<neon> uv run alembic upgrade head
+#
+# 3. Load data from the frozen snapshot rather than reseeding — no API
+#    quota is consumed and the demo matches what has been benchmarked:
+#        DATABASE_URL=<neon> uv run python -m seeds.snapshot restore
+#
+# 4. Register Groq as the default provider through the admin API against a
+#    local run, then export and import those rows; the public deployment
+#    has no admin routes to create them with.
+#
+# The free plan sleeps after inactivity, so the first request after an idle
+# period pays a cold start on top of the usual query time.

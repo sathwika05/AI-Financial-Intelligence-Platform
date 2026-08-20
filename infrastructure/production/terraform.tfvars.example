@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+project     = "fip"
+environment = "dev"
+region      = "us-east-1"
+
+# No default in variables.tf, so Terraform prompts if this is missing.
+db_password = "change-me"
+
+# false keeps Fargate in public subnets behind security groups.
+# true adds a NAT Gateway at roughly $32/month, billed idle.
+use_nat_gateway = false

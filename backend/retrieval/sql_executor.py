@@ -285,6 +285,24 @@ Examples:
   question as "which five technology companies have the smallest market
   caps", and returning the second is a wrong answer, not a loose one.
 
+- WHERE THESE MEASURES LIVE. eps, pe_ratio and revenue_growth are columns
+  of financial_metrics. They are NOT columns of companies. Using any of
+  them — in SELECT, WHERE or ORDER BY — requires the join:
+
+      JOIN financial_metrics fm ON fm.company_id = c.id
+
+  and the column must be qualified fm.eps, fm.pe_ratio, fm.revenue_growth.
+  c.eps, c.pe_ratio and c.revenue_growth do not exist; a query using them
+  is rejected by PostgreSQL before it returns a row. Consult the schema
+  above for the authoritative column list of each table.
+
+- The two failures this rule exists to prevent, both observed: writing
+  `WHERE c.eps > 0` against companies, which does not execute; and dropping
+  the profitability filter altogether because eps was not found on
+  companies, which executes and silently answers a different question. The
+  second is worse. If a measure the question needs is on another table,
+  join to it — never drop the condition to make the query run.
+
 5. REQUIRED IDENTIFIER COLUMNS
 - Whenever the query returns companies, the SELECT list MUST include
   c.ticker and c.name, even when the user did not ask for them.

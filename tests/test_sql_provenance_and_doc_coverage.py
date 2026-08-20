@@ -221,3 +221,83 @@ class TestDocumentCoverageFloor:
         assert "min_documents_per_company" in src
         normalized = " ".join(src.split())
         assert "cannot substitute for them" in normalized
+
+
+class TestVectorBudgetScalesWithCohort:
+    """
+    A fixed top_k of five is a per-question budget spent on a per-company
+    job. sentiment_001 compares three companies and returned five chunks
+    from a cohort holding twelve, so a company could contribute nothing and
+    the comparison rested on whichever chunks ranked highest. "Which company
+    has the most positive coverage" is unanswerable for a company with no
+    retrieved coverage.
+    """
+
+    def test_budget_widens_for_a_multi_company_filter(self):
+        from backend.retrieval import vector_search
+
+        src = inspect.getsource(vector_search.search_similar_chunks)
+        assert "CHUNKS_PER_COMPANY * len(company_ids)" in src
+        assert vector_search.CHUNKS_PER_COMPANY >= 2
+
+    def test_it_only_widens_never_narrows(self):
+        """
+        max() against the caller's value, so an unfiltered query keeps the
+        top_k it asked for and a single-company filter is not cut down.
+        """
+        from backend.retrieval import vector_search
+
+        src = inspect.getsource(vector_search.search_similar_chunks)
+        block = src[src.index("if company_ids:"): src.index("fetch_k =")]
+        assert "max(" in block
+        assert "top_k," in block
+
+    def test_no_filter_leaves_the_budget_alone(self):
+        from backend.retrieval import vector_search
+
+        src = inspect.getsource(vector_search.search_similar_chunks)
+        assert 'get("company_ids") or []' in src
+        # Guarded, so an empty filter cannot produce top_k = 0.
+        assert "if company_ids:" in src
+
+
+class TestSchemaOwnershipRule:
+    """
+    The generator knew "profitable" means eps > 0 — rule 4 says so and uses
+    valuation_002's own wording as its example — but nothing told it which
+    table eps belongs to. It guessed twice and got it wrong both ways:
+    `WHERE c.eps > 0`, which PostgreSQL rejects, and then dropping the
+    filter entirely, which executes and answers a different question.
+
+    The auto-fixer rescued the first into a reported 1.0, so this only
+    became visible once the evaluator started grading the query that ran.
+    """
+
+    def _prompt(self):
+        from backend.retrieval import sql_executor
+
+        # generate_sql_query is a StructuredTool; the body is on .func.
+        tool = sql_executor.generate_sql_query
+        src = inspect.getsource(getattr(tool, "func", tool))
+        return " ".join(src.split())
+
+    def test_it_names_the_table_the_measures_live_on(self):
+        prompt = self._prompt()
+        assert "columns of financial_metrics" in prompt
+        assert "NOT columns of companies" in prompt
+
+    def test_it_states_the_join(self):
+        prompt = self._prompt()
+        assert "JOIN financial_metrics fm ON fm.company_id = c.id" in prompt
+
+    def test_it_names_the_columns_that_do_not_exist(self):
+        prompt = self._prompt()
+        assert "c.eps, c.pe_ratio and c.revenue_growth do not exist" in prompt
+
+    def test_it_forbids_dropping_the_condition_as_the_workaround(self):
+        """
+        The silent failure is worse than the loud one: a dropped filter
+        executes and answers a different question.
+        """
+        prompt = self._prompt()
+        assert "never drop the condition to make the query run" in prompt

@@ -21,6 +21,14 @@ embeddings = OpenAIEmbeddings(
 )
 
 
+# How many chunks each in-scope company should be able to contribute.
+#
+# The reranker applies the same idea to its evidence budget: a question
+# covering N companies needs evidence for each of them, not N slots shared
+# across the best-scoring one or two.
+CHUNKS_PER_COMPANY = 3
+
+
 @traceable(
     name="pgvector_ann_search",
     run_type="retriever",
@@ -168,12 +176,33 @@ async def search_similar_chunks(
              rerank by keyword relevance
              return top_k results
     """
+    # Scale the result budget with the number of companies in scope.
+    #
+    # A fixed five is a per-question budget being spent on a per-company
+    # job. sentiment_001 compares three companies and returned five chunks
+    # from a cohort holding twelve, so a company could contribute nothing
+    # and the comparison rested on whichever two happened to rank highest.
+    # The question asks which company has the most positive coverage, and
+    # that is unanswerable for a company with no retrieved coverage.
+    #
+    # Only widens, never narrows: an unfiltered query keeps the caller's
+    # top_k.
+    company_ids = (filters or {}).get("company_ids") or []
+
+    if company_ids:
+        top_k = max(
+            top_k,
+            CHUNKS_PER_COMPANY * len(company_ids),
+        )
+
     fetch_k = top_k * 4
 
     logger.info(
         f"[VECTOR_SEARCH] Query: {query}, "
         f"filters: {filters}, "
         f"keywords: {keywords}, "
+        f"companies: {len(company_ids)}, "
+        f"top_k: {top_k}, "
         f"fetch_k: {fetch_k}"
     )
 

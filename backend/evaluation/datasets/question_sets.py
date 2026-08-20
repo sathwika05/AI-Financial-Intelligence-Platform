@@ -16,8 +16,12 @@ Constraints the seed imposes, and how each is handled:
   - Only NVDA, AMD and INTC are semiconductors in the seed, so that question
     asks for three companies, not five.
   - The document corpus is general market news, not filings or earnings
-    transcripts, and chunks are only loosely tied to their company. The
-    sentiment question is phrased around news coverage for that reason.
+    transcripts. The sentiment question is phrased around news coverage for
+    that reason. Coverage is company-linked through Alpha Vantage's
+    ticker_sentiment relevance rather than by keyword, but a relevant article
+    is often about a company's customers or rivals rather than the company
+    itself — the NVIDIA documents are about CoreWeave and Hut 8. Reference
+    contexts have to reflect that, not the article one would prefer existed.
 
 Never set `expected_sql_result=[]` as a placeholder. An empty list is not the
 same as leaving it unset: the SQL evaluator skips its comparison only when the
@@ -120,40 +124,60 @@ VALUATION_QUESTIONS: list[EvalQuestion] = [
         # are what that query returns, not a wish list. market_cap is a
         # float because the column is double precision; the ints that were
         # here before matched only because DataCompy compares numerically.
+        #
+        # THE LIMIT IS CURRENTLY NON-BINDING — read this before trusting a
+        # top_k membership score from this question.
+        #
+        # Six Technology companies have positive EPS, and Salesforce is one
+        # of them, but the 2026-08-19 reseed returned a null market_cap for
+        # CRM and HD. Yahoo reports no marketCap and no sharesOutstanding
+        # for either right now; only enterpriseValue comes back, which is
+        # market cap plus debt minus cash and therefore a different figure
+        # that must not be written into this column.
+        #
+        # `AND c.market_cap > 0` drops CRM, leaving exactly five qualifying
+        # rows for a query asking for five. Membership is satisfied by any
+        # query with the right filters, so top_k grading currently proves
+        # only the ordering, not the selection. That is a weaker test than
+        # it looks — treat a passing membership score here as uninformative
+        # until Yahoo returns the field again.
+        #
+        # The previous run is what this guards against: CRM sat second at
+        # $156B, and its disappearance pulled NVDA in from sixth place.
         expected_sql_result=[
             {
                 "ticker": "ADBE",
                 "name": "Adobe Inc.",
-                "market_cap": 100980899840.0,
-            },
-            {
-                "ticker": "CRM",
-                "name": "Salesforce, Inc.",
-                "market_cap": 156404432896.0,
+                "market_cap": 108207448064.0,
             },
             {
                 "ticker": "AMD",
                 "name": "Advanced Micro Devices, Inc.",
-                "market_cap": 826032324608.0,
+                "market_cap": 766373527552.0,
             },
             {
                 "ticker": "MSFT",
                 "name": "Microsoft Corporation",
-                "market_cap": 3566861025280.0,
+                "market_cap": 3572801208320.0,
             },
             {
                 "ticker": "AAPL",
                 "name": "Apple Inc.",
-                "market_cap": 4459835424768.0,
+                "market_cap": 4543167856640.0,
+            },
+            {
+                "ticker": "NVDA",
+                "name": "NVIDIA Corporation",
+                "market_cap": 5252323999744.0,
             },
         ],
 
         expected_ranking=[
             "ADBE",
-            "CRM",
             "AMD",
             "MSFT",
             "AAPL",
+            "NVDA",
         ],
 
         # "Which five ... have the smallest market capitalizations? Rank
@@ -227,52 +251,90 @@ SENTIMENT_QUESTIONS: list[EvalQuestion] = [
         expected_intent=IntentType.SENTIMENT,
         expected_tools=["planner", "vector"],
 
-        # UNDER-SUPPORTED BY THE CURRENT CORPUS — read this before trusting
-        # a score from this question.
+        # NO LONGER UNDER-SUPPORTED. This question previously carried a
+        # warning that the corpus held exactly one document across all three
+        # semiconductor companies, making it a measurement of missing data
+        # rather than of the pipeline. Raising the per-company article cap
+        # to twelve on 2026-08-19 fixed that at the source: the cohort now
+        # has NVDA 3 documents, INTC 3 and AMD 1, all of them Alpha Vantage
+        # articles scoring 0.84 or better on ticker relevance.
         #
-        # The semiconductor cohort is NVDA, AMD and INTC, and after the news
-        # relevance filter the corpus holds exactly one document across all
-        # three of them: the NVIDIA chunk below. A question asking which of
-        # three companies has the most positive sentiment cannot be answered
-        # from coverage of one, so this currently measures a gap in the data
-        # rather than the quality of the pipeline.
-        #
-        # Left in place rather than deleted because the shape of the
-        # question is sound and it will start measuring something real as
-        # soon as the corpus carries semiconductor coverage again. Two ways
-        # to get there: seed more news for these tickers, or lower
-        # MIN_NEWS_RELEVANCE, though the measured distribution says
-        # everything below 0.75 is mostly mislinked.
-        #
-        # Do not "fix" a low score here by adding reference_contexts that
-        # are not in the corpus. That is what the previous version did — it
-        # cited an AMD bond sale and two Intel stories, all of which the
-        # reseed removed, and the pipeline was then graded against evidence
-        # that could not be retrieved at any quality level.
+        # The old warning also said not to paper over a low score with
+        # reference_contexts that are absent from the corpus. That still
+        # holds, and everything below is verbatim from document_chunks.
         reference_answer=(
-            "Only NVIDIA has recent coverage in the corpus, and it is "
-            "positive: ARK's ETFs sold Roblox to buy a substantial NVIDIA "
-            "position, which the coverage frames as continued confidence in "
-            "NVIDIA's growth. AMD and Intel have no documents, so their "
-            "sentiment is unknown rather than neutral, and a ranking that "
-            "places either above NVIDIA is unsupported. The correct answer "
-            "reports the absence rather than inferring a position from it."
+            "NVIDIA has the most positive coverage, though all of it is "
+            "indirect: Hut 8 drew Wall Street upgrades on long-term AI "
+            "deals with NVIDIA reportedly worth up to $50 billion, and "
+            "CoreWeave signed a multibillion-dollar agreement with Hudson "
+            "River Trading for access to NVIDIA's Vera Rubin and B200 "
+            "systems while raising prices on the strength of that demand. "
+            "The articles are about NVIDIA's customers, and they read as a "
+            "demand signal for NVIDIA. AMD is second and mildly positive: "
+            "Wyoming raised its stake by 87.9%, institutional ownership "
+            "stands at 71.34% and analysts hold a Moderate Buy consensus, "
+            "but the coverage names high valuation and recent insider sales "
+            "as risks. Intel is last and genuinely mixed despite the "
+            "headline: SoftBank holding 67% of its U.S. equity portfolio in "
+            "Intel reads as confidence, but the coverage points out the "
+            "concentration came from Intel's stock nearly tripling rather "
+            "than from any new purchase, and calls the valuation expensive "
+            "given a recent price drop and dilution from Intel's own share "
+            "offering. A correct answer distinguishes coverage volume from "
+            "sentiment and does not treat the SoftBank position as a fresh "
+            "vote of confidence."
         ),
 
-        # Verbatim from document_chunks. The single chunk the semiconductor
-        # cohort currently has.
+        # Verbatim from document_chunks, one or two per company so the
+        # ranking below is traceable to text rather than asserted.
         reference_contexts=[
-            "Cathie Wood's ARK ETFs have strategically rebalanced their "
-            "portfolio by selling a significant amount of Roblox stock and "
-            "acquiring a substantial number of Nvidia shares. This move "
-            "reflects ARK's continued confidence in Nvidia's growth potential "
-            "within the evolving tech landscape.",
+            "CoreWeave Inc. has secured a multiyear, multibillion-dollar "
+            "agreement with Hudson River Trading, granting Hudson River "
+            "access to Nvidia's Vera Rubin and B200 AI systems. This deal "
+            "highlights Wall Street's increasing demand for Nvidia's "
+            "advanced AI chips for tasks like training trading models and "
+            "analyzing data. CoreWeave has been raising prices for its AI "
+            "cloud services, driven by this high demand and its early "
+            "validation of Nvidia's new platforms.",
+
+            "Hut 8 Corp. (HUT) stock is experiencing a significant surge "
+            "due to massive long-term AI deals with Nvidia, repositioning "
+            "the company from a crypto miner to a power-first AI "
+            "infrastructure operator. These deals, reportedly totaling up "
+            "to $50 billion over 30 years for its Texas data centers, have "
+            "led to bullish upgrades and higher price targets from numerous "
+            "Wall Street firms.",
+
+            "The State of Wyoming significantly increased its holdings in "
+            "Advanced Micro Devices (AMD) by 87.9% in Q2, purchasing an "
+            "additional 2,540 shares to bring its total to 5,431 shares "
+            "valued at $3.16 million. Institutional investors now own "
+            "71.34% of AMD, with many funds increasing their stakes. "
+            "Despite strong Q2 results, a \"Moderate Buy\" consensus from "
+            "analysts, and a target price of $546.87, the stock faces risks "
+            "due to high valuation and recent insider sales.",
+
+            "SoftBank Group has made Intel (NasdaqGS: INTC) the largest "
+            "component of its U.S. equity portfolio, with the stock "
+            "representing nearly 67% of its disclosed holdings. This "
+            "significant concentration signals a strong vote of confidence "
+            "from SoftBank in Intel's AI and foundry roadmap, aligning with "
+            "Intel's recent strategic shifts and capital raises.",
+
+            "SoftBank Group's latest 13F filing reveals that Intel (INTC) "
+            "now constitutes 67% of its U.S. stock portfolio, valued at "
+            "$12.1 billion as of June 30. However, this high concentration "
+            "is due to Intel's stock nearly tripling in the last quarter, "
+            "not new purchases by Masayoshi Son, as SoftBank held the exact "
+            "same number of shares.",
         ],
 
-        # NVDA first because it is the only company with evidence. AMD and
-        # INTC follow in a fixed order so the metric is deterministic, but
-        # nothing in the corpus justifies preferring one over the other —
-        # treat any ranking score here as weak.
+        # Now grounded in coverage of all three rather than in one company
+        # having evidence and the others none. NVDA's coverage is uniformly
+        # positive demand news; AMD's is positive with named risks; INTC's
+        # leads with a confidence signal that its own follow-up coverage
+        # walks back, and adds an expensive valuation and dilution. The
+        # order is unchanged from before, but it is now supported.
         expected_ranking=["NVDA", "AMD", "INTC"],
     ),
 ]
@@ -307,11 +369,11 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
         ),
 
         expected_sql_result=[
-            {"ticker": "NVDA", "name": "NVIDIA Corporation", "pe_ratio": 34.457886, "eps": 6.53, "revenue_growth": 0.852},
-            {"ticker": "AMD", "name": "Advanced Micro Devices, Inc.", "pe_ratio": 131.42857, "eps": 3.85, "revenue_growth": 0.501},
-            {"ticker": "META", "name": "Meta Platforms, Inc.", "pe_ratio": 22.22539, "eps": 25.6, "revenue_growth": 0.28},
-            {"ticker": "GOOGL", "name": "Alphabet Inc.", "pe_ratio": 17.364967, "eps": 19.81, "revenue_growth": 0.242},
-            {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 27.622198, "eps": 17.39, "revenue_growth": 0.177},
+            {"ticker": "NVDA", "name": "NVIDIA Corporation", "pe_ratio": 33.20827, "eps": 6.53, "revenue_growth": 0.852},
+            {"ticker": "AMD", "name": "Advanced Micro Devices, Inc.", "pe_ratio": 119.75893, "eps": 3.92, "revenue_growth": 0.501},
+            {"ticker": "META", "name": "Meta Platforms, Inc.", "pe_ratio": 20.566315, "eps": 26.54, "revenue_growth": 0.28},
+            {"ticker": "GOOGL", "name": "Alphabet Inc.", "pe_ratio": 17.101908, "eps": 19.92, "revenue_growth": 0.242},
+            {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 26.77518, "eps": 17.97, "revenue_growth": 0.177},
         ],
 
         # SQL cannot produce the ordering this question asks for. The
@@ -354,18 +416,23 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
         # AMD and Alphabet have no documents, and an answer that invented
         # sentiment for them would be wrong.
         reference_answer=(
-            "NVIDIA has the most positive recent coverage in the cohort: "
-            "ARK increased its NVIDIA position, which the coverage frames "
-            "as confidence in NVIDIA's growth. Microsoft's coverage is "
-            "product-led rather than sentiment-led, describing AI voice "
-            "agents in Microsoft Teams and its position as a customer "
-            "interaction platform. Meta's coverage is the weakest of the "
-            "three, noting a decline amid legal challenges and uncertainty "
-            "about its AI strategy. AMD and Alphabet have no recent "
-            "documents in the corpus, so their sentiment is unknown rather "
-            "than neutral, and the ranking for them rests on financial and "
-            "market evidence alone. Every claim should cite the retrieved "
-            "document, financial or market evidence for that company."
+            "All five cohort companies now have recent coverage, so the "
+            "sentiment component rests on documents rather than on absence. "
+            "NVIDIA has the strongest coverage, and it is indirect: Hut 8 "
+            "was upgraded on long-term AI deals with NVIDIA, and CoreWeave "
+            "signed a multibillion-dollar agreement with Hudson River "
+            "Trading for access to NVIDIA systems while raising prices on "
+            "demand. The coverage describes NVIDIA's customers rather than "
+            "NVIDIA itself, and reads as a demand signal. AMD's coverage is "
+            "mildly positive, reporting institutional accumulation and a "
+            "Moderate Buy consensus, tempered by high valuation and insider "
+            "sales. Microsoft appears favourably by comparison, placed ahead "
+            "of Meta in the AI race. Alphabet is mixed: it fell as part of a "
+            "broad Big Tech decline, while YouTube is spending aggressively "
+            "to keep creators from Netflix. Meta is weakest, with its AI "
+            "manifesto questioned as positioning rather than capability. "
+            "Every claim should cite the retrieved document, financial or "
+            "market evidence for that company."
         ),
 
         # Read from the corpus rather than written from memory, and chosen
@@ -380,25 +447,62 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
         # precision, recall and entity recall to 0.0 — the pipeline was
         # being graded against evidence that no longer existed.
         #
-        # Each of these carries company-specific AI content for a different
-        # cohort member. AMD and Alphabet are absent because the corpus has
-        # no documents for them, which is a fact about the data and not
-        # something to paper over with a loosely related chunk.
+        # One chunk per cohort member, each taken verbatim from
+        # document_chunks after the 2026-08-19 reseed. All five are present
+        # for the first time: raising the per-company article cap to twelve
+        # gave AMD and Alphabet coverage they previously lacked, so the
+        # earlier note about their absence no longer applies.
+        #
+        # The NVIDIA chunk is about CoreWeave, not NVIDIA. That is what the
+        # corpus holds — Alpha Vantage scores the article 0.96 relevant to
+        # NVDA because it turns on demand for NVIDIA hardware — and the
+        # reference has to match the corpus rather than the ideal article.
         reference_contexts=[
-            "Cathie Wood's ARK ETFs have strategically rebalanced their "
-            "portfolio by selling a significant amount of Roblox stock and "
-            "acquiring a substantial number of Nvidia shares. This move "
-            "reflects ARK's continued confidence in Nvidia's growth potential "
-            "within the evolving tech landscape.",
+            "CoreWeave Inc. has secured a multiyear, multibillion-dollar "
+            "agreement with Hudson River Trading, granting Hudson River "
+            "access to Nvidia's Vera Rubin and B200 AI systems. This deal "
+            "highlights Wall Street's increasing demand for Nvidia's "
+            "advanced AI chips for tasks like training trading models and "
+            "analyzing data. CoreWeave has been raising prices for its AI "
+            "cloud services, driven by this high demand and its early "
+            "validation of Nvidia's new platforms.",
 
-            "The move highlights Microsoft's strategy to position Teams as a "
-            "comprehensive customer interaction platform and signifies the "
-            "growing importance of AI voice agents in contact center "
-            "architectures, creating new opportunities for partners to "
-            "provide integration and managed services.",
+            "The State of Wyoming significantly increased its holdings in "
+            "Advanced Micro Devices (AMD) by 87.9% in Q2, purchasing an "
+            "additional 2,540 shares to bring its total to 5,431 shares "
+            "valued at $3.16 million. Institutional investors now own "
+            "71.34% of AMD, with many funds increasing their stakes. "
+            "Despite strong Q2 results, a \"Moderate Buy\" consensus from "
+            "analysts, and a target price of $546.87, the stock faces risks "
+            "due to high valuation and recent insider sales.",
 
-            "Meta Platforms (META) declined amid legal challenges and AI "
-            "strategy uncertainties.",
+            "Meta's market capitalization of $1.39 trillion significantly "
+            "lags behind Amazon ($2.87 trillion), Microsoft ($3.60 "
+            "trillion), and Alphabet ($4.19 trillion) in the AI race, "
+            "despite CEO Mark Zuckerberg's 14-page AI manifesto. Even "
+            "private AI rival Anthropic is nearing or surpassing Meta's "
+            "valuation, highlighting investors' diminished view of Meta's "
+            "social media business and AI strategy compared to its tech "
+            "giant peers.",
+
+            "YouTube is offering millions to popular creators for exclusive "
+            "video uploads, aiming to prevent them from simultaneously "
+            "working with Netflix. This strategy includes direct financing "
+            "of programs and sharing portions of major brand deals. Netflix "
+            "has been paying YouTubers to cross-post content, seeking to "
+            "attract younger audiences and expand its subscriber base, "
+            "which YouTube views as a threat to its viewership and "
+            "advertising revenue.",
+
+            "Mark Zuckerberg's \"AI manifesto,\" \"The Future is for "
+            "Everyone,\" outlines a vision of democratized AI and personal "
+            "superintelligence agents. However, the article questions "
+            "whether Meta's past actions and current capabilities align "
+            "with this ambitious vision, particularly concerning its "
+            "commitment to open-source principles and its standing in the "
+            "competitive AI landscape. It suggests that Meta's public "
+            "stance might be more of a PR move to position itself amidst "
+            "stronger AI contenders.",
         ],
 
         # Ordered by revenue growth, which is the widest spread in this cohort

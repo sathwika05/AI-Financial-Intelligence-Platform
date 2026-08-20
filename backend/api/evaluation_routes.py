@@ -88,10 +88,14 @@ class RunRequest(BaseModel):
         "growth",
         "sentiment",
         "mixed",
+        # The four hand-written questions, one per intent. Roughly twelve
+        # minutes against four hours for "all", so this is the set to run
+        # on a change; every fix was measured against it.
+        "smoke",
         # Every question across the four sets; defined in question_sets.py
         # but previously unreachable through this endpoint.
         "all",
-    ] = "valuation"
+    ] = "smoke"
 
     company_filter: str = "all"
 

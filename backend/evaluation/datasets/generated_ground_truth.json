@@ -1,0 +1,2544 @@
+{
+  "generated_at": "2026-08-20T23:27:07.905446+00:00",
+  "note": "Derived from the database by generate_ground_truth.py. Do not edit by hand \u2014 re-run the generator after a reseed instead.",
+  "questions": {
+    "valuation_pe_sector_01": {
+      "set": "valuation",
+      "question": "Which three Technology companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "ADBE",
+          "name": "Adobe Inc.",
+          "pe_ratio": 15.564322
+        },
+        {
+          "ticker": "CRM",
+          "name": "Salesforce, Inc.",
+          "pe_ratio": 23.776619
+        },
+        {
+          "ticker": "MSFT",
+          "name": "Microsoft Corporation",
+          "pe_ratio": 26.77518
+        }
+      ],
+      "expected_ranking": [
+        "ADBE",
+        "CRM",
+        "MSFT"
+      ],
+      "shape": "single metric, sector-scoped, positive filter",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_pe_sector_02": {
+      "set": "valuation",
+      "question": "Which three Financial Services companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Financial Services' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "PYPL",
+          "name": "PayPal Holdings, Inc.",
+          "pe_ratio": 11.7769375
+        },
+        {
+          "ticker": "WFC",
+          "name": "Wells Fargo & Company",
+          "pe_ratio": 12.165697
+        },
+        {
+          "ticker": "C",
+          "name": "Citigroup Inc.",
+          "pe_ratio": 13.973061
+        }
+      ],
+      "expected_ranking": [
+        "PYPL",
+        "WFC",
+        "C"
+      ],
+      "shape": "single metric, sector-scoped, positive filter",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_pe_sector_03": {
+      "set": "valuation",
+      "question": "Which three Healthcare companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "BMY",
+          "name": "Bristol-Myers Squibb Company",
+          "pe_ratio": 14.420705
+        },
+        {
+          "ticker": "UNH",
+          "name": "UnitedHealth Group Incorporated",
+          "pe_ratio": 24.765123
+        },
+        {
+          "ticker": "AMGN",
+          "name": "Amgen Inc.",
+          "pe_ratio": 26.93975
+        }
+      ],
+      "expected_ranking": [
+        "BMY",
+        "UNH",
+        "AMGN"
+      ],
+      "shape": "single metric, sector-scoped, positive filter",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_pe_sector_04": {
+      "set": "valuation",
+      "question": "Which three Energy companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Energy' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "pe_ratio": 11.834371
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "pe_ratio": 17.842592
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "pe_ratio": 19.804619
+        }
+      ],
+      "expected_ranking": [
+        "EOG",
+        "COP",
+        "CVX"
+      ],
+      "shape": "single metric, sector-scoped, positive filter",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_pe_sector_05": {
+      "set": "valuation",
+      "question": "Which three Industrials companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Industrials' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "HON",
+          "name": "Honeywell International Inc.",
+          "pe_ratio": 8.393695
+        },
+        {
+          "ticker": "UPS",
+          "name": "United Parcel Service, Inc.",
+          "pe_ratio": 19.066914
+        },
+        {
+          "ticker": "CAT",
+          "name": "Caterpillar, Inc.",
+          "pe_ratio": 35.05546
+        }
+      ],
+      "expected_ranking": [
+        "HON",
+        "UPS",
+        "CAT"
+      ],
+      "shape": "single metric, sector-scoped, positive filter",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_pe_sector_06": {
+      "set": "valuation",
+      "question": "Which three Consumer Cyclical companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Consumer Cyclical' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "NKE",
+          "name": "NIKE, Inc.",
+          "pe_ratio": 19.14762
+        },
+        {
+          "ticker": "AMZN",
+          "name": "Amazon.com, Inc.",
+          "pe_ratio": 20.909164
+        },
+        {
+          "ticker": "MCD",
+          "name": "McDonald's Corporation",
+          "pe_ratio": 21.880487
+        }
+      ],
+      "expected_ranking": [
+        "NKE",
+        "AMZN",
+        "MCD"
+      ],
+      "shape": "single metric, sector-scoped, positive filter",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_pe_sector_07": {
+      "set": "valuation",
+      "question": "Which three Communication Services companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Communication Services' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "GOOGL",
+          "name": "Alphabet Inc.",
+          "pe_ratio": 17.101908
+        },
+        {
+          "ticker": "META",
+          "name": "Meta Platforms, Inc.",
+          "pe_ratio": 20.566315
+        },
+        {
+          "ticker": "DIS",
+          "name": "Walt Disney Company (The)",
+          "pe_ratio": 22.127836
+        }
+      ],
+      "expected_ranking": [
+        "GOOGL",
+        "META",
+        "DIS"
+      ],
+      "shape": "single metric, sector-scoped, positive filter",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_cap_sector_08": {
+      "set": "valuation",
+      "question": "Rank the three largest Technology companies by market capitalization, from largest to smallest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Technology' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "market_cap": 5252323999744.0
+        },
+        {
+          "ticker": "AAPL",
+          "name": "Apple Inc.",
+          "market_cap": 4543167856640.0
+        },
+        {
+          "ticker": "MSFT",
+          "name": "Microsoft Corporation",
+          "market_cap": 3572801208320.0
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "AAPL",
+        "MSFT"
+      ],
+      "shape": "no join required \u2014 market_cap is on companies",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_cap_sector_09": {
+      "set": "valuation",
+      "question": "Rank the three largest Financial Services companies by market capitalization, from largest to smallest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Financial Services' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "JPM",
+          "name": "JP Morgan Chase & Co.",
+          "market_cap": 934485360640.0
+        },
+        {
+          "ticker": "V",
+          "name": "Visa Inc.",
+          "market_cap": 682835247104.0
+        },
+        {
+          "ticker": "MA",
+          "name": "Mastercard Incorporated",
+          "market_cap": 502698278912.0
+        }
+      ],
+      "expected_ranking": [
+        "JPM",
+        "V",
+        "MA"
+      ],
+      "shape": "no join required \u2014 market_cap is on companies",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_cap_sector_10": {
+      "set": "valuation",
+      "question": "Rank the three largest Healthcare companies by market capitalization, from largest to smallest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Healthcare' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "JNJ",
+          "name": "Johnson & Johnson",
+          "market_cap": 644334551040.0
+        },
+        {
+          "ticker": "ABBV",
+          "name": "AbbVie Inc.",
+          "market_cap": 462684291072.0
+        },
+        {
+          "ticker": "MRK",
+          "name": "Merck & Company, Inc.",
+          "market_cap": 367583920128.0
+        }
+      ],
+      "expected_ranking": [
+        "JNJ",
+        "ABBV",
+        "MRK"
+      ],
+      "shape": "no join required \u2014 market_cap is on companies",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_cap_sector_11": {
+      "set": "valuation",
+      "question": "Rank the three largest Energy companies by market capitalization, from largest to smallest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Energy' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "market_cap": 683194122240.0
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "market_cap": 403639140352.0
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "market_cap": 162048409600.0
+        }
+      ],
+      "expected_ranking": [
+        "XOM",
+        "CVX",
+        "COP"
+      ],
+      "shape": "no join required \u2014 market_cap is on companies",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_cap_sector_12": {
+      "set": "valuation",
+      "question": "Rank the three largest Industrials companies by market capitalization, from largest to smallest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Industrials' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "CAT",
+          "name": "Caterpillar, Inc.",
+          "market_cap": 374814310400.0
+        },
+        {
+          "ticker": "GE",
+          "name": "GE Aerospace",
+          "market_cap": 357585551360.0
+        },
+        {
+          "ticker": "BA",
+          "name": "The Boeing Company",
+          "market_cap": 170008608768.0
+        }
+      ],
+      "expected_ranking": [
+        "CAT",
+        "GE",
+        "BA"
+      ],
+      "shape": "no join required \u2014 market_cap is on companies",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_cap_sector_13": {
+      "set": "valuation",
+      "question": "Rank the three largest Consumer Cyclical companies by market capitalization, from largest to smallest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Consumer Cyclical' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "AMZN",
+          "name": "Amazon.com, Inc.",
+          "market_cap": 2805627879424.0
+        },
+        {
+          "ticker": "TSLA",
+          "name": "Tesla, Inc.",
+          "market_cap": 1363107381248.0
+        },
+        {
+          "ticker": "MCD",
+          "name": "McDonald's Corporation",
+          "market_cap": 190447566848.0
+        }
+      ],
+      "expected_ranking": [
+        "AMZN",
+        "TSLA",
+        "MCD"
+      ],
+      "shape": "no join required \u2014 market_cap is on companies",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_cap_sector_14": {
+      "set": "valuation",
+      "question": "Rank the three largest Communication Services companies by market capitalization, from largest to smallest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Communication Services' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "GOOGL",
+          "name": "Alphabet Inc.",
+          "market_cap": 4166372032512.0
+        },
+        {
+          "ticker": "META",
+          "name": "Meta Platforms, Inc.",
+          "market_cap": 1390505361408.0
+        },
+        {
+          "ticker": "NFLX",
+          "name": "Netflix, Inc.",
+          "market_cap": 333698105344.0
+        }
+      ],
+      "expected_ranking": [
+        "GOOGL",
+        "META",
+        "NFLX"
+      ],
+      "shape": "no join required \u2014 market_cap is on companies",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_profitable_15": {
+      "set": "valuation",
+      "question": "Which 5 profitable Technology companies have the smallest market capitalizations? Rank them from smallest to largest market cap.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND fm.eps > 0 AND c.market_cap IS NOT NULL ORDER BY c.market_cap ASC LIMIT 5",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "ADBE",
+          "name": "Adobe Inc.",
+          "market_cap": 108207448064.0
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "market_cap": 766373527552.0
+        },
+        {
+          "ticker": "MSFT",
+          "name": "Microsoft Corporation",
+          "market_cap": 3572801208320.0
+        },
+        {
+          "ticker": "AAPL",
+          "name": "Apple Inc.",
+          "market_cap": 4543167856640.0
+        },
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "market_cap": 5252323999744.0
+        }
+      ],
+      "expected_ranking": [
+        "ADBE",
+        "AMD",
+        "MSFT",
+        "AAPL",
+        "NVDA"
+      ],
+      "shape": "filter and sort on different tables",
+      "row_count": 5,
+      "limit_non_binding": true
+    },
+    "valuation_profitable_16": {
+      "set": "valuation",
+      "question": "Which 5 profitable Healthcare companies have the smallest market capitalizations? Rank them from smallest to largest market cap.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND fm.eps > 0 AND c.market_cap IS NOT NULL ORDER BY c.market_cap ASC LIMIT 5",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "BMY",
+          "name": "Bristol-Myers Squibb Company",
+          "market_cap": 133736529920.0
+        },
+        {
+          "ticker": "DHR",
+          "name": "Danaher Corporation",
+          "market_cap": 151781720064.0
+        },
+        {
+          "ticker": "PFE",
+          "name": "Pfizer, Inc.",
+          "market_cap": 158393942016.0
+        },
+        {
+          "ticker": "ABT",
+          "name": "Abbott Laboratories",
+          "market_cap": 197505957888.0
+        },
+        {
+          "ticker": "TMO",
+          "name": "Thermo Fisher Scientific Inc",
+          "market_cap": 232034910208.0
+        }
+      ],
+      "expected_ranking": [
+        "BMY",
+        "DHR",
+        "PFE",
+        "ABT",
+        "TMO"
+      ],
+      "shape": "filter and sort on different tables",
+      "row_count": 5,
+      "limit_non_binding": false
+    },
+    "valuation_profitable_17": {
+      "set": "valuation",
+      "question": "Which 5 profitable Financial Services companies have the smallest market capitalizations? Rank them from smallest to largest market cap.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Financial Services' AND fm.eps > 0 AND c.market_cap IS NOT NULL ORDER BY c.market_cap ASC LIMIT 5",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "PYPL",
+          "name": "PayPal Holdings, Inc.",
+          "market_cap": 53295210496.0
+        },
+        {
+          "ticker": "BLK",
+          "name": "BlackRock, Inc.",
+          "market_cap": 185193611264.0
+        },
+        {
+          "ticker": "SCHW",
+          "name": "The Charles Schwab Corporation",
+          "market_cap": 189863772160.0
+        },
+        {
+          "ticker": "C",
+          "name": "Citigroup Inc.",
+          "market_cap": 217513230336.0
+        },
+        {
+          "ticker": "AXP",
+          "name": "American Express Company",
+          "market_cap": 223628836864.0
+        }
+      ],
+      "expected_ranking": [
+        "PYPL",
+        "BLK",
+        "SCHW",
+        "C",
+        "AXP"
+      ],
+      "shape": "filter and sort on different tables",
+      "row_count": 5,
+      "limit_non_binding": false
+    },
+    "valuation_profitable_18": {
+      "set": "valuation",
+      "question": "Which 3 profitable Industrials companies have the smallest market capitalizations? Rank them from smallest to largest market cap.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Industrials' AND fm.eps > 0 AND c.market_cap IS NOT NULL ORDER BY c.market_cap ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "HON",
+          "name": "Honeywell International Inc.",
+          "market_cap": 69194342400.0
+        },
+        {
+          "ticker": "UPS",
+          "name": "United Parcel Service, Inc.",
+          "market_cap": 87273177088.0
+        },
+        {
+          "ticker": "BA",
+          "name": "The Boeing Company",
+          "market_cap": 170008608768.0
+        }
+      ],
+      "expected_ranking": [
+        "HON",
+        "UPS",
+        "BA"
+      ],
+      "shape": "filter and sort on different tables",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_expensive_19": {
+      "set": "valuation",
+      "question": "Which three Technology companies are the most expensive by P/E ratio? Rank them from highest to lowest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "pe_ratio": 119.75893
+        },
+        {
+          "ticker": "AAPL",
+          "name": "Apple Inc.",
+          "pe_ratio": 35.74053
+        },
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "pe_ratio": 33.20827
+        }
+      ],
+      "expected_ranking": [
+        "AMD",
+        "AAPL",
+        "NVDA"
+      ],
+      "shape": "descending \u2014 direction must follow the wording",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_expensive_20": {
+      "set": "valuation",
+      "question": "Which three Healthcare companies are the most expensive by P/E ratio? Rank them from highest to lowest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "MRK",
+          "name": "Merck & Company, Inc.",
+          "pe_ratio": 119.192
+        },
+        {
+          "ticker": "ABBV",
+          "name": "AbbVie Inc.",
+          "pe_ratio": 73.96327
+        },
+        {
+          "ticker": "DHR",
+          "name": "Danaher Corporation",
+          "pe_ratio": 38.55536
+        }
+      ],
+      "expected_ranking": [
+        "MRK",
+        "ABBV",
+        "DHR"
+      ],
+      "shape": "descending \u2014 direction must follow the wording",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_expensive_21": {
+      "set": "valuation",
+      "question": "Which three Consumer Cyclical companies are the most expensive by P/E ratio? Rank them from highest to lowest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Consumer Cyclical' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "TSLA",
+          "name": "Tesla, Inc.",
+          "pe_ratio": 316.63303
+        },
+        {
+          "ticker": "SBUX",
+          "name": "Starbucks Corporation",
+          "pe_ratio": 60.109825
+        },
+        {
+          "ticker": "HD",
+          "name": "Home Depot, Inc. (The)",
+          "pe_ratio": 23.407278
+        }
+      ],
+      "expected_ranking": [
+        "TSLA",
+        "SBUX",
+        "HD"
+      ],
+      "shape": "descending \u2014 direction must follow the wording",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_expensive_22": {
+      "set": "valuation",
+      "question": "Which three Energy companies are the most expensive by P/E ratio? Rank them from highest to lowest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Energy' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "SLB",
+          "name": "SLB N.V.",
+          "pe_ratio": 26.121952
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "pe_ratio": 21.35604
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "pe_ratio": 19.804619
+        }
+      ],
+      "expected_ranking": [
+        "SLB",
+        "XOM",
+        "CVX"
+      ],
+      "shape": "descending \u2014 direction must follow the wording",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_short_23": {
+      "set": "valuation",
+      "question": "List the ten Communication Services companies with the lowest P/E ratios, ranked from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Communication Services' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 10",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "GOOGL",
+          "name": "Alphabet Inc.",
+          "pe_ratio": 17.101908
+        },
+        {
+          "ticker": "META",
+          "name": "Meta Platforms, Inc.",
+          "pe_ratio": 20.566315
+        },
+        {
+          "ticker": "DIS",
+          "name": "Walt Disney Company (The)",
+          "pe_ratio": 22.127836
+        },
+        {
+          "ticker": "NFLX",
+          "name": "Netflix, Inc.",
+          "pe_ratio": 25.201258
+        }
+      ],
+      "expected_ranking": [
+        "GOOGL",
+        "META",
+        "DIS",
+        "NFLX"
+      ],
+      "shape": "K exceeds the population \u2014 a short result is correct",
+      "row_count": 4,
+      "limit_non_binding": true
+    },
+    "valuation_short_24": {
+      "set": "valuation",
+      "question": "List the ten Energy companies with the lowest P/E ratios, ranked from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Energy' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 10",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "pe_ratio": 11.834371
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "pe_ratio": 17.842592
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "pe_ratio": 19.804619
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "pe_ratio": 21.35604
+        },
+        {
+          "ticker": "SLB",
+          "name": "SLB N.V.",
+          "pe_ratio": 26.121952
+        }
+      ],
+      "expected_ranking": [
+        "EOG",
+        "COP",
+        "CVX",
+        "XOM",
+        "SLB"
+      ],
+      "shape": "K exceeds the population \u2014 a short result is correct",
+      "row_count": 5,
+      "limit_non_binding": true
+    },
+    "valuation_short_25": {
+      "set": "valuation",
+      "question": "List the ten Industrials companies with the lowest P/E ratios, ranked from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Industrials' AND fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 10",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "HON",
+          "name": "Honeywell International Inc.",
+          "pe_ratio": 8.393695
+        },
+        {
+          "ticker": "UPS",
+          "name": "United Parcel Service, Inc.",
+          "pe_ratio": 19.066914
+        },
+        {
+          "ticker": "CAT",
+          "name": "Caterpillar, Inc.",
+          "pe_ratio": 35.05546
+        },
+        {
+          "ticker": "GE",
+          "name": "GE Aerospace",
+          "pe_ratio": 40.641514
+        },
+        {
+          "ticker": "BA",
+          "name": "The Boeing Company",
+          "pe_ratio": 77.37411
+        }
+      ],
+      "expected_ranking": [
+        "HON",
+        "UPS",
+        "CAT",
+        "GE",
+        "BA"
+      ],
+      "shape": "K exceeds the population \u2014 a short result is correct",
+      "row_count": 5,
+      "limit_non_binding": true
+    },
+    "valuation_market_26": {
+      "set": "valuation",
+      "question": "Across all sectors, which 3 companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "HON",
+          "name": "Honeywell International Inc.",
+          "pe_ratio": 8.393695
+        },
+        {
+          "ticker": "PYPL",
+          "name": "PayPal Holdings, Inc.",
+          "pe_ratio": 11.7769375
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "pe_ratio": 11.834371
+        }
+      ],
+      "expected_ranking": [
+        "HON",
+        "PYPL",
+        "EOG"
+      ],
+      "shape": "no sector filter, varying K",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "valuation_market_27": {
+      "set": "valuation",
+      "question": "Across all sectors, which 5 companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 5",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "HON",
+          "name": "Honeywell International Inc.",
+          "pe_ratio": 8.393695
+        },
+        {
+          "ticker": "PYPL",
+          "name": "PayPal Holdings, Inc.",
+          "pe_ratio": 11.7769375
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "pe_ratio": 11.834371
+        },
+        {
+          "ticker": "WFC",
+          "name": "Wells Fargo & Company",
+          "pe_ratio": 12.165697
+        },
+        {
+          "ticker": "C",
+          "name": "Citigroup Inc.",
+          "pe_ratio": 13.973061
+        }
+      ],
+      "expected_ranking": [
+        "HON",
+        "PYPL",
+        "EOG",
+        "WFC",
+        "C"
+      ],
+      "shape": "no sector filter, varying K",
+      "row_count": 5,
+      "limit_non_binding": false
+    },
+    "valuation_market_28": {
+      "set": "valuation",
+      "question": "Across all sectors, which 10 companies have the lowest P/E ratios? Rank them from lowest to highest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.pe_ratio > 0 ORDER BY fm.pe_ratio ASC LIMIT 10",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "HON",
+          "name": "Honeywell International Inc.",
+          "pe_ratio": 8.393695
+        },
+        {
+          "ticker": "PYPL",
+          "name": "PayPal Holdings, Inc.",
+          "pe_ratio": 11.7769375
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "pe_ratio": 11.834371
+        },
+        {
+          "ticker": "WFC",
+          "name": "Wells Fargo & Company",
+          "pe_ratio": 12.165697
+        },
+        {
+          "ticker": "C",
+          "name": "Citigroup Inc.",
+          "pe_ratio": 13.973061
+        },
+        {
+          "ticker": "BAC",
+          "name": "Bank of America Corporation",
+          "pe_ratio": 14.286374
+        },
+        {
+          "ticker": "BMY",
+          "name": "Bristol-Myers Squibb Company",
+          "pe_ratio": 14.420705
+        },
+        {
+          "ticker": "JPM",
+          "name": "JP Morgan Chase & Co.",
+          "pe_ratio": 15.068581
+        },
+        {
+          "ticker": "GS",
+          "name": "Goldman Sachs Group, Inc. (The)",
+          "pe_ratio": 15.469354
+        },
+        {
+          "ticker": "ADBE",
+          "name": "Adobe Inc.",
+          "pe_ratio": 15.564322
+        }
+      ],
+      "expected_ranking": [
+        "HON",
+        "PYPL",
+        "EOG",
+        "WFC",
+        "C",
+        "BAC",
+        "BMY",
+        "JPM",
+        "GS",
+        "ADBE"
+      ],
+      "shape": "no sector filter, varying K",
+      "row_count": 10,
+      "limit_non_binding": false
+    },
+    "valuation_compound_29": {
+      "set": "valuation",
+      "question": "Which five profitable companies trade below a P/E ratio of 25? Rank them from lowest to highest P/E.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.pe_ratio, fm.eps FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.eps > 0 AND fm.pe_ratio > 0 AND fm.pe_ratio < 25 ORDER BY fm.pe_ratio ASC LIMIT 5",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "HON",
+          "name": "Honeywell International Inc.",
+          "pe_ratio": 8.393695,
+          "eps": 26.01
+        },
+        {
+          "ticker": "PYPL",
+          "name": "PayPal Holdings, Inc.",
+          "pe_ratio": 11.7769375,
+          "eps": 5.29
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "pe_ratio": 11.834371,
+          "eps": 12.86
+        },
+        {
+          "ticker": "WFC",
+          "name": "Wells Fargo & Company",
+          "pe_ratio": 12.165697,
+          "eps": 6.88
+        },
+        {
+          "ticker": "C",
+          "name": "Citigroup Inc.",
+          "pe_ratio": 13.973061,
+          "eps": 9.28
+        }
+      ],
+      "expected_ranking": [
+        "HON",
+        "PYPL",
+        "EOG",
+        "WFC",
+        "C"
+      ],
+      "shape": "compound filter, two metric columns projected",
+      "row_count": 5,
+      "limit_non_binding": false
+    },
+    "valuation_ranking_30": {
+      "set": "valuation",
+      "question": "Rank every Energy company by market capitalization, from largest to smallest.",
+      "expected_intent": "VALUATION",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Energy' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC",
+      "sql_order_requirement": "ranking",
+      "expected_sql_result": [
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "market_cap": 683194122240.0
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "market_cap": 403639140352.0
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "market_cap": 162048409600.0
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "market_cap": 79828099072.0
+        },
+        {
+          "ticker": "SLB",
+          "name": "SLB N.V.",
+          "market_cap": 79475867648.0
+        }
+      ],
+      "expected_ranking": [
+        "XOM",
+        "CVX",
+        "COP",
+        "EOG",
+        "SLB"
+      ],
+      "shape": "no LIMIT \u2014 ordering without selection",
+      "row_count": 5,
+      "limit_non_binding": false
+    },
+    "growth_sector_01": {
+      "set": "growth",
+      "question": "Rank the three Technology companies with the strongest revenue growth, from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "revenue_growth": 0.501
+        },
+        {
+          "ticker": "INTC",
+          "name": "Intel Corporation",
+          "revenue_growth": 0.254
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "AMD",
+        "INTC"
+      ],
+      "shape": "sector-scoped growth ranking",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_sector_02": {
+      "set": "growth",
+      "question": "Rank the three Financial Services companies with the strongest revenue growth, from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Financial Services' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "GS",
+          "name": "Goldman Sachs Group, Inc. (The)",
+          "revenue_growth": 0.425
+        },
+        {
+          "ticker": "BLK",
+          "name": "BlackRock, Inc.",
+          "revenue_growth": 0.306
+        },
+        {
+          "ticker": "JPM",
+          "name": "JP Morgan Chase & Co.",
+          "revenue_growth": 0.304
+        }
+      ],
+      "expected_ranking": [
+        "GS",
+        "BLK",
+        "JPM"
+      ],
+      "shape": "sector-scoped growth ranking",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_sector_03": {
+      "set": "growth",
+      "question": "Rank the three Healthcare companies with the strongest revenue growth, from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "ABT",
+          "name": "Abbott Laboratories",
+          "revenue_growth": 0.13
+        },
+        {
+          "ticker": "TMO",
+          "name": "Thermo Fisher Scientific Inc",
+          "revenue_growth": 0.105
+        },
+        {
+          "ticker": "ABBV",
+          "name": "AbbVie Inc.",
+          "revenue_growth": 0.102
+        }
+      ],
+      "expected_ranking": [
+        "ABT",
+        "TMO",
+        "ABBV"
+      ],
+      "shape": "sector-scoped growth ranking",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_sector_04": {
+      "set": "growth",
+      "question": "Rank the three Energy companies with the strongest revenue growth, from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Energy' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "revenue_growth": 0.441
+        }
+      ],
+      "expected_ranking": [
+        "EOG",
+        "CVX",
+        "XOM"
+      ],
+      "shape": "sector-scoped growth ranking",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_sector_05": {
+      "set": "growth",
+      "question": "Rank the three Industrials companies with the strongest revenue growth, from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Industrials' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "CAT",
+          "name": "Caterpillar, Inc.",
+          "revenue_growth": 0.24
+        },
+        {
+          "ticker": "GE",
+          "name": "GE Aerospace",
+          "revenue_growth": 0.211
+        },
+        {
+          "ticker": "BA",
+          "name": "The Boeing Company",
+          "revenue_growth": 0.08
+        }
+      ],
+      "expected_ranking": [
+        "CAT",
+        "GE",
+        "BA"
+      ],
+      "shape": "sector-scoped growth ranking",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_sector_06": {
+      "set": "growth",
+      "question": "Rank the three Consumer Cyclical companies with the strongest revenue growth, from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Consumer Cyclical' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "TSLA",
+          "name": "Tesla, Inc.",
+          "revenue_growth": 0.255
+        },
+        {
+          "ticker": "AMZN",
+          "name": "Amazon.com, Inc.",
+          "revenue_growth": 0.196
+        },
+        {
+          "ticker": "HD",
+          "name": "Home Depot, Inc. (The)",
+          "revenue_growth": 0.057
+        }
+      ],
+      "expected_ranking": [
+        "TSLA",
+        "AMZN",
+        "HD"
+      ],
+      "shape": "sector-scoped growth ranking",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_sector_07": {
+      "set": "growth",
+      "question": "Rank the three Communication Services companies with the strongest revenue growth, from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Communication Services' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "META",
+          "name": "Meta Platforms, Inc.",
+          "revenue_growth": 0.28
+        },
+        {
+          "ticker": "GOOGL",
+          "name": "Alphabet Inc.",
+          "revenue_growth": 0.242
+        },
+        {
+          "ticker": "NFLX",
+          "name": "Netflix, Inc.",
+          "revenue_growth": 0.134
+        }
+      ],
+      "expected_ranking": [
+        "META",
+        "GOOGL",
+        "NFLX"
+      ],
+      "shape": "sector-scoped growth ranking",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_slowest_08": {
+      "set": "growth",
+      "question": "Which three Technology companies have the weakest revenue growth? Rank them from weakest to strongest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "ADBE",
+          "name": "Adobe Inc.",
+          "revenue_growth": 0.127
+        },
+        {
+          "ticker": "CRM",
+          "name": "Salesforce, Inc.",
+          "revenue_growth": 0.133
+        },
+        {
+          "ticker": "AAPL",
+          "name": "Apple Inc.",
+          "revenue_growth": 0.164
+        }
+      ],
+      "expected_ranking": [
+        "ADBE",
+        "CRM",
+        "AAPL"
+      ],
+      "shape": "ascending \u2014 negatives must NOT be filtered out",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_slowest_09": {
+      "set": "growth",
+      "question": "Which three Financial Services companies have the weakest revenue growth? Rank them from weakest to strongest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Financial Services' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "PYPL",
+          "name": "PayPal Holdings, Inc.",
+          "revenue_growth": 0.048
+        },
+        {
+          "ticker": "WFC",
+          "name": "Wells Fargo & Company",
+          "revenue_growth": 0.095
+        },
+        {
+          "ticker": "AXP",
+          "name": "American Express Company",
+          "revenue_growth": 0.128
+        }
+      ],
+      "expected_ranking": [
+        "PYPL",
+        "WFC",
+        "AXP"
+      ],
+      "shape": "ascending \u2014 negatives must NOT be filtered out",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_slowest_10": {
+      "set": "growth",
+      "question": "Which three Healthcare companies have the weakest revenue growth? Rank them from weakest to strongest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "UNH",
+          "name": "UnitedHealth Group Incorporated",
+          "revenue_growth": 0.004
+        },
+        {
+          "ticker": "PFE",
+          "name": "Pfizer, Inc.",
+          "revenue_growth": 0.026
+        },
+        {
+          "ticker": "MRK",
+          "name": "Merck & Company, Inc.",
+          "revenue_growth": 0.051
+        }
+      ],
+      "expected_ranking": [
+        "UNH",
+        "PFE",
+        "MRK"
+      ],
+      "shape": "ascending \u2014 negatives must NOT be filtered out",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_slowest_11": {
+      "set": "growth",
+      "question": "Which three Energy companies have the weakest revenue growth? Rank them from weakest to strongest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Energy' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "SLB",
+          "name": "SLB N.V.",
+          "revenue_growth": 0.05
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "revenue_growth": 0.355
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "revenue_growth": 0.441
+        }
+      ],
+      "expected_ranking": [
+        "SLB",
+        "COP",
+        "XOM"
+      ],
+      "shape": "ascending \u2014 negatives must NOT be filtered out",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_slowest_12": {
+      "set": "growth",
+      "question": "Which three Industrials companies have the weakest revenue growth? Rank them from weakest to strongest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Industrials' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "HON",
+          "name": "Honeywell International Inc.",
+          "revenue_growth": 0.043
+        },
+        {
+          "ticker": "UPS",
+          "name": "United Parcel Service, Inc.",
+          "revenue_growth": 0.076
+        },
+        {
+          "ticker": "BA",
+          "name": "The Boeing Company",
+          "revenue_growth": 0.08
+        }
+      ],
+      "expected_ranking": [
+        "HON",
+        "UPS",
+        "BA"
+      ],
+      "shape": "ascending \u2014 negatives must NOT be filtered out",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_slowest_13": {
+      "set": "growth",
+      "question": "Which three Consumer Cyclical companies have the weakest revenue growth? Rank them from weakest to strongest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Consumer Cyclical' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "SBUX",
+          "name": "Starbucks Corporation",
+          "revenue_growth": -0.014
+        },
+        {
+          "ticker": "NKE",
+          "name": "NIKE, Inc.",
+          "revenue_growth": -0.011
+        },
+        {
+          "ticker": "MCD",
+          "name": "McDonald's Corporation",
+          "revenue_growth": 0.037
+        }
+      ],
+      "expected_ranking": [
+        "SBUX",
+        "NKE",
+        "MCD"
+      ],
+      "shape": "ascending \u2014 negatives must NOT be filtered out",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_slowest_14": {
+      "set": "growth",
+      "question": "Which three Communication Services companies have the weakest revenue growth? Rank them from weakest to strongest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Communication Services' AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth ASC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "DIS",
+          "name": "Walt Disney Company (The)",
+          "revenue_growth": 0.068
+        },
+        {
+          "ticker": "NFLX",
+          "name": "Netflix, Inc.",
+          "revenue_growth": 0.134
+        },
+        {
+          "ticker": "GOOGL",
+          "name": "Alphabet Inc.",
+          "revenue_growth": 0.242
+        }
+      ],
+      "expected_ranking": [
+        "DIS",
+        "NFLX",
+        "GOOGL"
+      ],
+      "shape": "ascending \u2014 negatives must NOT be filtered out",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_profitable_15": {
+      "set": "growth",
+      "question": "Among profitable Technology companies, which 3 have the strongest revenue growth? Rank them from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, fm.eps FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND fm.eps > 0 AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852,
+          "eps": 6.53
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "revenue_growth": 0.501,
+          "eps": 3.92
+        },
+        {
+          "ticker": "MSFT",
+          "name": "Microsoft Corporation",
+          "revenue_growth": 0.177,
+          "eps": 17.97
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "AMD",
+        "MSFT"
+      ],
+      "shape": "filter and sort both on financial_metrics",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_profitable_16": {
+      "set": "growth",
+      "question": "Among profitable Healthcare companies, which 3 have the strongest revenue growth? Rank them from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, fm.eps FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND fm.eps > 0 AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "ABT",
+          "name": "Abbott Laboratories",
+          "revenue_growth": 0.13,
+          "eps": 3.09
+        },
+        {
+          "ticker": "TMO",
+          "name": "Thermo Fisher Scientific Inc",
+          "revenue_growth": 0.105,
+          "eps": 18.59
+        },
+        {
+          "ticker": "ABBV",
+          "name": "AbbVie Inc.",
+          "revenue_growth": 0.102,
+          "eps": 3.54
+        }
+      ],
+      "expected_ranking": [
+        "ABT",
+        "TMO",
+        "ABBV"
+      ],
+      "shape": "filter and sort both on financial_metrics",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_profitable_17": {
+      "set": "growth",
+      "question": "Among profitable Financial Services companies, which 5 have the strongest revenue growth? Rank them from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, fm.eps FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Financial Services' AND fm.eps > 0 AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 5",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "GS",
+          "name": "Goldman Sachs Group, Inc. (The)",
+          "revenue_growth": 0.425,
+          "eps": 64.77
+        },
+        {
+          "ticker": "BLK",
+          "name": "BlackRock, Inc.",
+          "revenue_growth": 0.306,
+          "eps": 41.72
+        },
+        {
+          "ticker": "JPM",
+          "name": "JP Morgan Chase & Co.",
+          "revenue_growth": 0.304,
+          "eps": 23.33
+        },
+        {
+          "ticker": "MS",
+          "name": "Morgan Stanley",
+          "revenue_growth": 0.28,
+          "eps": 12.38
+        },
+        {
+          "ticker": "SCHW",
+          "name": "The Charles Schwab Corporation",
+          "revenue_growth": 0.209,
+          "eps": 5.49
+        }
+      ],
+      "expected_ranking": [
+        "GS",
+        "BLK",
+        "JPM",
+        "MS",
+        "SCHW"
+      ],
+      "shape": "filter and sort both on financial_metrics",
+      "row_count": 5,
+      "limit_non_binding": false
+    },
+    "growth_profitable_18": {
+      "set": "growth",
+      "question": "Among profitable Consumer Cyclical companies, which 3 have the strongest revenue growth? Rank them from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, fm.eps FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Consumer Cyclical' AND fm.eps > 0 AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "TSLA",
+          "name": "Tesla, Inc.",
+          "revenue_growth": 0.255,
+          "eps": 1.09
+        },
+        {
+          "ticker": "AMZN",
+          "name": "Amazon.com, Inc.",
+          "revenue_growth": 0.196,
+          "eps": 12.44
+        },
+        {
+          "ticker": "HD",
+          "name": "Home Depot, Inc. (The)",
+          "revenue_growth": 0.057,
+          "eps": 14.29
+        }
+      ],
+      "expected_ranking": [
+        "TSLA",
+        "AMZN",
+        "HD"
+      ],
+      "shape": "filter and sort both on financial_metrics",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_large_19": {
+      "set": "growth",
+      "question": "Among Technology companies with a market capitalization above $500 billion, which three have the strongest revenue growth? Rank them from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND c.market_cap > 500000000000 AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852,
+          "market_cap": 5252323999744.0
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "revenue_growth": 0.501,
+          "market_cap": 766373527552.0
+        },
+        {
+          "ticker": "MSFT",
+          "name": "Microsoft Corporation",
+          "revenue_growth": 0.177,
+          "market_cap": 3572801208320.0
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "AMD",
+        "MSFT"
+      ],
+      "shape": "filter on companies, sort on financial_metrics",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_large_20": {
+      "set": "growth",
+      "question": "Among Healthcare companies with a market capitalization above $100 billion, which three have the strongest revenue growth? Rank them from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND c.market_cap > 100000000000 AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "ABT",
+          "name": "Abbott Laboratories",
+          "revenue_growth": 0.13,
+          "market_cap": 197505957888.0
+        },
+        {
+          "ticker": "TMO",
+          "name": "Thermo Fisher Scientific Inc",
+          "revenue_growth": 0.105,
+          "market_cap": 232034910208.0
+        },
+        {
+          "ticker": "ABBV",
+          "name": "AbbVie Inc.",
+          "revenue_growth": 0.102,
+          "market_cap": 462684291072.0
+        }
+      ],
+      "expected_ranking": [
+        "ABT",
+        "TMO",
+        "ABBV"
+      ],
+      "shape": "filter on companies, sort on financial_metrics",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_large_21": {
+      "set": "growth",
+      "question": "Among Financial Services companies with a market capitalization above $100 billion, which three have the strongest revenue growth? Rank them from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Financial Services' AND c.market_cap > 100000000000 AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "GS",
+          "name": "Goldman Sachs Group, Inc. (The)",
+          "revenue_growth": 0.425,
+          "market_cap": 291739172864.0
+        },
+        {
+          "ticker": "BLK",
+          "name": "BlackRock, Inc.",
+          "revenue_growth": 0.306,
+          "market_cap": 185193611264.0
+        },
+        {
+          "ticker": "JPM",
+          "name": "JP Morgan Chase & Co.",
+          "revenue_growth": 0.304,
+          "market_cap": 934485360640.0
+        }
+      ],
+      "expected_ranking": [
+        "GS",
+        "BLK",
+        "JPM"
+      ],
+      "shape": "filter on companies, sort on financial_metrics",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_large_22": {
+      "set": "growth",
+      "question": "Among Energy companies with a market capitalization above $50 billion, which three have the strongest revenue growth? Rank them from highest to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Energy' AND c.market_cap > 50000000000 AND fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587,
+          "market_cap": 79828099072.0
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535,
+          "market_cap": 403639140352.0
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "revenue_growth": 0.441,
+          "market_cap": 683194122240.0
+        }
+      ],
+      "expected_ranking": [
+        "EOG",
+        "CVX",
+        "XOM"
+      ],
+      "shape": "filter on companies, sort on financial_metrics",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_market_23": {
+      "set": "growth",
+      "question": "Rank the 3 companies with the strongest revenue growth based on the latest available financial metrics.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 3",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "EOG",
+        "CVX"
+      ],
+      "shape": "unscoped, varying K",
+      "row_count": 3,
+      "limit_non_binding": false
+    },
+    "growth_market_24": {
+      "set": "growth",
+      "question": "Rank the 5 companies with the strongest revenue growth based on the latest available financial metrics.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 5",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "revenue_growth": 0.501
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "revenue_growth": 0.441
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "EOG",
+        "CVX",
+        "AMD",
+        "XOM"
+      ],
+      "shape": "unscoped, varying K",
+      "row_count": 5,
+      "limit_non_binding": false
+    },
+    "growth_market_25": {
+      "set": "growth",
+      "question": "Rank the 10 companies with the strongest revenue growth based on the latest available financial metrics.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.revenue_growth IS NOT NULL ORDER BY fm.revenue_growth DESC LIMIT 10",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "revenue_growth": 0.501
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "revenue_growth": 0.441
+        },
+        {
+          "ticker": "GS",
+          "name": "Goldman Sachs Group, Inc. (The)",
+          "revenue_growth": 0.425
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "revenue_growth": 0.355
+        },
+        {
+          "ticker": "BLK",
+          "name": "BlackRock, Inc.",
+          "revenue_growth": 0.306
+        },
+        {
+          "ticker": "JPM",
+          "name": "JP Morgan Chase & Co.",
+          "revenue_growth": 0.304
+        },
+        {
+          "ticker": "MS",
+          "name": "Morgan Stanley",
+          "revenue_growth": 0.28
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "EOG",
+        "CVX",
+        "AMD",
+        "XOM",
+        "GS",
+        "COP",
+        "BLK",
+        "JPM",
+        "MS"
+      ],
+      "shape": "unscoped, varying K",
+      "row_count": 10,
+      "limit_non_binding": false
+    },
+    "growth_threshold_26": {
+      "set": "growth",
+      "question": "Which companies grew revenue by more than 20%? Rank them from highest growth to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.revenue_growth > 0.2 ORDER BY fm.revenue_growth DESC",
+      "sql_order_requirement": "ranking",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "revenue_growth": 0.501
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "revenue_growth": 0.441
+        },
+        {
+          "ticker": "GS",
+          "name": "Goldman Sachs Group, Inc. (The)",
+          "revenue_growth": 0.425
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "revenue_growth": 0.355
+        },
+        {
+          "ticker": "BLK",
+          "name": "BlackRock, Inc.",
+          "revenue_growth": 0.306
+        },
+        {
+          "ticker": "JPM",
+          "name": "JP Morgan Chase & Co.",
+          "revenue_growth": 0.304
+        },
+        {
+          "ticker": "MS",
+          "name": "Morgan Stanley",
+          "revenue_growth": 0.28
+        },
+        {
+          "ticker": "META",
+          "name": "Meta Platforms, Inc.",
+          "revenue_growth": 0.28
+        },
+        {
+          "ticker": "TSLA",
+          "name": "Tesla, Inc.",
+          "revenue_growth": 0.255
+        },
+        {
+          "ticker": "INTC",
+          "name": "Intel Corporation",
+          "revenue_growth": 0.254
+        },
+        {
+          "ticker": "GOOGL",
+          "name": "Alphabet Inc.",
+          "revenue_growth": 0.242
+        },
+        {
+          "ticker": "CAT",
+          "name": "Caterpillar, Inc.",
+          "revenue_growth": 0.24
+        },
+        {
+          "ticker": "GE",
+          "name": "GE Aerospace",
+          "revenue_growth": 0.211
+        },
+        {
+          "ticker": "SCHW",
+          "name": "The Charles Schwab Corporation",
+          "revenue_growth": 0.209
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "EOG",
+        "CVX",
+        "AMD",
+        "XOM",
+        "GS",
+        "COP",
+        "BLK",
+        "JPM",
+        "MS",
+        "META",
+        "TSLA",
+        "INTC",
+        "GOOGL",
+        "CAT",
+        "GE",
+        "SCHW"
+      ],
+      "shape": "threshold on the sort column, no LIMIT",
+      "row_count": 17,
+      "limit_non_binding": false
+    },
+    "growth_threshold_27": {
+      "set": "growth",
+      "question": "Which companies grew revenue by more than 30%? Rank them from highest growth to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.revenue_growth > 0.3 ORDER BY fm.revenue_growth DESC",
+      "sql_order_requirement": "ranking",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "revenue_growth": 0.501
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "revenue_growth": 0.441
+        },
+        {
+          "ticker": "GS",
+          "name": "Goldman Sachs Group, Inc. (The)",
+          "revenue_growth": 0.425
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "revenue_growth": 0.355
+        },
+        {
+          "ticker": "BLK",
+          "name": "BlackRock, Inc.",
+          "revenue_growth": 0.306
+        },
+        {
+          "ticker": "JPM",
+          "name": "JP Morgan Chase & Co.",
+          "revenue_growth": 0.304
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "EOG",
+        "CVX",
+        "AMD",
+        "XOM",
+        "GS",
+        "COP",
+        "BLK",
+        "JPM"
+      ],
+      "shape": "threshold on the sort column, no LIMIT",
+      "row_count": 9,
+      "limit_non_binding": false
+    },
+    "growth_threshold_28": {
+      "set": "growth",
+      "question": "Which companies grew revenue by more than 50%? Rank them from highest growth to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.revenue_growth > 0.5 ORDER BY fm.revenue_growth DESC",
+      "sql_order_requirement": "ranking",
+      "expected_sql_result": [
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA Corporation",
+          "revenue_growth": 0.852
+        },
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535
+        },
+        {
+          "ticker": "AMD",
+          "name": "Advanced Micro Devices, Inc.",
+          "revenue_growth": 0.501
+        }
+      ],
+      "expected_ranking": [
+        "NVDA",
+        "EOG",
+        "CVX",
+        "AMD"
+      ],
+      "shape": "threshold on the sort column, no LIMIT",
+      "row_count": 4,
+      "limit_non_binding": false
+    },
+    "growth_contraction_29": {
+      "set": "growth",
+      "question": "Which companies had negative revenue growth? Rank them from the steepest decline upward.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.revenue_growth < 0 ORDER BY fm.revenue_growth ASC",
+      "sql_order_requirement": "ranking",
+      "expected_sql_result": [
+        {
+          "ticker": "SBUX",
+          "name": "Starbucks Corporation",
+          "revenue_growth": -0.014
+        },
+        {
+          "ticker": "NKE",
+          "name": "NIKE, Inc.",
+          "revenue_growth": -0.011
+        }
+      ],
+      "expected_ranking": [
+        "SBUX",
+        "NKE"
+      ],
+      "shape": "negative filter \u2014 result may be small or empty",
+      "row_count": 2,
+      "limit_non_binding": false
+    },
+    "growth_cheap_30": {
+      "set": "growth",
+      "question": "Which five companies combine revenue growth above 10% with a P/E ratio below 30? Rank them from highest growth to lowest.",
+      "expected_intent": "GROWTH",
+      "expected_tools": [
+        "planner",
+        "sql"
+      ],
+      "expected_sql": "SELECT c.ticker, c.name, fm.revenue_growth, fm.pe_ratio FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE fm.revenue_growth > 0.10 AND fm.pe_ratio > 0 AND fm.pe_ratio < 30 ORDER BY fm.revenue_growth DESC LIMIT 5",
+      "sql_order_requirement": "top_k",
+      "expected_sql_result": [
+        {
+          "ticker": "EOG",
+          "name": "EOG Resources, Inc.",
+          "revenue_growth": 0.587,
+          "pe_ratio": 11.834371
+        },
+        {
+          "ticker": "CVX",
+          "name": "Chevron Corporation",
+          "revenue_growth": 0.535,
+          "pe_ratio": 19.804619
+        },
+        {
+          "ticker": "XOM",
+          "name": "ExxonMobil Holdings Corporation",
+          "revenue_growth": 0.441,
+          "pe_ratio": 21.35604
+        },
+        {
+          "ticker": "GS",
+          "name": "Goldman Sachs Group, Inc. (The)",
+          "revenue_growth": 0.425,
+          "pe_ratio": 15.469354
+        },
+        {
+          "ticker": "COP",
+          "name": "ConocoPhillips",
+          "revenue_growth": 0.355,
+          "pe_ratio": 17.842592
+        }
+      ],
+      "expected_ranking": [
+        "EOG",
+        "CVX",
+        "XOM",
+        "GS",
+        "COP"
+      ],
+      "shape": "two metrics constrained, one of them the sort key",
+      "row_count": 5,
+      "limit_non_binding": false
+    }
+  }
+}

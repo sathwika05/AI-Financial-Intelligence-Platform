@@ -35,13 +35,34 @@ the smallest-market-cap five and brought CRM in. The pipeline then answers
 correctly and the benchmark marks it wrong, which looks exactly like a
 regression and is not one.
 
-After every reseed, re-run each `expected_sql` against the database and paste
-the rows back in. The queries are written to be runnable as-is for that
-reason.
+After every reseed, rebuild the ground truth. Two commands, because the two
+halves are maintained differently:
+
+    uv run python -m backend.evaluation.datasets.generate_ground_truth
+    uv run python -m backend.evaluation.datasets.verify_ground_truth
+
+The first re-runs every specification in question_bank.py and writes the
+rows it gets back — that covers the sixty derived valuation and growth
+questions, which nobody should be maintaining by hand. The second checks
+everything, derived and authored alike, and exits non-zero if anything
+drifted, so it can gate a run.
+
+The questions written out below are the authored half. Their expected rows
+still need re-running by hand, and their reference answers and contexts need
+judgement about what a good answer says and which documents support it — a
+script that generated those would only ever confirm its own output. The
+queries are written to be runnable as-is for that reason.
 """
+
+import json
+import logging
+from pathlib import Path
 
 from backend.evaluation.schemas import EvalQuestion, IntentType
 from backend.observability.logging import log_span
+
+
+logger = logging.getLogger(__name__)
 
 
 VALUATION_QUESTIONS: list[EvalQuestion] = [
@@ -514,14 +535,97 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
 ]
 
 
+def _load_generated(set_name: str) -> list[EvalQuestion]:
+    """
+    Load the SQL-derived questions for one set.
+
+    Ground truth for valuation and growth is read out of the database by
+    generate_ground_truth.py rather than written here, because a reseed
+    moves every fundamental. Rebuilding four questions by hand took most of
+    a session; sixty is not slow, it is infeasible.
+
+    Returns an empty list when the file is missing, so the authored sets
+    still run on a checkout where the generator has not been run yet. The
+    file is regenerated with:
+
+        uv run python -m backend.evaluation.datasets.generate_ground_truth
+    """
+    path = Path(__file__).parent / "generated_ground_truth.json"
+
+    if not path.exists():
+        logger.warning(
+            "[QUESTION_SETS] %s not found — the '%s' set is empty. Run "
+            "generate_ground_truth to build it.",
+            path.name,
+            set_name,
+        )
+        return []
+
+    payload = json.loads(path.read_text())
+
+    questions: list[EvalQuestion] = []
+
+    for question_id, entry in payload.get("questions", {}).items():
+        if entry.get("set") != set_name:
+            continue
+
+        questions.append(
+            EvalQuestion(
+                question_id=question_id,
+                question=entry["question"],
+                expected_intent=IntentType(entry["expected_intent"]),
+                expected_tools=entry.get("expected_tools", []),
+                expected_sql=entry["expected_sql"],
+                expected_sql_result=entry["expected_sql_result"],
+                expected_ranking=entry.get("expected_ranking", []),
+                sql_order_requirement=entry.get(
+                    "sql_order_requirement",
+                    "top_k",
+                ),
+            )
+        )
+
+    return questions
+
+
+GENERATED_VALUATION = _load_generated("valuation")
+GENERATED_GROWTH = _load_generated("growth")
+
+
+# The four hand-written questions above, kept as a fast regression set.
+#
+# Every fix this session was measured against these, so they carry the
+# history: valuation_002 is the question whose fabricated 1.0 exposed the
+# SQL provenance bug, and mixed_001 is the only one joining both tables,
+# which is what caught fm.market_cap. They run in roughly twelve minutes,
+# where the full hundred takes over four hours — short enough to run on
+# every change.
+SMOKE_QUESTIONS: list[EvalQuestion] = (
+    VALUATION_QUESTIONS
+    + GROWTH_QUESTIONS
+    + SENTIMENT_QUESTIONS
+    + MIXED_QUESTIONS
+)
+
+
 QUESTION_SETS: dict[str, list[EvalQuestion]] = {
-    "valuation": VALUATION_QUESTIONS,
-    "growth": GROWTH_QUESTIONS,
+    # Generated sets, with the hand-written original kept at the front so
+    # its history stays comparable across runs.
+    "valuation": VALUATION_QUESTIONS + GENERATED_VALUATION,
+    "growth": GROWTH_QUESTIONS + GENERATED_GROWTH,
+
+    # Authored sets: reference answers and contexts need judgement about
+    # what a good answer says and which documents support it.
     "sentiment": SENTIMENT_QUESTIONS,
     "mixed": MIXED_QUESTIONS,
+
+    "smoke": SMOKE_QUESTIONS,
+
     "all": (
         VALUATION_QUESTIONS
+        + GENERATED_VALUATION
         + GROWTH_QUESTIONS
+        + GENERATED_GROWTH
         + SENTIMENT_QUESTIONS
         + MIXED_QUESTIONS
     ),

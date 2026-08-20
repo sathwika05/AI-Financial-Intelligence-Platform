@@ -1,0 +1,72 @@
+[    4143ms] [WARNING]   WARN  [Statsig] Caught error in _writeToCache {error: QuotaExceededError: Failed to execute 'setItem' on 'Storage': Setting the value of 'statsig.cached.…} @ https://openai.com/_next/static/immutable/chunks/0al1hvic2fd6e.js:0
+[    4243ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://statsigapi.net/v1/sdk_exception:0
+[   10644ms] [WARNING]   WARN  [Statsig] Caught error in _writeToCache {error: QuotaExceededError: Failed to execute 'setItem' on 'Storage': Setting the value of 'statsig.cached.…} @ https://openai.com/_next/static/immutable/chunks/0al1hvic2fd6e.js:0
+[   10850ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://statsigapi.net/v1/sdk_exception:0
+[   21397ms] [WARNING]   WARN  [Statsig] Caught error in _writeToCache {error: QuotaExceededError: Failed to execute 'setItem' on 'Storage': Setting the value of 'statsig.cached.…} @ https://openai.com/_next/static/immutable/chunks/0al1hvic2fd6e.js:0
+[   21501ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://statsigapi.net/v1/sdk_exception:0
+[   36503ms] [WARNING] Mixed Content: The page at 'https://www.google.com/search?q=openai+payments&rlz=1C5MACD_enUS1100US1101&oq=openai+payment&gs_lcrp=EgZjaHJvbWUqDQgAEAAYkQIYgAQYigUyDQgAEAAYkQIYgAQYigUyBggBEEUYOTINCAIQABiRAhiABBiKBTIMCAMQABgUGIcCGIAEMgcIBBAAGIAEMgcIBRAAGIAEMg0IBhAAGJECGIAEGIoFMgcIBxAAGIAEMgcICBAAGIAEMgwICRAAGBQYhwIYgATSAQg2NjA1ajBqN6gCCLACAfEFaQBGvyIYuHA&sourceid=chrome&source=chrome.ob&ie=UTF-8' was loaded over HTTPS, but requested an insecure element 'http://img.youtube.com/vi/6CxLY3RRyNU/hqdefault.jpg'. This request was automatically upgraded to HTTPS, For more information see https://blog.chromium.org/2019/10/no-more-mixed-messages-about-https.html @ https://www.google.com/search?q=openai+payments&rlz=1C5MACD_enUS1100US1101&oq=openai+payment&gs_lcrp=EgZjaHJvbWUqDQgAEAAYkQIYgAQYigUyDQgAEAAYkQIYgAQYigUyBggBEEUYOTINCAIQABiRAhiABBiKBTIMCAMQABgUGIcCGIAEMgcIBBAAGIAEMgcIBRAAGIAEMg0IBhAAGJECGIAEGIoFMgcIBxAAGIAEMgcICBAAGIAEMgwICRAAGBQYhwIYgATSAQg2NjA1ajBqN6gCCLACAfEFaQBGvyIYuHA&sourceid=chrome&source=chrome.ob&ie=UTF-8:0
+[   39175ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "userID" for Dynamic config "openai_curated_plugin_admin" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[   39175ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "org_id" for Dynamic config "plugin_submissions_config" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[   39184ms] [LOG] %c
+           .d88888b.             
+         .8P"     "9bd888b.      
+        .8P     .d8P””'`”988.   
+     .8888   .d8P"    ,     98.  
+   .8P" 88   88"   .d98b.    88  
+  .8P   88   88.d8P".  "98b. 88
+  88    88   88”   `"8b.    "98.  
+  88.   88   89      88"8b.   88 
+   88    "98.89      88  88   "88
+    “8b.    “98b.  .d8B  88    88
+    88 "98b.   8d8P" BB  88   d8"
+    88    d98bP88   .8P  88 .d8" 
+    "8b         .d8P"    888"   
+     "88b..   .d8P"     d8"      
+       "9888P98b.     .d8"       
+               "988888P 
+
+
+  Solve impossible problems
+  openai.com/careers
+ font-family:monospace;  @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[   39188ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "userID" for Gate "api_playground_refresh" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[   43209ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "userID" for Dynamic config "openai_curated_plugin_admin" @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   43209ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "org_id" for Dynamic config "plugin_submissions_config" @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   43218ms] [LOG] %c
+           .d88888b.             
+         .8P"     "9bd888b.      
+        .8P     .d8P””'`”988.   
+     .8888   .d8P"    ,     98.  
+   .8P" 88   88"   .d98b.    88  
+  .8P   88   88.d8P".  "98b. 88
+  88    88   88”   `"8b.    "98.  
+  88.   88   89      88"8b.   88 
+   88    "98.89      88  88   "88
+    “8b.    “98b.  .d8B  88    88
+    88 "98b.   8d8P" BB  88   d8"
+    88    d98bP88   .8P  88 .d8" 
+    "8b         .d8P"    888"   
+     "88b..   .d8P"     d8"      
+       "9888P98b.     .d8"       
+               "988888P 
+
+
+  Solve impossible problems
+  openai.com/careers
+ font-family:monospace;  @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   43563ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "userID" for Dynamic config "openai_curated_plugin_admin" @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   43563ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "org_id" for Dynamic config "plugin_submissions_config" @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   43661ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "userID" for Dynamic config "openai_curated_plugin_admin" @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   43661ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "org_id" for Dynamic config "plugin_submissions_config" @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44589ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44589ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44590ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44590ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44695ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "org_id" for Dynamic config "plugin_submissions_config" @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44714ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44715ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44715ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44715ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44716ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44765ms] [WARNING]   WARN  [Statsig] SDK initialization has not completed. Reason: Loading:Unrecognized @ https://platform.openai.com/static/index-BwxJ9yUW.js:58
+[   44931ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://api.openai.com/v1/dashboard/organization/permissions:0

@@ -73,6 +73,7 @@ class RagasEvaluator:
         contexts: list[str],
         reference_answer: str | None,
         reference_contexts: list[str],
+        document_contexts: list[str] | None = None,
     ) -> EvaluatorResult:
         if not answer.strip():
             return EvaluatorResult(
@@ -116,6 +117,7 @@ class RagasEvaluator:
                 contexts=contexts,
                 reference_answer=reference_answer,
                 reference_contexts=reference_contexts,
+                document_contexts=document_contexts,
             )
 
             # Higher is better for all metrics except noise_sensitivity.
@@ -190,6 +192,7 @@ class RagasEvaluator:
         contexts: list[str],
         reference_answer: str | None,
         reference_contexts: list[str],
+        document_contexts: list[str] | None = None,
     ) -> dict[str, float | None]:
         from ragas import SingleTurnSample
         from ragas.metrics import (
@@ -202,13 +205,39 @@ class RagasEvaluator:
             ResponseRelevancy,
         )
 
-        sample = SingleTurnSample(
+        # Two samples, because the metrics below answer two different
+        # questions and need different context sets.
+        #
+        # The generation metrics — faithfulness, response_relevancy,
+        # noise_sensitivity — ask whether the answer is grounded in what the
+        # pipeline was given. They see everything, market rows included:
+        # removing a context the answer legitimately cites would make a
+        # grounded claim look unsupported.
+        #
+        # The retrieval metrics — precision, recall, entity recall — ask how
+        # good the document retrieval was, and are scored over documents
+        # alone. Grading them across a MIXED question's fourteen contexts,
+        # eleven of which are live price rows, measured the market API
+        # instead: context_precision read 0.1186 while retrieval itself was
+        # sound.
+        generation_sample = SingleTurnSample(
             user_input=question,
             response=answer,
             retrieved_contexts=contexts,
             reference=reference_answer,
             reference_contexts=reference_contexts,
         )
+
+        retrieval_sample = SingleTurnSample(
+            user_input=question,
+            response=answer,
+            retrieved_contexts=document_contexts or contexts,
+            reference=reference_answer,
+            reference_contexts=reference_contexts,
+        )
+
+        # Kept as `sample` for the generation metrics that follow.
+        sample = generation_sample
 
         # Metrics that do not require a golden answer.
         scores: dict[str, float | None] = {
@@ -247,7 +276,7 @@ class RagasEvaluator:
 
         scores["context_precision"] = await self._safe_score(
             precision_metric,
-            sample,
+            retrieval_sample,
         )
 
         # These metrics require golden reference information.
@@ -256,14 +285,14 @@ class RagasEvaluator:
                 LLMContextRecall(
                     llm=self.judge_llm
                 ),
-                sample,
+                retrieval_sample,
             )
 
             scores["context_entity_recall"] = await self._safe_score(
                 ContextEntityRecall(
                     llm=self.judge_llm
                 ),
-                sample,
+                retrieval_sample,
             )
 
             scores["noise_sensitivity"] = await self._safe_score(

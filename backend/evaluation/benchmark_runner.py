@@ -300,7 +300,20 @@ class BenchmarkRunner:
 
                 else:
                     contexts = execution.reranked_contexts
-                
+
+                # The document subset, for the retrieval metrics only.
+                #
+                # SENTIMENT retrieves documents and nothing else, so its
+                # contexts are already the subset. MIXED mixes document
+                # chunks with live market rows, and the reranker's
+                # source_type is the only thing that separates them.
+                document_contexts = (
+                    contexts
+                    if route == "SENTIMENT"
+                    else self._document_contexts(
+                        execution.reranked_context_records
+                    )
+                )
 
                 evaluator_results["ragas"] = (
                     await self.ragas_evaluator.evaluate(
@@ -315,6 +328,7 @@ class BenchmarkRunner:
                         reference_contexts=(
                             question.reference_contexts
                         ),
+                        document_contexts=document_contexts,
                     )
                 )
 
@@ -516,6 +530,16 @@ class BenchmarkRunner:
                     )
                 )
             ),
+            # Carried alongside the flattened text so the RAGAS evaluator
+            # can tell a document chunk from a market row.
+            reranked_context_records=[
+                record
+                for record in final_state.get(
+                    "reranked_context_records",
+                    [],
+                )
+                if isinstance(record, dict)
+            ],
             market_result=final_state.get(
                 "market_result"
             ),
@@ -583,6 +607,30 @@ class BenchmarkRunner:
             for name in tool_names
             if name
         ]
+
+    @staticmethod
+    def _document_contexts(
+        records: list[dict[str, Any]],
+    ) -> list[str]:
+        """
+        Text of the reranked contexts that came from the document corpus.
+
+        The reranker labels every candidate with a source_type, and only
+        "vector" records are retrieved documents — "market" is a live price
+        row and "sql" is a database result. Both are legitimate evidence
+        for the answer, and neither says anything about how well document
+        retrieval performed.
+
+        Returns an empty list when nothing matches, and the caller falls
+        back to the full context set rather than scoring against nothing.
+        """
+        return BenchmarkRunner._contexts_to_text(
+            [
+                record
+                for record in records
+                if record.get("source_type") == "vector"
+            ]
+        )
 
     @staticmethod
     def _contexts_to_text(

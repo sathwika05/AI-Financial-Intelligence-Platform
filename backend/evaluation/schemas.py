@@ -148,6 +148,20 @@ class PipelineExecution(BaseModel):
         default_factory=list
     )
 
+    # The reranked contexts with the reranker's own source_type intact —
+    # "vector" for a document chunk, "market" for a live price row, "sql"
+    # for a result row.
+    #
+    # reranked_contexts above is the flattened text, and flattening lost
+    # the one distinction the RAGAS context metrics need. On a MIXED
+    # question the reranker returns roughly three document chunks and
+    # eleven market rows; grading retrieval quality over all fourteen
+    # measured the market API rather than the document corpus, and
+    # context_precision read 0.1186.
+    reranked_context_records: list[dict[str, Any]] = Field(
+        default_factory=list
+    )
+
     market_result: Any | None = None
 
     ranked_companies: list[dict[str, Any]] = Field(

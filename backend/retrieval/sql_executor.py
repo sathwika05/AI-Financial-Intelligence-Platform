@@ -14,6 +14,7 @@ from sqlalchemy import create_engine, text
 from backend.config import settings
 from backend.llm.llm_context import get_llm_client
 from backend.llm.llm_tiers import LLMTier
+from backend.services.postgres_service import engine as async_engine
 
 
 ALLOWED_TABLES = ["companies", "financial_metrics", "documents"]
@@ -31,17 +32,33 @@ SCHEMA = db.get_table_info()
 # SQLDatabase.run() renders rows as a Python repr string, which collapses
 # a whole result set into one opaque blob. Downstream scoring needs real
 # rows — one evidence candidate per company, with usable column names —
-# so SELECTs are executed here and returned as structured JSON.
+# so SELECTs are executed here and returned as structured JSON. That
+# happens on the application's async engine; see _run_select.
+#
+# This sync engine remains for get_sector_vocabulary alone, which is read
+# from inside generate_sql_query — a synchronous tool that cannot await.
+#
+# SYNC_DATABASE_URL is required regardless: langchain's SQLDatabase above
+# builds its own engine internally, rejects an async driver, and offers
+# get_table_info() only as a blocking call.
 _engine = create_engine(
     settings.SYNC_DATABASE_URL,
     pool_pre_ping=True,
 )
 
 
-def _run_select(query: str) -> dict[str, Any]:
-    """Execute a validated SELECT and return structured rows."""
-    with _engine.connect() as conn:
-        result = conn.execute(text(query))
+async def _run_select(query: str) -> dict[str, Any]:
+    """
+    Execute a validated SELECT and return structured rows.
+
+    Uses the application's async engine rather than a second sync one. The
+    only reason a sync engine existed here was that this function, and the
+    tool calling it, were sync — and being sync is what made the auto-fix
+    path unreachable, since fix_sql_error is a coroutine that cannot be
+    awaited from a sync caller.
+    """
+    async with async_engine.connect() as conn:
+        result = await conn.execute(text(query))
 
         columns = list(result.keys())
         rows = [
@@ -355,7 +372,11 @@ def validate_sql_query(query: str):
 
 
 @tool
-def execute_sql_query(sql_query: str, question: str = ""):
+async def execute_sql_query(
+    sql_query: str,
+    config: RunnableConfig,
+    question: str = "",
+):
     """Execute a validated SQL query. Auto-fix once if SQL execution fails."""
 
     query = validate_sql_query.invoke(sql_query)
@@ -366,7 +387,7 @@ def execute_sql_query(sql_query: str, question: str = ""):
         )
 
     try:
-        payload = _run_select(query)
+        payload = await _run_select(query)
 
         logger.info(
             "[SQL_EXECUTOR] Returned %s rows",
@@ -377,11 +398,24 @@ def execute_sql_query(sql_query: str, question: str = ""):
     except Exception as e:
         logger.error(f"[SQL_EXECUTOR] SQL execution failed: {e}")
 
-        fixed_query = fix_sql_error.invoke({
-            "original_query": query,
-            "error_message": str(e),
-            "question": question
-        })
+        # fix_sql_error is a coroutine, so this must be awaited. It was
+        # previously called with .invoke() from a synchronous tool, which
+        # raises "StructuredTool does not support sync invocation" — so
+        # every SQL execution error destroyed the whole SQL branch instead
+        # of being repaired, and the retry machinery around it had never
+        # actually run. The failure only surfaced when the generator first
+        # produced a query with a bad column name.
+        #
+        # config is forwarded because fix_sql_error needs the LLM runtime;
+        # without it get_llm_client raises "llm_runtime is missing".
+        fixed_query = await fix_sql_error.ainvoke(
+            {
+                "original_query": query,
+                "error_message": str(e),
+                "question": question,
+            },
+            config=config,
+        )
 
         fixed_query = validate_sql_query.invoke(fixed_query)
 
@@ -391,7 +425,7 @@ def execute_sql_query(sql_query: str, question: str = ""):
             )
 
         try:
-            payload = _run_select(fixed_query)
+            payload = await _run_select(fixed_query)
 
             logger.info(
                 "[SQL_EXECUTOR] Auto-fixed query returned %s rows",
@@ -409,7 +443,7 @@ def execute_sql_query(sql_query: str, question: str = ""):
             )
 
 @tool
-async def fix_sql_error(original_query: str, error_message: str, question: str, config: RunnableConfig | None = None,)-> str:
+async def fix_sql_error(original_query: str, error_message: str, question: str, config: RunnableConfig,)-> str:
     """Fix a failed SQL query."""
 
     llm = get_llm_client(

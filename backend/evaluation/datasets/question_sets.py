@@ -330,18 +330,42 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
         # identical values scored 0.0 for sorting by pe_ratio instead.
         sql_order_requirement="none",
 
+        # Written around what the documents can support, not around the
+        # numbers.
+        #
+        # context_entity_recall extracts entities from THIS text, extracts
+        # entities from the retrieved contexts, and scores the intersection
+        # over the entities found here — reference_contexts is not involved.
+        # An earlier version of this answer opened "NVIDIA leads on growth
+        # with 85.2% revenue growth at a 34.5 P/E", and every figure in it
+        # enlarged the denominator with something a news article can never
+        # contain. The metric read 0.0714: roughly one entity matched out of
+        # fourteen, most of the misses being P/E ratios and growth
+        # percentages that live in financial_metrics.
+        #
+        # The figures are not lost. sql grades the values, and ranking
+        # grades the order, both at 1.0 — so restating them here only
+        # measured the document corpus against something that was never in
+        # it.
+        #
+        # What remains are claims a reader could check against the retrieved
+        # articles, with company names as the entities that should actually
+        # be recoverable. Coverage gaps are stated rather than filled in:
+        # AMD and Alphabet have no documents, and an answer that invented
+        # sentiment for them would be wrong.
         reference_answer=(
-            "NVIDIA leads on growth with 85.2% revenue growth at a 34.5 P/E, "
-            "the strongest growth in the cohort at a moderate multiple. AMD "
-            "grows quickly at 50.1% but is by far the most expensive on "
-            "valuation at a 131.4 P/E. Meta and Alphabet are the cheapest on "
-            "earnings at 22.2 and 17.4 P/E with moderate growth of 28.0% and "
-            "24.2%. Microsoft is the slowest grower of the five at 17.7%. "
-            "Document evidence is uneven across the cohort — only NVIDIA, "
-            "Microsoft and Meta have recent coverage in the corpus — so "
-            "sentiment should be reported as unavailable for AMD and "
-            "Alphabet rather than inferred. Every conclusion should cite the "
-            "retrieved financial or document evidence for that company."
+            "NVIDIA has the most positive recent coverage in the cohort: "
+            "ARK increased its NVIDIA position, which the coverage frames "
+            "as confidence in NVIDIA's growth. Microsoft's coverage is "
+            "product-led rather than sentiment-led, describing AI voice "
+            "agents in Microsoft Teams and its position as a customer "
+            "interaction platform. Meta's coverage is the weakest of the "
+            "three, noting a decline amid legal challenges and uncertainty "
+            "about its AI strategy. AMD and Alphabet have no recent "
+            "documents in the corpus, so their sentiment is unknown rather "
+            "than neutral, and the ranking for them rests on financial and "
+            "market evidence alone. Every claim should cite the retrieved "
+            "document, financial or market evidence for that company."
         ),
 
         # Read from the corpus rather than written from memory, and chosen

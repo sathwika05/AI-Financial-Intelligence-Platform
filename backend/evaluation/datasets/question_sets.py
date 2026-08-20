@@ -91,8 +91,21 @@ VALUATION_QUESTIONS: list[EvalQuestion] = [
         expected_intent=IntentType.VALUATION,
         expected_tools=["planner", "sql"],
     
+        # eps is the profitability filter, not output. The question asks
+        # which companies qualify and how large they are, never for their
+        # EPS, and prompt rule 6 tells the generator to select only the
+        # columns the question needs — so projecting it here graded the
+        # model down for following its own instructions.
+        #
+        # Nothing downstream needs it either: evidence_builder emits a
+        # `<TICKER>-metrics-1` citation carrying P/E, EPS, revenue growth
+        # and market cap for every ranked company, so the evidence for
+        # "profitable" exists whether or not SQL returns the column. When
+        # SQL did also return it, the analysis node flagged the pair as
+        # "two evidence records largely duplicate the same financial
+        # metrics" and lowered that company's confidence to 0.43.
         expected_sql=(
-            "SELECT c.ticker, c.name, c.market_cap, fm.eps "
+            "SELECT c.ticker, c.name, c.market_cap "
             "FROM companies c "
             "JOIN financial_metrics fm ON fm.company_id = c.id "
             "WHERE c.sector = 'Technology' "
@@ -103,36 +116,35 @@ VALUATION_QUESTIONS: list[EvalQuestion] = [
             "LIMIT 5"
         ),
     
+        # Mirrors expected_sql above, so eps is absent here too — the rows
+        # are what that query returns, not a wish list. market_cap is a
+        # float because the column is double precision; the ints that were
+        # here before matched only because DataCompy compares numerically.
         expected_sql_result=[
             {
                 "ticker": "ADBE",
                 "name": "Adobe Inc.",
-                "market_cap": 100980899840,
-                "eps": 16.82,
+                "market_cap": 100980899840.0,
             },
             {
                 "ticker": "CRM",
                 "name": "Salesforce, Inc.",
-                "market_cap": 156404432896,
-                "eps": 8.4,
+                "market_cap": 156404432896.0,
             },
             {
                 "ticker": "AMD",
                 "name": "Advanced Micro Devices, Inc.",
-                "market_cap": 826032324608,
-                "eps": 3.85,
+                "market_cap": 826032324608.0,
             },
             {
                 "ticker": "MSFT",
                 "name": "Microsoft Corporation",
-                "market_cap": 3566861025280,
-                "eps": 17.39,
+                "market_cap": 3566861025280.0,
             },
             {
                 "ticker": "AAPL",
                 "name": "Apple Inc.",
-                "market_cap": 4459835424768,
-                "eps": 8.72,
+                "market_cap": 4459835424768.0,
             },
         ],
 
@@ -170,8 +182,14 @@ GROWTH_QUESTIONS: list[EvalQuestion] = [
         # Ranks on revenue growth alone: the seed has no eps_growth column,
         # and asking for it would penalise the pipeline for not returning a
         # figure the database cannot produce.
+        #
+        # eps is not projected either. The question asks which companies
+        # grow fastest and by how much; EPS is neither asked for nor used
+        # to filter here, so selecting it would contradict prompt rule 6.
+        # Every ranked company already carries EPS in its `-metrics-1`
+        # evidence citation, so nothing downstream loses the figure.
         expected_sql=(
-            "SELECT c.ticker, c.name, fm.revenue_growth, fm.eps "
+            "SELECT c.ticker, c.name, fm.revenue_growth "
             "FROM companies c "
             "JOIN financial_metrics fm ON fm.company_id = c.id "
             "WHERE fm.revenue_growth IS NOT NULL "
@@ -180,11 +198,11 @@ GROWTH_QUESTIONS: list[EvalQuestion] = [
         ),
 
         expected_sql_result=[
-            {"ticker": "NVDA", "name": "NVIDIA Corporation", "revenue_growth": 0.852, "eps": 6.53},
-            {"ticker": "EOG", "name": "EOG Resources, Inc.", "revenue_growth": 0.587, "eps": 13.17},
-            {"ticker": "CVX", "name": "Chevron Corporation", "revenue_growth": 0.535, "eps": 10.54},
-            {"ticker": "AMD", "name": "Advanced Micro Devices, Inc.", "revenue_growth": 0.501, "eps": 3.85},
-            {"ticker": "XOM", "name": "ExxonMobil Holdings Corporation", "revenue_growth": 0.441, "eps": 7.83},
+            {"ticker": "NVDA", "name": "NVIDIA Corporation", "revenue_growth": 0.852},
+            {"ticker": "EOG", "name": "EOG Resources, Inc.", "revenue_growth": 0.587},
+            {"ticker": "CVX", "name": "Chevron Corporation", "revenue_growth": 0.535},
+            {"ticker": "AMD", "name": "Advanced Micro Devices, Inc.", "revenue_growth": 0.501},
+            {"ticker": "XOM", "name": "ExxonMobil Holdings Corporation", "revenue_growth": 0.441},
         ],
 
         expected_ranking=["NVDA", "EOG", "CVX", "AMD", "XOM"],

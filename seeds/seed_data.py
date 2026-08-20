@@ -97,6 +97,26 @@ logger = logging.getLogger(__name__)
 MIN_NEWS_RELEVANCE = 0.75
 
 
+# How many articles to keep per company, per provider, before filtering.
+#
+# Was 3, which left 1.4 documents per company once relevance filtering and
+# deduplication had run, and twelve companies with none at all. RAGAS
+# context recall and entity recall are bounded by that: retrieval cannot
+# return what was never fetched.
+#
+# Raising it costs no additional Alpha Vantage quota. That quota is counted
+# in requests, and this seed makes exactly one request per ticker whatever
+# the limit — so twelve articles and three cost the same one request.
+#
+# The real Alpha Vantage constraint is requests per day. When it is
+# reached, fetch_alpha_vantage_news sets ALPHA_VANTAGE_AVAILABLE to False
+# and every remaining ticker falls through to Finnhub, which has no
+# relevance score and therefore cannot be filtered. Watch the
+# "Alpha Vantage unavailable" line in a seed run to see where that happened
+# — companies after it get unfiltered articles.
+MAX_ARTICLES_PER_COMPANY = 12
+
+
 # Query parameters that identify a marketing campaign rather than a
 # document. Two URLs differing only by these point at the same article.
 TRACKING_QUERY_PARAMS = frozenset(
@@ -356,7 +376,7 @@ def fetch_alpha_vantage_news(ticker: str) -> list[dict]:
         params = {
             "function": "NEWS_SENTIMENT",
             "tickers": ticker,
-            "limit": 3,
+            "limit": MAX_ARTICLES_PER_COMPANY,
             "apikey": ALPHA_VANTAGE_KEY,
         }
 
@@ -436,8 +456,8 @@ def fetch_alpha_vantage_news(ticker: str) -> list[dict]:
 
         articles = []
 
-        # Keep a maximum of 3 articles.
-        for item in feed[:3]:
+        # Keep at most MAX_ARTICLES_PER_COMPANY articles.
+        for item in feed[:MAX_ARTICLES_PER_COMPANY]:
 
             # Ignore malformed feed entries.
             if not isinstance(item, dict):
@@ -576,8 +596,8 @@ def fetch_finnhub_news(ticker: str) -> list[dict]:
 
         articles = []
 
-        # Keep at most 3 articles to match the Alpha Vantage behavior.
-        for item in data[:3]:
+        # Keep at most MAX_ARTICLES_PER_COMPANY, matching Alpha Vantage.
+        for item in data[:MAX_ARTICLES_PER_COMPANY]:
 
             # Ignore malformed entries.
             if not isinstance(item, dict):

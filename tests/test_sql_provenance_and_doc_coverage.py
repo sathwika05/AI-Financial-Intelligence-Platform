@@ -283,8 +283,8 @@ class TestSchemaOwnershipRule:
 
     def test_it_names_the_table_the_measures_live_on(self):
         prompt = self._prompt()
-        assert "columns of financial_metrics" in prompt
-        assert "NOT columns of companies" in prompt
+        assert "companies c.market_cap" in prompt
+        assert "financial_metrics fm.eps, fm.pe_ratio, fm.revenue_growth" in prompt
 
     def test_it_states_the_join(self):
         prompt = self._prompt()
@@ -293,6 +293,18 @@ class TestSchemaOwnershipRule:
     def test_it_names_the_columns_that_do_not_exist(self):
         prompt = self._prompt()
         assert "c.eps, c.pe_ratio and c.revenue_growth do not exist" in prompt
+
+    def test_the_rule_covers_both_directions(self):
+        """
+        The first version of this rule named only one side — that eps lives
+        on financial_metrics — and the model over-corrected, moving
+        market_cap there too. mixed_001 needs c.market_cap and fm.pe_ratio
+        in the same query, so it is the question that exercises both halves,
+        and it failed with "column fm.market_cap does not exist".
+        """
+        prompt = self._prompt()
+        assert "neither does fm.market_cap" in prompt
+        assert "needs both tables" in prompt
 
     def test_it_forbids_dropping_the_condition_as_the_workaround(self):
         """

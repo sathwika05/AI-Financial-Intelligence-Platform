@@ -43,6 +43,47 @@ from backend.observability.logging import log_span
 logger = logging.getLogger(__name__)
 
 
+# Failures that say nothing about the pipeline's quality.
+#
+# A quota, rate-limit or auth error means the judge could not be called at
+# all. Scoring that 0.0 reports the strongest possible negative result about
+# retrieval and grounding on the basis of a billing problem — run 68cce08a
+# recorded mixed_001 at ragas 0.0 with an empty metrics dict because the
+# OpenAI balance ran out on the last metric, and the question dropped from
+# 0.9103 to 0.784 with nothing about the pipeline having changed.
+#
+# These still fail the question, because an unmeasured question is not a
+# passing one, but they are tagged so a reader can tell "we could not
+# measure this" from "this scored zero".
+_INFRASTRUCTURE_MARKERS = (
+    "insufficient_quota",
+    "credit_balance_exhausted",
+    # Three spellings, all seen in the wild: the API's error code
+    # (rate_limit_exceeded), a prose message ("Rate limit reached for
+    # gpt-4"), and the SDK's exception class name (RateLimitError), which
+    # is all that is available when the message carries no detail.
+    "rate_limit",
+    "rate limit",
+    "ratelimit",
+    "429",
+    "401",
+    "invalid_api_key",
+    "authentication",
+    "connection error",
+    "timeout",
+)
+
+
+def _is_infrastructure_error(exc: Exception) -> bool:
+    """True when the judge could not be reached, rather than scoring badly."""
+    text = f"{type(exc).__name__} {exc}".lower()
+
+    return any(
+        marker in text
+        for marker in _INFRASTRUCTURE_MARKERS
+    )
+
+
 class RagasEvaluator:
     """Evaluate answer grounding and retrieval quality with RAGAS."""
 
@@ -166,9 +207,20 @@ class RagasEvaluator:
             )
 
         except Exception as exc:
-            logger.exception(
-                "[RAGAS_EVALUATOR] Evaluation failed"
-            )
+            infrastructure = _is_infrastructure_error(exc)
+
+            if infrastructure:
+                # Loud, because the number that follows is not a
+                # measurement and no one should read it as one.
+                logger.error(
+                    "[RAGAS_EVALUATOR] Judge unreachable — this is NOT a "
+                    "quality result: %s",
+                    exc,
+                )
+            else:
+                logger.exception(
+                    "[RAGAS_EVALUATOR] Evaluation failed"
+                )
 
             return EvaluatorResult(
                 evaluator="ragas",
@@ -178,9 +230,16 @@ class RagasEvaluator:
                 metrics={},
                 details={
                     "context_count": len(contexts),
+                    "infrastructure_error": infrastructure,
+                    "unmeasured": infrastructure,
                 },
                 errors=[
-                    f"RAGAS evaluation failed: {exc}"
+                    (
+                        "RAGAS could not be measured — the judge was "
+                        f"unreachable: {exc}"
+                    )
+                    if infrastructure
+                    else f"RAGAS evaluation failed: {exc}"
                 ],
             )
 

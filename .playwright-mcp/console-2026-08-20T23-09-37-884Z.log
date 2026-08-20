@@ -1,0 +1,34 @@
+[    6655ms] [WARNING] Mixed Content: The page at 'https://www.google.com/search?q=aws+console&rlz=1C5MACD_enUS1100US1101&oq=aws&gs_lcrp=EgZjaHJvbWUqDwgCEAAYQxixAxiABBiKBTIJCAAQIxgnGOMCMg8IARAuGCcYxwEYyQMY0QMyDwgCEAAYQxixAxiABBiKBTINCAMQABiSAxiABBiKBTIGCAQQRRg8MgYIBRBFGDwyBggGEEUYPDIGCAcQRRg80gEIMzQwN2owajeoAgiwAgHxBZPDZK9QXUZv&sourceid=chrome&source=chrome.ob&ie=UTF-8' was loaded over HTTPS, but requested an insecure element 'http://img.youtube.com/vi/tYQkg-RI5io/hqdefault.jpg'. This request was automatically upgraded to HTTPS, For more information see https://blog.chromium.org/2019/10/no-more-mixed-messages-about-https.html @ https://www.google.com/search?q=aws+console&rlz=1C5MACD_enUS1100US1101&oq=aws&gs_lcrp=EgZjaHJvbWUqDwgCEAAYQxixAxiABBiKBTIJCAAQIxgnGOMCMg8IARAuGCcYxwEYyQMY0QMyDwgCEAAYQxixAxiABBiKBTINCAMQABiSAxiABBiKBTIGCAQQRRg8MgYIBRBFGDwyBggGEEUYPDIGCAcQRRg80gEIMzQwN2owajeoAgiwAgHxBZPDZK9QXUZv&sourceid=chrome&source=chrome.ob&ie=UTF-8:0
+[    6656ms] [WARNING] Mixed Content: The page at 'https://www.google.com/search?q=aws+console&rlz=1C5MACD_enUS1100US1101&oq=aws&gs_lcrp=EgZjaHJvbWUqDwgCEAAYQxixAxiABBiKBTIJCAAQIxgnGOMCMg8IARAuGCcYxwEYyQMY0QMyDwgCEAAYQxixAxiABBiKBTINCAMQABiSAxiABBiKBTIGCAQQRRg8MgYIBRBFGDwyBggGEEUYPDIGCAcQRRg80gEIMzQwN2owajeoAgiwAgHxBZPDZK9QXUZv&sourceid=chrome&source=chrome.ob&ie=UTF-8' was loaded over HTTPS, but requested an insecure element 'http://img.youtube.com/vi/kSTShbVpBt8/hqdefault.jpg'. This request was automatically upgraded to HTTPS, For more information see https://blog.chromium.org/2019/10/no-more-mixed-messages-about-https.html @ https://www.google.com/search?q=aws+console&rlz=1C5MACD_enUS1100US1101&oq=aws&gs_lcrp=EgZjaHJvbWUqDwgCEAAYQxixAxiABBiKBTIJCAAQIxgnGOMCMg8IARAuGCcYxwEYyQMY0QMyDwgCEAAYQxixAxiABBiKBTINCAMQABiSAxiABBiKBTIGCAQQRRg8MgYIBRBFGDwyBggGEEUYPDIGCAcQRRg80gEIMzQwN2owajeoAgiwAgHxBZPDZK9QXUZv&sourceid=chrome&source=chrome.ob&ie=UTF-8:0
+[    8186ms] [WARNING] 
+
+⚠️ Your `allowedTags` option includes, `script`, which is inherently
+vulnerable to XSS attacks. Please remove it from `allowedTags`.
+Or, to disable this warning, add the `allowVulnerableTags` option
+and ensure you are accounting for this risk.
+
+ @ https://a0.awsstatic.com/eb-csr/2.0.19/sanitize-html/index.js:7
+[    8187ms] [WARNING] 
+
+⚠️ Your `allowedTags` option includes, `style`, which is inherently
+vulnerable to XSS attacks. Please remove it from `allowedTags`.
+Or, to disable this warning, add the `allowVulnerableTags` option
+and ensure you are accounting for this risk.
+
+ @ https://a0.awsstatic.com/eb-csr/2.0.19/sanitize-html/index.js:7
+[    8640ms] [ERROR] [TangerineBox] Telemetry configuration is missing. Error: Error: Session data meta tag not found @ https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:1
+[    8641ms] [ERROR] [TangerineBox] Telemetry configuration is missing. Error: Error: Session data meta tag not found @ https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:1
+[    8642ms] [LOG] Error: failed to parse meta tag awsc-session-data
+    at x (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:2:20414)
+    at F.parseSessionDataMetaTag (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:2:21726)
+    at new F (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:2:21189)
+    at F.getInstance (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:2:21307)
+    at j.getInstance (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:2:23908)
+    at Ce (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:2:28828)
+    at Hs.setupLocals (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:4:84470)
+    at new Hs (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:4:78460)
+    at qs.createNewNamespace (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:4:103269)
+    at qs.applyAsyncFunction (https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:4:104353) @ https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:1
+[    8642ms] [WARNING] Unable to parse the data using legacy methods @ https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:1
+[    8642ms] [ERROR] Couldn't determine console domain and dual-stack values. @ https://a.b.cdn.console.awsstatic.com/a/v1/CEQ753HGI4VIEBGCDVTGJAUVQGBTUEBLQAPUZKXOPUCG73VLELWQ/4f9d21011c2f449797c97ad39e28d981db54e8abc2d447ce9b3129dbc8be99c4.js:1
+[    9669ms] [WARNING] VIDEOJS: WARN: videojs.createTimeRange is deprecated and will be removed in 9.0; please use videojs.time.createTimeRanges instead. @ https://a0.awsstatic.com/eb-csr/2.0.19/videojs/video.es-qQlcKqI8.js:53

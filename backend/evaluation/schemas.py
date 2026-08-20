@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -78,6 +78,40 @@ class EvalQuestion(BaseModel):
     # Expected SQL artifacts used by SQLEvaluator.
     expected_sql: str | None = None
     expected_sql_result: Any | None = None
+
+    # What the question makes the SQL node responsible for, orderwise.
+    #
+    # The single source of truth for ordering semantics: both sql_accuracy
+    # (result level) and sql_equivalence (query level) read this, so the two
+    # primary metrics judge the same contract. Derived from the question's
+    # wording and the SQL node's responsibility — never from whether the
+    # golden SQL happens to contain an ORDER BY, which is incidental.
+    #
+    #   "none"     Row order is not part of SQL correctness. The rows are
+    #              compared as a multiset. Use when the question asks SQL to
+    #              retrieve or filter, or when it asks for a ranking SQL
+    #              cannot compute — "rank by valuation, growth, market
+    #              performance and sentiment" needs four signals, of which
+    #              SQL holds two, so no ordering it produces could be the
+    #              requested one.
+    #
+    #   "ranking"  The question asks for an order over a population SQL can
+    #              sort, and SQL owns it. Same rows in the wrong order is a
+    #              failure. Sort column and direction both matter.
+    #
+    #   "top_k"    Ordering decides membership, not just sequence. "The five
+    #              lowest P/E" is not satisfied by any five rows: a bare
+    #              LIMIT 5 returns five companies that are probably the wrong
+    #              five. Both the K selected and their order are graded.
+    #
+    # Defaults to "none" so a new question cannot silently claim an ordering
+    # contract it never stated. Every existing question is classified
+    # explicitly rather than relying on this default — see question_sets.py.
+    sql_order_requirement: Literal[
+        "none",
+        "ranking",
+        "top_k",
+    ] = "none"
 
     # Expected company/ticker ordering for RankingEvaluator.
     expected_ranking: list[str] = Field(

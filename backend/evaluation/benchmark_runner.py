@@ -211,8 +211,24 @@ class BenchmarkRunner:
                 runnable_config=runnable_config,
             )
 
-            print(json.dumps(json.loads(dumps(execution)), indent=2))
-            
+            # print(json.dumps(json.loads(dumps(execution)), indent=2))
+            #
+            # Routed through the logger instead. print() writes straight to
+            # stdout with no run tag, so a concurrent request's log lines
+            # land in the middle of the JSON and the block stops parsing —
+            # which is how a whole run's per-question detail became
+            # unreadable. As a log record it carries bench:<run_id>, can be
+            # filtered out of a busy stream, and stays off unless DEBUG is
+            # enabled.
+            #
+            # Serialised lazily: dumps() walks the entire pipeline state,
+            # and at INFO that work would be done and then discarded.
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "[BENCHMARK] execution question_id=%s %s",
+                    question.question_id,
+                    dumps(execution),
+                )
 
             evaluator_results: dict[
                 str,
@@ -268,6 +284,9 @@ class BenchmarkRunner:
                             question.expected_sql
                         ),
                         database_schema=SCHEMA,
+                        sql_order_requirement=(
+                            question.sql_order_requirement
+                        ),
                     )
                 )
 
@@ -339,11 +358,29 @@ class BenchmarkRunner:
                 question_result
             )
 
-            # Dumped after finalization: overall_score, passed and
-            # aggregate_metrics are computed there, so printing earlier
-            # always showed the schema defaults (0.0 / False / {}) no matter
-            # how the question actually scored.
-            print(question_result.model_dump_json(indent=2))
+            # print(question_result.model_dump_json(indent=2))
+            #
+            # Logged rather than printed, for the same reason as above.
+            #
+            # Emitted after finalization, because overall_score, passed and
+            # aggregate_metrics are computed there — dumping earlier always
+            # showed the schema defaults (0.0 / False / {}) however the
+            # question actually scored.
+            #
+            # This is currently the only per-question record that exists:
+            # evaluation_metrics stores run-level aggregates and has no
+            # question_id, so nothing else keeps a question's individual
+            # scores, its ordering diagnostics, or the equivalence judge's
+            # reasoning. Kept at INFO for that reason, where the execution
+            # dump above is DEBUG — one is a summary, the other is the whole
+            # pipeline state.
+            logger.info(
+                "[BENCHMARK] result question_id=%s overall=%s passed=%s %s",
+                question_result.question_id,
+                question_result.overall_score,
+                question_result.passed,
+                question_result.model_dump_json(),
+            )
 
             return question_result
 

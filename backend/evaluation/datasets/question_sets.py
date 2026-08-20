@@ -77,6 +77,10 @@ VALUATION_QUESTIONS: list[EvalQuestion] = [
     #     # The question defines the order, so this is not a judgement call:
     #     # ascending P/E.
     #     expected_ranking=["ADBE", "CRM", "MSFT", "NVDA", "AAPL"],
+    #
+    #     # "the five ... lowest P/E ratios": the sort selects the members,
+    #     # so this is top_k rather than plain ranking when re-enabled.
+    #     sql_order_requirement="top_k",
     # ),
     EvalQuestion(
         question_id="valuation_002",
@@ -139,6 +143,16 @@ VALUATION_QUESTIONS: list[EvalQuestion] = [
             "MSFT",
             "AAPL",
         ],
+
+        # "Which five ... have the smallest market capitalizations? Rank
+        # them from smallest to largest." The sort decides which five
+        # companies appear at all, so an arbitrary LIMIT 5 is a wrong
+        # answer even with the filters right — and the question then asks
+        # for those five in a stated order on top.
+        #
+        # Previously graded as plain ordered comparison, which checked the
+        # sequence but never that these were the true five smallest.
+        sql_order_requirement="top_k",
     ),
 ]
 
@@ -174,7 +188,13 @@ GROWTH_QUESTIONS: list[EvalQuestion] = [
         ],
 
         expected_ranking=["NVDA", "EOG", "CVX", "AMD", "XOM"],
-    ), 
+
+        # "Rank the five companies with the strongest revenue growth."
+        # Same shape as valuation_002: revenue_growth DESC is what makes
+        # these five the answer rather than any five companies, and the
+        # question asks for them ranked.
+        sql_order_requirement="top_k",
+    ),
 ]
 
 
@@ -275,6 +295,22 @@ MIXED_QUESTIONS: list[EvalQuestion] = [
             {"ticker": "GOOGL", "name": "Alphabet Inc.", "pe_ratio": 17.364967, "eps": 19.81, "revenue_growth": 0.242},
             {"ticker": "MSFT", "name": "Microsoft Corporation", "pe_ratio": 27.622198, "eps": 17.39, "revenue_growth": 0.177},
         ],
+
+        # SQL cannot produce the ordering this question asks for. The
+        # ranking is over valuation, revenue growth, current market
+        # performance and document sentiment; SQL holds the first two, and
+        # the other two arrive from the market and vector branches. No
+        # ORDER BY it could write would be the requested ranking, so the
+        # ORDER BY revenue_growth DESC in the reference above is one
+        # defensible choice rather than the answer.
+        #
+        # This is about SQL's semantic contract, not about the reranker
+        # overwriting the order downstream: even judged in isolation, there
+        # is no correct SQL ordering here to grade against.
+        #
+        # Concretely, a query returning exactly these five companies with
+        # identical values scored 0.0 for sorting by pe_ratio instead.
+        sql_order_requirement="none",
 
         reference_answer=(
             "NVIDIA leads on growth with 85.2% revenue growth at a 34.5 P/E, "

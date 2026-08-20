@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 from langchain_core.load import dumps
 
@@ -36,6 +36,7 @@ from backend.evaluation.benchmark_runner import (
 )
 from backend.evaluation.schemas import (
     BenchmarkConfig,
+    QuestionEvaluationResult,
 )
 from backend.graph.financial_graph import (
     financial_graph,
@@ -46,6 +47,7 @@ from backend.llm.llm_config_service import (
 from backend.models.db_models import (
     BenchmarkRun,
     EvaluationMetric,
+    QuestionResult,
 )
 # Aliased: `benchmark_run` is already used as a local variable for the ORM
 # row inside _execute_benchmark, which would shadow the import.
@@ -608,6 +610,14 @@ async def _execute_benchmark(
                     aggregate=aggregate,
                 )
 
+                await _upsert_question_results(
+                    session=session,
+                    run_id=run_id,
+                    question_results=(
+                        benchmark_result.question_results
+                    ),
+                )
+
                 await session.commit()
 
                 logger.info(
@@ -641,6 +651,72 @@ async def _execute_benchmark(
                     )
 
                     await session.commit()
+
+
+@log_span("run_id")
+async def _upsert_question_results(
+    *,
+    session: AsyncSession,
+    run_id: UUID,
+    question_results: list[QuestionEvaluationResult],
+) -> None:
+    """
+    Persist one row per question in this run.
+
+    Upserted on (run_id, question_id) so re-running the persistence for a
+    run updates its rows rather than accumulating duplicates.
+
+    model_dump(mode="json") rather than the raw objects: evaluator details
+    carry enums, UUIDs and datetimes that the JSON column cannot adapt on
+    its own.
+    """
+    if not question_results:
+        return
+
+    existing = await session.execute(
+        select(QuestionResult).where(
+            QuestionResult.run_id == run_id
+        )
+    )
+
+    by_question = {
+        row.question_id: row
+        for row in existing.scalars().all()
+    }
+
+    for result in question_results:
+        values = {
+            "question": result.question,
+            "expected_intent": str(
+                result.expected_intent
+            ),
+            "actual_intent": result.actual_intent,
+            "overall_score": result.overall_score,
+            "passed": result.passed,
+            "evaluator_results": {
+                name: evaluator.model_dump(mode="json")
+                for name, evaluator in (
+                    result.evaluator_results.items()
+                )
+            },
+            "aggregate_metrics": result.aggregate_metrics,
+            "error": result.error,
+        }
+
+        row = by_question.get(result.question_id)
+
+        if row is None:
+            session.add(
+                QuestionResult(
+                    run_id=run_id,
+                    question_id=result.question_id,
+                    **values,
+                )
+            )
+            continue
+
+        for field_name, value in values.items():
+            setattr(row, field_name, value)
 
 
 @log_span("run_id")
@@ -913,6 +989,86 @@ async def get_run(
         run=benchmark_run,
         metric=metric,
     )
+
+
+@router.get("/runs/{run_id}/questions")
+@log_span("run_id")
+async def get_run_questions(
+    run_id: UUID,
+    session: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """
+    Per-question results for one run.
+
+    The run endpoint above returns a single averaged row, which shows a
+    run's level but not its shape — a 0.90 average hides whether every
+    question scored 0.90 or one scored 0.60 and the rest were perfect.
+    """
+    result = await session.execute(
+        select(QuestionResult)
+        .where(QuestionResult.run_id == run_id)
+        .order_by(QuestionResult.question_id)
+    )
+
+    rows = result.scalars().all()
+
+    return [
+        {
+            "question_id": row.question_id,
+            "question": row.question,
+            "expected_intent": row.expected_intent,
+            "actual_intent": row.actual_intent,
+            "overall_score": row.overall_score,
+            "passed": row.passed,
+            "evaluator_results": row.evaluator_results,
+            "aggregate_metrics": row.aggregate_metrics,
+            "error": row.error,
+        }
+        for row in rows
+    ]
+
+
+@router.get("/questions/{question_id}/history")
+@log_span("question_id")
+async def get_question_history(
+    question_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """
+    One question's score across runs, newest first.
+
+    This is the read the table was added for: whether a change helped or
+    hurt a specific question is not answerable from run averages, because
+    a regression in one question and an improvement in another cancel out.
+    """
+    result = await session.execute(
+        select(QuestionResult, BenchmarkRun)
+        .join(
+            BenchmarkRun,
+            BenchmarkRun.run_id == QuestionResult.run_id,
+        )
+        .where(QuestionResult.question_id == question_id)
+        .order_by(desc(BenchmarkRun.created_at))
+        .limit(limit)
+    )
+
+    return [
+        {
+            "run_id": str(row.QuestionResult.run_id),
+            "created_at": (
+                row.BenchmarkRun.created_at.isoformat()
+                if row.BenchmarkRun.created_at
+                else None
+            ),
+            "overall_score": row.QuestionResult.overall_score,
+            "passed": row.QuestionResult.passed,
+            "aggregate_metrics": (
+                row.QuestionResult.aggregate_metrics
+            ),
+        }
+        for row in result.all()
+    ]
 
 
 def _build_model_snapshot(

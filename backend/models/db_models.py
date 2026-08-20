@@ -495,6 +495,74 @@ class EvaluationMetric(Base):
 # ---------------------------------------------------------------------------
 
 
+class QuestionResult(Base):
+    """
+    One question's outcome within a benchmark run.
+
+    evaluation_metrics holds a single averaged row per run, so until this
+    existed nothing recorded how an individual question scored. The only
+    trace was a log line, which meant a question could not be compared
+    across runs, a regression could not be attributed to the question that
+    caused it, and the dashboard could show a run's average but never its
+    shape.
+
+    evaluator_results is stored whole rather than flattened into columns.
+    Evaluators come and go — ragas and market do not apply to every
+    question, and sql gained order and top-k diagnostics recently — so a
+    column per metric would need a migration each time and would leave
+    every earlier row null for the new ones. The averaged, queryable copy
+    already exists on evaluation_metrics; this keeps the detail.
+    """
+
+    __tablename__ = "question_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("benchmark_runs.run_id"),
+        index=True,
+    )
+
+    question_id = Column(String, nullable=False, index=True)
+    question = Column(Text)
+
+    expected_intent = Column(String)
+    actual_intent = Column(String)
+
+    overall_score = Column(Float)
+    passed = Column(Boolean)
+
+    # Per-evaluator scores, metrics and details, exactly as scored.
+    evaluator_results = Column(
+        JSON,
+        nullable=True,
+    )
+
+    # Flattened "<evaluator>.<metric>" values, matching what
+    # finalize_question_result already computes for the run aggregate.
+    aggregate_metrics = Column(
+        JSON,
+        nullable=True,
+    )
+
+    error = Column(Text, nullable=True)
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        # A question appears once per run, so a re-persist updates rather
+        # than accumulating duplicates.
+        UniqueConstraint(
+            "run_id",
+            "question_id",
+            name="uq_question_results_run_question",
+        ),
+    )
+
+
 class PipelineTrace(Base):
     """One row per graph node per run."""
 

@@ -1,7 +1,7 @@
 
 import logging
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from backend.services.postgres_service import engine
 
 logger = logging.getLogger(__name__)

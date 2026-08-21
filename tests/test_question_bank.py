@@ -175,13 +175,26 @@ class TestBuilder:
         assert sql.count("pe_ratio IS NOT NULL") == 0
 
     def test_it_guards_an_unconstrained_sort_key(self):
+        """
+        pe_ratio is a positive-only measure, so the guard is `> 0` rather
+        than a null check — see TestRankingGuards for why.
+        """
         sql = build_sql(
             select=("pe_ratio",),
             order_by="pe_ratio",
             direction="ASC",
             limit=3,
         )
-        assert "fm.pe_ratio IS NOT NULL" in sql
+        assert "fm.pe_ratio > 0" in sql
+
+    def test_a_signed_sort_key_gets_a_null_guard(self):
+        sql = build_sql(
+            select=("eps",),
+            order_by="eps",
+            direction="DESC",
+            limit=3,
+        )
+        assert "fm.eps IS NOT NULL" in sql
 
     def test_an_unknown_column_is_rejected(self):
         """
@@ -245,19 +258,42 @@ class TestGeneratedFile:
 
 
 class TestLoader:
-    def test_sets_are_wired_up(self):
+    def test_sets_are_exactly_thirty_each(self):
+        """
+        Thirty, not thirty-one. The hand-written valuation_002 asks the same
+        question as the generated valuation_profitable_15 — "five" for 5 and
+        a redundant market_cap > 0 apart — so adding it on top would measure
+        one question twice and weight it double in the pass rate.
+        """
         from backend.evaluation.datasets.question_sets import QUESTION_SETS
 
-        assert len(QUESTION_SETS["valuation"]) > 25
-        assert len(QUESTION_SETS["growth"]) > 25
+        assert len(QUESTION_SETS["valuation"]) == 30
+        assert len(QUESTION_SETS["growth"]) == 30
         assert len(QUESTION_SETS["smoke"]) == 4
 
-    def test_smoke_is_a_subset_of_all(self):
+    def test_the_originals_are_not_duplicated_into_the_generated_sets(self):
         from backend.evaluation.datasets.question_sets import QUESTION_SETS
 
-        smoke = {q.question_id for q in QUESTION_SETS["smoke"]}
+        ids = {q.question_id for q in QUESTION_SETS["all"]}
+        assert "valuation_002" not in ids
+        assert "growth_001" not in ids
+
+    def test_the_originals_survive_in_smoke(self):
+        from backend.evaluation.datasets.question_sets import QUESTION_SETS
+
+        ids = {q.question_id for q in QUESTION_SETS["smoke"]}
+        assert {"valuation_002", "growth_001"} <= ids
+
+    def test_the_authored_questions_are_in_both(self):
+        """
+        sentiment_001 and mixed_001 are the only questions of their kind, so
+        they belong to smoke and to all. The two SQL originals deliberately
+        do not.
+        """
+        from backend.evaluation.datasets.question_sets import QUESTION_SETS
+
         every = {q.question_id for q in QUESTION_SETS["all"]}
-        assert smoke <= every
+        assert {"sentiment_001", "mixed_001"} <= every
 
     def test_no_duplicate_ids_in_all(self):
         from backend.evaluation.datasets.question_sets import QUESTION_SETS
@@ -275,3 +311,79 @@ class TestLoader:
         )
         assert "smoke" in allowed
         assert "all" in allowed
+
+
+class TestRankingGuards:
+    """
+    The guard on a sort key must match rule 3 of the SQL generator's prompt
+    — "if zero or negative values would make the ranking meaningless,
+    exclude them" — or a generator following its instructions produces a
+    query that differs from the golden. 25 of 31 valuation questions scored
+    sql_equivalence 0.0 on exactly that mismatch while returning perfect
+    rows.
+    """
+
+    def test_positive_only_measures_are_guarded_with_a_comparison(self):
+        from backend.evaluation.datasets.question_bank import (
+            POSITIVE_ONLY_MEASURES,
+        )
+
+        assert POSITIVE_ONLY_MEASURES == {"market_cap", "pe_ratio"}
+
+    def test_growth_and_eps_keep_their_negatives(self):
+        """
+        Both go negative meaningfully in the seed. A `> 0` guard on
+        revenue_growth would silently delete the contraction questions'
+        whole subject.
+        """
+        from backend.evaluation.datasets.question_bank import (
+            POSITIVE_ONLY_MEASURES,
+        )
+
+        assert "revenue_growth" not in POSITIVE_ONLY_MEASURES
+        assert "eps" not in POSITIVE_ONLY_MEASURES
+
+    def test_market_cap_rankings_exclude_nonpositive(self):
+        sql = build_sql(
+            select=("market_cap",),
+            order_by="market_cap",
+            direction="DESC",
+            limit=3,
+            sector="Energy",
+        )
+        assert "c.market_cap > 0" in sql
+        assert "IS NOT NULL" not in sql
+
+    def test_growth_rankings_use_a_null_guard_only(self):
+        sql = build_sql(
+            select=("revenue_growth",),
+            order_by="revenue_growth",
+            direction="ASC",
+            limit=3,
+            sector="Energy",
+        )
+        assert "fm.revenue_growth IS NOT NULL" in sql
+        assert "revenue_growth > 0" not in sql
+
+
+class TestJudgeAcceptsRedundantPredicates:
+    def _instruction(self):
+        from backend.evaluation.evaluators.sql_evaluator import (
+            _STRICT_REGARDLESS,
+        )
+
+        return " ".join(_STRICT_REGARDLESS.split())
+
+    def test_it_states_redundant_guards_are_not_a_filter_difference(self):
+        text = self._instruction()
+        assert "REDUNDANT PREDICATES ARE NOT A DIFFERENCE IN FILTERS" in text
+        assert "a comparison against NULL is never true" in text
+
+    def test_it_closes_the_loophole(self):
+        """
+        Leniency has to stay narrow: `> 0` and `>= 0` differ, and so do
+        `> 0` and `IS NOT NULL` on a column holding negatives.
+        """
+        text = self._instruction()
+        assert "`x > 0` and `x >= 0` differ" in text
+        assert "provably interchangeable" in text

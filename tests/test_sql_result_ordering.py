@@ -439,8 +439,12 @@ class TestQuestionClassification:
     @pytest.mark.parametrize(
         "question_set,question_id,expected",
         [
-            ("valuation", "valuation_002", "top_k"),
-            ("growth", "growth_001", "top_k"),
+            # valuation_002 and growth_001 moved to "smoke" when the
+            # generated sets landed: the generated valuation_profitable_15
+            # asks the same question, so keeping both in "valuation" would
+            # have weighted one question double in the pass rate.
+            ("smoke", "valuation_002", "top_k"),
+            ("smoke", "growth_001", "top_k"),
             ("mixed", "mixed_001", "none"),
         ],
     )

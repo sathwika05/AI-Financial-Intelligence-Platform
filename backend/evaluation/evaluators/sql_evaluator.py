@@ -100,6 +100,22 @@ _STRICT_REGARDLESS = """
 Regardless of ordering, the queries are NOT equivalent if they differ in
 filters, joins, required selected columns, calculations, aggregation,
 grouping, or the number of rows returned.
+
+REDUNDANT PREDICATES ARE NOT A DIFFERENCE IN FILTERS.
+A filter difference has to change which rows qualify. Two predicates that
+provably select the same rows are one filter written two ways:
+
+  `x IS NOT NULL AND x > 0`  selects exactly what  `x > 0`  selects,
+  because a comparison against NULL is never true.
+
+Adding or omitting a guard that another predicate already implies is a
+stylistic difference. Do not judge queries non-equivalent for it alone.
+
+This applies ONLY where the predicates are provably interchangeable, which
+you must check rather than assume. `x > 0` and `x >= 0` differ. So do
+`x > 0` and `x IS NOT NULL` on a column that can hold negatives: the first
+excludes them and the second keeps them. When you cannot show the two
+select the same rows for every possible value of the column, they differ.
 """
 
 _ORDER_CONTRACTS: dict[str, str] = {

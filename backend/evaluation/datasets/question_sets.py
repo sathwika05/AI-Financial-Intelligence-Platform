@@ -609,10 +609,16 @@ SMOKE_QUESTIONS: list[EvalQuestion] = (
 
 
 QUESTION_SETS: dict[str, list[EvalQuestion]] = {
-    # Generated sets, with the hand-written original kept at the front so
-    # its history stays comparable across runs.
-    "valuation": VALUATION_QUESTIONS + GENERATED_VALUATION,
-    "growth": GROWTH_QUESTIONS + GENERATED_GROWTH,
+    # Exactly the generated questions. The hand-written valuation_002 and
+    # growth_001 are NOT added on top: valuation_002 asks the same thing as
+    # the generated valuation_profitable_15, differing only in spelling
+    # "five" for 5 and a redundant market_cap > 0. Counting both would
+    # measure one question twice and weight it double in the pass rate.
+    #
+    # They are not lost — "smoke" below is where they live, which is the
+    # set that should stay stable across runs anyway.
+    "valuation": GENERATED_VALUATION,
+    "growth": GENERATED_GROWTH,
 
     # Authored sets: reference answers and contexts need judgement about
     # what a good answer says and which documents support it.
@@ -622,9 +628,7 @@ QUESTION_SETS: dict[str, list[EvalQuestion]] = {
     "smoke": SMOKE_QUESTIONS,
 
     "all": (
-        VALUATION_QUESTIONS
-        + GENERATED_VALUATION
-        + GROWTH_QUESTIONS
+        GENERATED_VALUATION
         + GENERATED_GROWTH
         + SENTIMENT_QUESTIONS
         + MIXED_QUESTIONS

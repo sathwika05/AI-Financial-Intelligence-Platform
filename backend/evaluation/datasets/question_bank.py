@@ -44,6 +44,19 @@ RANKABLE_SECTORS = (
 COMPANY_COLUMNS = frozenset({"market_cap", "sector", "ticker", "name"})
 METRIC_COLUMNS = frozenset({"eps", "pe_ratio", "revenue_growth"})
 
+# Measures where a zero or negative value makes a ranking meaningless, and
+# the guard on the sort key is therefore `> 0` rather than a bare null
+# check. This mirrors rule 3 of the SQL generator's own prompt — "if zero or
+# negative values would make the ranking meaningless, exclude them" — so
+# that a generator following its instructions produces the golden query
+# rather than differing from it.
+#
+# revenue_growth and eps are deliberately absent. Both go negative in the
+# seed and the negatives are meaningful: the weakest-growth questions exist
+# to surface contraction, and filtering it out would answer a different
+# question.
+POSITIVE_ONLY_MEASURES = frozenset({"market_cap", "pe_ratio"})
+
 
 @dataclass(frozen=True)
 class QuestionSpec:
@@ -127,7 +140,11 @@ def build_sql(
     sort_key = _qualify(order_by)
 
     if not any(clause.startswith(sort_key) for clause in extra_where):
-        where.append(f"{sort_key} IS NOT NULL")
+        where.append(
+            f"{sort_key} > 0"
+            if order_by in POSITIVE_ONLY_MEASURES
+            else f"{sort_key} IS NOT NULL"
+        )
 
     # extra_where clauses arrive already qualified ("fm.eps > 0"), so the
     # prefix is the reliable signal there; projected and sorted columns are

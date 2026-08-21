@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-20T23:27:07.905446+00:00",
+  "generated_at": "2026-08-21T00:06:06.310173+00:00",
   "note": "Derived from the database by generate_ground_truth.py. Do not edit by hand \u2014 re-run the generator after a reseed instead.",
   "questions": {
     "valuation_pe_sector_01": {
@@ -262,7 +262,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Technology' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Technology' AND c.market_cap > 0 ORDER BY c.market_cap DESC LIMIT 3",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -298,7 +298,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Financial Services' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Financial Services' AND c.market_cap > 0 ORDER BY c.market_cap DESC LIMIT 3",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -334,7 +334,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Healthcare' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Healthcare' AND c.market_cap > 0 ORDER BY c.market_cap DESC LIMIT 3",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -370,7 +370,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Energy' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Energy' AND c.market_cap > 0 ORDER BY c.market_cap DESC LIMIT 3",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -406,7 +406,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Industrials' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Industrials' AND c.market_cap > 0 ORDER BY c.market_cap DESC LIMIT 3",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -442,7 +442,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Consumer Cyclical' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Consumer Cyclical' AND c.market_cap > 0 ORDER BY c.market_cap DESC LIMIT 3",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -478,7 +478,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Communication Services' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC LIMIT 3",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Communication Services' AND c.market_cap > 0 ORDER BY c.market_cap DESC LIMIT 3",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -514,7 +514,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND fm.eps > 0 AND c.market_cap IS NOT NULL ORDER BY c.market_cap ASC LIMIT 5",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Technology' AND fm.eps > 0 AND c.market_cap > 0 ORDER BY c.market_cap ASC LIMIT 5",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -562,7 +562,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND fm.eps > 0 AND c.market_cap IS NOT NULL ORDER BY c.market_cap ASC LIMIT 5",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Healthcare' AND fm.eps > 0 AND c.market_cap > 0 ORDER BY c.market_cap ASC LIMIT 5",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -610,7 +610,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Financial Services' AND fm.eps > 0 AND c.market_cap IS NOT NULL ORDER BY c.market_cap ASC LIMIT 5",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Financial Services' AND fm.eps > 0 AND c.market_cap > 0 ORDER BY c.market_cap ASC LIMIT 5",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -658,7 +658,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Industrials' AND fm.eps > 0 AND c.market_cap IS NOT NULL ORDER BY c.market_cap ASC LIMIT 3",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c JOIN financial_metrics fm ON fm.company_id = c.id WHERE c.sector = 'Industrials' AND fm.eps > 0 AND c.market_cap > 0 ORDER BY c.market_cap ASC LIMIT 3",
       "sql_order_requirement": "top_k",
       "expected_sql_result": [
         {
@@ -1191,7 +1191,7 @@
         "planner",
         "sql"
       ],
-      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Energy' AND c.market_cap IS NOT NULL ORDER BY c.market_cap DESC",
+      "expected_sql": "SELECT c.ticker, c.name, c.market_cap FROM companies c WHERE c.sector = 'Energy' AND c.market_cap > 0 ORDER BY c.market_cap DESC",
       "sql_order_requirement": "ranking",
       "expected_sql_result": [
         {

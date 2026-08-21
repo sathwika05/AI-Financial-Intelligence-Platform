@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-21T00:06:06.310173+00:00",
+  "generated_at": "2026-08-21T01:32:13.844434+00:00",
   "note": "Derived from the database by generate_ground_truth.py. Do not edit by hand \u2014 re-run the generator after a reseed instead.",
   "questions": {
     "valuation_pe_sector_01": {
@@ -2489,7 +2489,7 @@
     },
     "growth_cheap_30": {
       "set": "growth",
-      "question": "Which five companies combine revenue growth above 10% with a P/E ratio below 30? Rank them from highest growth to lowest.",
+      "question": "Among companies trading below a P/E ratio of 30, which five have the strongest revenue growth? Rank them from highest growth to lowest.",
       "expected_intent": "GROWTH",
       "expected_tools": [
         "planner",

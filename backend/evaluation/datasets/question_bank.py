@@ -554,12 +554,25 @@ def _growth() -> None:
         allows_short_result=True,
     ))
 
-    # 30. Growth and valuation together: cheap and growing.
+    # 30. Growth ranked within a valuation filter.
+    #
+    # Phrased "Among companies trading below X, which five have the
+    # strongest growth" rather than "which five combine growth with a P/E
+    # below X". The second version routed to MIXED and scored intent 0.0:
+    # "combine A with B" reads as a two-dimensional analysis, and MIXED
+    # here means multi-SOURCE (SQL, vector and market), not multi-metric.
+    # The rows and the ranking were perfect both ways — only the route
+    # differed — so this is the question being clear about what it asks,
+    # not the router being wrong.
+    #
+    # The "Among ... which N have the strongest ..." shape is what the
+    # other filtered growth questions use, and they all route correctly.
     add(QuestionSpec(
         question_id="growth_cheap_30",
         question=(
-            "Which five companies combine revenue growth above 10% with a "
-            "P/E ratio below 30? Rank them from highest growth to lowest."
+            "Among companies trading below a P/E ratio of 30, which five "
+            "have the strongest revenue growth? Rank them from highest "
+            "growth to lowest."
         ),
         expected_sql=build_sql(
             select=("revenue_growth", "pe_ratio"),

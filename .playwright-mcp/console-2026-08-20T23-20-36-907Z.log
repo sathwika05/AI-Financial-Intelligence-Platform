@@ -32,3 +32,45 @@
 [ 2239121ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/1yo-u56zqm5gu.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
 [ 2547875ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/2zn5fvp0y3zlq.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
 [ 2547875ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/1yo-u56zqm5gu.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 2850024ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/2zn5fvp0y3zlq.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 2850024ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/1yo-u56zqm5gu.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 2948885ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/2zn5fvp0y3zlq.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 2948886ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/1yo-u56zqm5gu.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3129691ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/2zn5fvp0y3zlq.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3129692ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/1yo-u56zqm5gu.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3224858ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/2zn5fvp0y3zlq.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3224859ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/1yo-u56zqm5gu.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3381236ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/2zn5fvp0y3zlq.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3381236ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/1yo-u56zqm5gu.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3525414ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/2zn5fvp0y3zlq.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3525414ms] [WARNING] The resource https://openai.com/_next/static/immutable/chunks/1yo-u56zqm5gu.js was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://openai.com/api/:0
+[ 3688209ms] [WARNING]   WARN  [Statsig] Caught error in _writeToCache {error: QuotaExceededError: Failed to execute 'setItem' on 'Storage': Setting the value of 'statsig.cached.…} @ https://openai.com/_next/static/immutable/chunks/0al1hvic2fd6e.js:0
+[ 3688467ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://statsigapi.net/v1/sdk_exception:0
+[ 3695295ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "userID" for Dynamic config "openai_curated_plugin_admin" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[ 3695296ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "org_id" for Dynamic config "plugin_submissions_config" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[ 3695307ms] [LOG] %c
+           .d88888b.             
+         .8P"     "9bd888b.      
+        .8P     .d8P””'`”988.   
+     .8888   .d8P"    ,     98.  
+   .8P" 88   88"   .d98b.    88  
+  .8P   88   88.d8P".  "98b. 88
+  88    88   88”   `"8b.    "98.  
+  88.   88   89      88"8b.   88 
+   88    "98.89      88  88   "88
+    “8b.    “98b.  .d8B  88    88
+    88 "98b.   8d8P" BB  88   d8"
+    88    d98bP88   .8P  88 .d8" 
+    "8b         .d8P"    888"   
+     "88b..   .d8P"     d8"      
+       "9888P98b.     .d8"       
+               "988888P 
+
+
+  Solve impossible problems
+  openai.com/careers
+ font-family:monospace;  @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[ 3695317ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "userID" for Dynamic config "openai_curated_plugin_admin" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[ 3695317ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "org_id" for Dynamic config "plugin_submissions_config" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[ 3695391ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "userID" for Dynamic config "openai_curated_plugin_admin" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58
+[ 3695392ms] [WARNING]   WARN  [Statsig] The user does not have the required id_type "org_id" for Dynamic config "plugin_submissions_config" @ https://platform.openai.com/static/index-CX-_Mc1C.js:58

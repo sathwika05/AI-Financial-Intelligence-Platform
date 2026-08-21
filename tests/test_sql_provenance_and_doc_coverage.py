@@ -313,3 +313,39 @@ class TestSchemaOwnershipRule:
         """
         prompt = self._prompt()
         assert "never drop the condition to make the query run" in prompt
+
+
+class TestCountIsNotADistractor:
+    """
+    growth_cheap_30 asked "Which five companies combine revenue growth above
+    10% with a P/E ratio below 30?" and the generator answered with LIMIT 10,
+    taking its count from the filter threshold instead of from the question.
+    The rows and their order were right — the ranking evaluator matched all
+    five — so only the row count was wrong, and sql_accuracy read 0.6667.
+
+    It was the one genuine failure across 62 SQL questions, and it needed a
+    question carrying numeric distractors to surface at all.
+    """
+
+    def _prompt(self):
+        from backend.retrieval import sql_executor
+
+        tool = sql_executor.generate_sql_query
+        src = inspect.getsource(getattr(tool, "func", tool))
+        return " ".join(src.split())
+
+    def test_it_warns_that_filter_numbers_are_not_the_count(self):
+        prompt = self._prompt()
+        assert "OTHER NUMBERS IN THE QUESTION ARE NOT THE COUNT" in prompt
+
+    def test_it_carries_the_failing_example(self):
+        prompt = self._prompt()
+        assert "The 10 belongs to `revenue_growth > 0.10`" in prompt
+
+    def test_it_says_where_the_count_attaches(self):
+        prompt = self._prompt()
+        assert "the number attached to the thing being returned" in prompt
+
+    def test_it_covers_a_count_stated_before_the_conditions(self):
+        prompt = self._prompt()
+        assert "A count stated early still governs the LIMIT" in prompt

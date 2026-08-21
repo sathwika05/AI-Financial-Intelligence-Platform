@@ -242,6 +242,20 @@ CRITICAL RULES:
 - Never replace a user-specified count with another default.
 - Use LIMIT 10 only when the user specifies no result count.
 
+- OTHER NUMBERS IN THE QUESTION ARE NOT THE COUNT. A question often
+  contains figures that belong to filters — percentages, thresholds,
+  prices, years — and none of them set the LIMIT. Read the count as the
+  number attached to the thing being returned ("five companies", "top 3
+  stocks"), not the nearest number in the sentence.
+  Example, and a real failure:
+    "Which five companies combine revenue growth above 10% with a P/E
+     ratio below 30?"
+    -> LIMIT 5. The 10 belongs to `revenue_growth > 0.10` and the 30 to
+       `pe_ratio < 30`. Answering this with LIMIT 10 returns ten companies
+       for a question that asked for five.
+- The count can appear anywhere in the sentence, including before a long
+  list of conditions. A count stated early still governs the LIMIT.
+
 2. ORDERING
 - "lowest", "smallest", "cheapest" -> ORDER BY ... ASC
 - "highest", "largest", "biggest" -> ORDER BY ... DESC

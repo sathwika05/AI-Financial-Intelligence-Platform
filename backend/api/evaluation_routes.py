@@ -92,6 +92,9 @@ class RunRequest(BaseModel):
         # minutes against four hours for "all", so this is the set to run
         # on a change; every fix was measured against it.
         "smoke",
+        # A scratch set named by the FOCUS_QUESTIONS environment variable,
+        # for iterating on specific questions. See question_sets/__init__.
+        "focus",
         # Every question across the four sets; defined in question_sets.py
         # but previously unreachable through this endpoint.
         "all",
@@ -559,10 +562,28 @@ async def _execute_benchmark(
                     graph=financial_graph
                 )
 
+                async def persist_one(question_result):
+                    """Write one question's result as soon as it exists.
+
+                    Its own transaction: the run's session is long-lived and
+                    committing it mid-run would also commit whatever else is
+                    pending on it. Upserted on (run_id, question_id), so the
+                    final write updates these rows rather than duplicating
+                    them.
+                    """
+                    async with AsyncSessionLocal() as write_session:
+                        await _upsert_question_results(
+                            session=write_session,
+                            run_id=run_id,
+                            question_results=[question_result],
+                        )
+                        await write_session.commit()
+
                 benchmark_result = await runner.run(
                     config=benchmark_config,
                     runnable_config=runnable_config,
                     run_id=run_id,
+                    on_question_result=persist_one,
                 )
 
                 

@@ -34,6 +34,11 @@ services:
       # "postgres" does not resolve outside this network.
       DATABASE_URL: postgresql+asyncpg://finuser:finpass@postgres:5432/findb
       SYNC_DATABASE_URL: postgresql+psycopg2://finuser:finpass@postgres:5432/findb
+
+      # The "focus" question set: a comma-separated list of question ids, for
+      # iterating on specific questions without waiting out a full run.
+      # Empty by default, which makes that set empty.
+      FOCUS_QUESTIONS: ${FOCUS_QUESTIONS:-}
     volumes:
       - .:/code
       # Give the container its own virtualenv.

@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
@@ -106,12 +107,20 @@ class BenchmarkRunner:
         config: BenchmarkConfig,
         runnable_config: RunnableConfig,
         run_id: UUID,
+        on_question_result: Callable[
+            [QuestionEvaluationResult], Awaitable[None]
+        ] | None = None,
     ) -> BenchmarkRunResult:
         """
         Execute every question in config.question_set.
 
         runnable_config contains the provider-specific LLMRuntime,
         LangSmith tags, and LangSmith metadata.
+
+        on_question_result is awaited after each question, so a caller can
+        persist as the run goes. A hundred questions is seven hours; when
+        the Docker daemon stopped during run 64671f10, 76 scored questions
+        were lost because the only write came after the loop.
         """
         result = BenchmarkRunResult(
             run_id=run_id,
@@ -146,6 +155,21 @@ class BenchmarkRunner:
                 result.question_results.append(
                     question_result
                 )
+
+                # Reporting is a side effect of measuring, not the point of
+                # it. A database hiccup on one question must not discard the
+                # ones already scored or stop the ones still to come.
+                if on_question_result is not None:
+                    try:
+                        await on_question_result(
+                            question_result
+                        )
+                    except Exception:
+                        logger.exception(
+                            "[BENCHMARK] Could not persist "
+                            "question_id=%s; the run continues",
+                            question_result.question_id,
+                        )
 
                 if question_result.passed:
                     result.passed_questions += 1

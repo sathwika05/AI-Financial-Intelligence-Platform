@@ -72,9 +72,22 @@ class RankingEvaluator:
             if value
         ]
 
+        # Graded over the cohort the question asks for, not over the run's
+        # configured top_k.
+        #
+        # k is a retrieval depth: how many documents the pipeline was asked
+        # to fetch. Dividing by it makes precision unwinnable whenever the
+        # question names fewer companies than that — three expected against
+        # k=5 caps a perfect answer at 0.6. The 2026-08-21 sentiment run
+        # measured exactly that: sentiment_002 and sentiment_021 returned
+        # the expected cohort in the expected order, scored mrr 1.0,
+        # recall_at_k 1.0 and ndcg 1.0, and still read precision_at_k
+        # 0.600 — the highest precision any of the twenty-five achieved.
+        #
+        # The golden defines the cohort, so the golden defines the slots.
         effective_k = max(
             1,
-            k,
+            len(expected),
         )
         top_k = actual[
             :effective_k

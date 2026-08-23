@@ -456,16 +456,23 @@ async def run_reviewer(
         and retry_count < MAX_RETRIES
     )
 
-    # Missing evidence and bad citations are retrieval problems, so those
-    # go back to retrieval. A grounding failure is not — re-running the
-    # same queries cannot fix it, so the draft is regenerated instead,
-    # with the rejected claims handed back to the analysis prompt.
-    if has_missing_evidence or has_invalid_citations:
-        retry_target = "retrieval"
-    elif has_hallucinations:
-        retry_target = "analysis"
-    else:
-        retry_target = "retrieval"
+    # Every retry regenerates the draft, because nothing upstream would
+    # differ on a second attempt. The query, the cohort and the corpus are
+    # all unchanged by the time the reviewer runs, so an identical
+    # retrieval returns identical documents and the same flags are raised
+    # again — three times, and then a forced pass.
+    #
+    # The module already applied this reasoning to grounding failures ("re-
+    # running the same queries cannot fix it") and then routed the other
+    # two cases back to retrieval anyway. Run c3f5c44b: 58 retries across
+    # 28 questions, 57 of them to retrieval, 17 questions exhausting
+    # MAX_RETRIES and force-passing regardless. analysis ran 86 times for
+    # 28 questions at ~26s a call.
+    #
+    # What can differ is the draft: the flagged claims go back to the
+    # analysis prompt, so a second attempt writes around evidence it does
+    # not have instead of asserting it.
+    retry_target = "analysis"
 
     if retry_count >= MAX_RETRIES and quality_failure:
         decision = "forced_pass"

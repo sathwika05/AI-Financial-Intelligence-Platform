@@ -74,6 +74,18 @@ MIXED
          growth narrative"
         "Which high-growth companies have positive sentiment?"
 
+    - NOT two structured metrics together. A question that filters on one
+      number and ranks on another is answered entirely in SQL, and needs
+      no documents. Combining pe_ratio with revenue_growth does not make a
+      question MIXED; asking what people SAY about a company does.
+    - Counter-examples, all single-intent:
+        "Among companies trading below a P/E ratio of 30, which five have
+         the strongest revenue growth?"                        -> GROWTH
+        "Which profitable companies have the smallest market
+         capitalisation?"                                      -> VALUATION
+    - The test is what the answer needs, not how many measures the
+      question names. If every clause maps to a column, it is not MIXED.
+
 Return:
 - intent: exactly one of VALUATION, GROWTH, SENTIMENT, MIXED
 - reason: a short explanation for the classification

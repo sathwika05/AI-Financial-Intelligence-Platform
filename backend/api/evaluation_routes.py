@@ -562,6 +562,8 @@ async def _execute_benchmark(
                     graph=financial_graph
                 )
 
+                running_cost = {"cost": 0.0, "questions": 0}
+
                 async def persist_one(question_result):
                     """Write one question's result as soon as it exists.
 
@@ -570,14 +572,51 @@ async def _execute_benchmark(
                     pending on it. Upserted on (run_id, question_id), so the
                     final write updates these rows rather than duplicating
                     them.
+
+                    The run row's totals are carried along with it. Written
+                    only at the end, they read $0.00 on every run that died
+                    — six of them in benchmark_runs, one having spent seven
+                    hours on 76 questions before the daemon stopped.
                     """
-                    async with AsyncSessionLocal() as write_session:
-                        await _upsert_question_results(
-                            session=write_session,
-                            run_id=run_id,
-                            question_results=[question_result],
+                    running_cost["questions"] += 1
+                    running_cost["cost"] += float(
+                        getattr(
+                            question_result.execution,
+                            "cost_usd",
+                            0.0,
                         )
-                        await write_session.commit()
+                        or 0.0
+                    )
+
+                    try:
+                        async with AsyncSessionLocal() as write_session:
+                            await _upsert_question_results(
+                                session=write_session,
+                                run_id=run_id,
+                                question_results=[question_result],
+                            )
+
+                            live_run = await _get_run_record(
+                                session=write_session,
+                                run_id=run_id,
+                            )
+
+                            if live_run is not None:
+                                live_run.total_requests = running_cost[
+                                    "questions"
+                                ]
+                                live_run.total_cost = round(
+                                    running_cost["cost"],
+                                    6,
+                                )
+
+                            await write_session.commit()
+                    except Exception:
+                        logger.exception(
+                            "[EVALUATION] Could not persist "
+                            "question_id=%s; the run continues",
+                            question_result.question_id,
+                        )
 
                 benchmark_result = await runner.run(
                     config=benchmark_config,

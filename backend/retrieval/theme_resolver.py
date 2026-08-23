@@ -146,7 +146,206 @@ async def resolve_theme_tickers(slug: str | None) -> list[str]:
     ]
 
 
-async def resolve_candidates(question: str) -> dict:
+# Words that end a company's legal name without identifying it. Stripped so
+# "Merck & Company, Inc." can be recognised from "Merck".
+_LEGAL_SUFFIXES = frozenset({
+    "incorporated", "inc", "corporation", "corp", "company", "co",
+    "group", "holdings", "plc", "ltd", "nv", "sa", "ag", "&",
+})
+
+
+def _core_name(name: str) -> str:
+    """The identifying part of a registered name."""
+    text = re.sub(r"\(the\)", " ", name, flags=re.IGNORECASE)
+    text = re.sub(r"[.,]", " ", text)
+
+    words = [word for word in text.split() if word]
+
+    while words and words[0].lower() == "the":
+        words.pop(0)
+
+    while words and words[-1].lower() in _LEGAL_SUFFIXES:
+        words.pop()
+
+    return " ".join(words)
+
+
+def _squash(text: str) -> str:
+    """Letters and digits only, lowercased.
+
+    "JPMorgan" and "JP Morgan", "Exxon Mobil" and "ExxonMobil" are the same
+    company written two ways, and a question uses whichever it likes.
+    """
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _name_aliases(name: str) -> set[str]:
+    """Every contiguous run of words in the core name.
+
+    "Walt Disney" yields "Walt", "Disney" and "Walt Disney", because a
+    question says "Disney" and the register says "Walt Disney Company
+    (The)". Ambiguous aliases are discarded later, by the caller, once every
+    company has been expanded — "Morgan" belongs to both Morgan Stanley and
+    JP Morgan Chase and identifies neither.
+    """
+    words = _core_name(name).split()
+
+    return {
+        " ".join(words[start:end])
+        for start in range(len(words))
+        for end in range(start + 1, len(words) + 1)
+    }
+
+
+async def _all_companies() -> list[dict]:
+    """Every company, for name matching. Fifty rows; not worth caching."""
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text("SELECT id, ticker, name FROM companies ORDER BY ticker")
+            )
+
+            return [
+                {"company_id": row[0], "ticker": row[1], "name": row[2]}
+                for row in result.fetchall()
+            ]
+
+    except Exception as exc:
+        logger.error("[THEME_RESOLVER] company lookup failed: %s", exc)
+        return []
+
+
+async def resolve_named_companies(question: str) -> list[dict]:
+    """
+    Companies the question names outright, by name or by ticker.
+
+    The theme resolver above answers "which companies are in this
+    category?". This answers the commoner case: the question already said
+    who it means. Without it a question naming its cohort resolved to
+    nothing, the pipeline ran unfiltered, and the ranking fell back to
+    whichever companies dominate the corpus — across the twenty-five
+    sentiment questions of run c3f5c44b, GE appeared in 22 answers, GS in
+    19 and MS in 17, whatever was asked. Ten matched nothing at all.
+
+    Still a lookup, not a judgement. The names come from the question and
+    are matched against the companies table, so the model never decides
+    membership — the property the theme resolver exists to protect.
+    """
+    if not question:
+        return []
+
+    companies = await _all_companies()
+
+    # An alias claimed by two companies identifies neither.
+    owners: dict[str, set[str]] = {}
+
+    for company in companies:
+        for alias in _name_aliases(company["name"]):
+            owners.setdefault(alias.lower(), set()).add(company["ticker"])
+
+    # Every run of adjacent words in the question, squashed. Comparing
+    # against these as whole values rather than searching for a substring is
+    # what keeps "America" out of "American Express" and "United" out of
+    # "UnitedHealth", while still letting the alias "JP Morgan" match the
+    # single token "JPMorgan".
+    tokens = re.findall(r"[A-Za-z0-9]+", question)
+    question_runs = {
+        _squash("".join(tokens[start:end]))
+        for start in range(len(tokens))
+        for end in range(start + 1, min(start + 5, len(tokens)) + 1)
+    }
+
+    found: dict[str, dict] = {}
+
+    for company in companies:
+        ticker = company["ticker"]
+
+        # Tickers match case-sensitively. Lowercasing would make "MA" match
+        # inside "may" and "C" match any stray capital.
+        if re.search(
+            r"(?<![A-Za-z0-9])" + re.escape(ticker) + r"(?![A-Za-z0-9])",
+            question,
+        ):
+            found[ticker] = company
+            continue
+
+        for alias in _name_aliases(company["name"]):
+            if len(owners.get(alias.lower(), set())) != 1:
+                continue
+
+            squashed_alias = _squash(alias)
+
+            if len(squashed_alias) >= 4 and squashed_alias in question_runs:
+                found[ticker] = company
+                break
+
+    return [found[ticker] for ticker in sorted(found)]
+
+async def resolve_sector_companies(question: str) -> list[dict]:
+    """
+    Companies in a sector the question names.
+
+    Five of the mixed questions ask for "the energy sector companies" or
+    "the communication services companies" rather than listing members.
+    Sector is a column on companies, so this is the same kind of lookup as a
+    theme: decided by the data, not by a model at query time.
+    """
+    if not question:
+        return []
+
+    try:
+        async with engine.connect() as conn:
+            sectors = [
+                row[0]
+                for row in (
+                    await conn.execute(
+                        text(
+                            "SELECT DISTINCT sector FROM companies "
+                            "WHERE sector IS NOT NULL"
+                        )
+                    )
+                ).fetchall()
+            ]
+
+            # Longest first, so "Consumer Cyclical" is not read as the
+            # "Consumer Defensive"-sharing word "Consumer".
+            for name in sorted(sectors, key=len, reverse=True):
+                pattern = (
+                    r"(?<![a-z0-9])" + re.escape(name.lower()) + r"(?![a-z0-9])"
+                )
+
+                if not re.search(pattern, question.lower()):
+                    continue
+
+                result = await conn.execute(
+                    text(
+                        "SELECT id, ticker FROM companies "
+                        "WHERE sector = :sector ORDER BY ticker"
+                    ),
+                    {"sector": name},
+                )
+
+                return [
+                    {"company_id": row[0], "ticker": row[1]}
+                    for row in result.fetchall()
+                ]
+
+    except Exception as exc:
+        logger.error("[THEME_RESOLVER] sector lookup failed: %s", exc)
+
+    return []
+
+# Intents whose answer is a ranking over a cohort, and which therefore need
+# one. VALUATION and GROWTH express their own population in SQL, and are
+# graded on the query they write — narrowing them from outside would rewrite
+# the filter sql_equivalence compares against.
+_COHORT_INTENTS = frozenset({"SENTIMENT", "MIXED"})
+
+
+async def resolve_candidates(
+    question: str,
+    intent: str | None = None,
+) -> dict:
     """
     Candidate companies for a question, with the reasoning attached.
 
@@ -158,6 +357,17 @@ async def resolve_candidates(question: str) -> dict:
     """
     slug = extract_theme_slug(question)
     companies = await resolve_theme_companies(slug)
+
+    # A curated theme wins. Its membership was decided once, by a person, in
+    # seeds/themes.py, and that beats whatever a question happens to mention
+    # in passing.
+    if not companies:
+        companies = await resolve_named_companies(question)
+
+    # Named companies before sector: a question that lists its cohort means
+    # that cohort, even if a sector word appears elsewhere in the sentence.
+    if not companies and (intent or "").upper() in _COHORT_INTENTS:
+        companies = await resolve_sector_companies(question)
 
     tickers = [company["ticker"] for company in companies]
     company_ids = [company["company_id"] for company in companies]

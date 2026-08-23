@@ -174,7 +174,7 @@ async def planner_node(state: FinancialState,config: RunnableConfig) -> dict:
     # taxonomy, and routing it through a rewritten subquery would put a
     # model back in charge of deciding who qualifies — which is what
     # produced an oil producer in an AI ranking.
-    candidates = await resolve_candidates(query)
+    candidates = await resolve_candidates(query, intent=intent)
 
     logger.info(
         "[PLANNER] theme=%s candidates=%s",

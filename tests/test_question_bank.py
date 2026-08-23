@@ -284,16 +284,59 @@ class TestLoader:
         ids = {q.question_id for q in QUESTION_SETS["smoke"]}
         assert {"valuation_002", "growth_001"} <= ids
 
-    def test_the_authored_questions_are_in_both(self):
+    def test_the_originals_are_counted_only_where_nothing_duplicates_them(self):
         """
-        sentiment_001 and mixed_001 are the only questions of their kind, so
-        they belong to smoke and to all. The two SQL originals deliberately
-        do not.
+        mixed_001 is still the only question of its kind, so it belongs to
+        smoke and to all.
+
+        sentiment_001 is gone entirely. It was the authored sentiment_002
+        word for word, with the same expected_ranking, so it was deleted
+        rather than kept — valuation_002 and growth_001 survive in smoke
+        because they at least differ in wording from their generated
+        twins; sentiment_001 did not differ at all. sentiment_002 holds
+        the smoke slot now.
         """
         from backend.evaluation.datasets.question_sets import QUESTION_SETS
 
         every = {q.question_id for q in QUESTION_SETS["all"]}
-        assert {"sentiment_001", "mixed_001"} <= every
+        smoke = {q.question_id for q in QUESTION_SETS["smoke"]}
+
+        assert "mixed_001" in every
+        assert "sentiment_001" not in every
+        assert "sentiment_001" not in smoke
+        assert "mixed_001" in smoke
+
+        # sentiment_002 took the smoke slot sentiment_001 used to hold.
+        assert "sentiment_002" in smoke
+
+    def test_the_sets_are_the_hundred(self):
+        """
+        30 valuation, 30 growth, 25 sentiment, 15 mixed. The split Sathwika
+        chose, and the reason each original is or is not counted above.
+        """
+        from backend.evaluation.datasets.question_sets import QUESTION_SETS
+
+        assert len(QUESTION_SETS["sentiment"]) == 25
+        assert len(QUESTION_SETS["mixed"]) == 15
+        assert len(QUESTION_SETS["all"]) == 100
+
+    def test_each_intent_module_owns_its_questions(self):
+        """
+        The package layout: one module per intent, combined in __init__.
+        Evaluation reads QUESTION_SETS, never an intent module directly.
+        """
+        from backend.evaluation.datasets.question_sets import (
+            QUESTION_SETS,
+            growth,
+            mixed,
+            sentiment,
+            valuation,
+        )
+
+        assert QUESTION_SETS["valuation"] is valuation.QUESTIONS
+        assert QUESTION_SETS["growth"] is growth.QUESTIONS
+        assert QUESTION_SETS["sentiment"] is sentiment.QUESTIONS
+        assert QUESTION_SETS["mixed"] is mixed.QUESTIONS
 
     def test_no_duplicate_ids_in_all(self):
         from backend.evaluation.datasets.question_sets import QUESTION_SETS

@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import re
 import sys
 import textwrap
 
@@ -43,13 +44,42 @@ async def _connect():
 
 
 def _as_python(text: str) -> str:
-    """Render a chunk as the quoted, wrapped string a spec file wants."""
-    lines = textwrap.wrap(text, width=62)
+    """Render a chunk as the quoted, wrapped string a spec file wants.
+
+    The concatenation of the parts must reproduce the chunk character for
+    character, so this cannot use textwrap.wrap: that breaks on hyphens
+    (turning "risk-management" into "risk- management" and splitting URLs
+    the same way) and collapses a run of spaces to one wherever it happens
+    to break a line. Both produce a literal that looks right and matches
+    nothing, which scores 0.0 and reads as a retrieval failure. Thirty-six
+    reference contexts were written that way before this was found.
+
+    So split only at spaces, keep the space on the line it ends, and let a
+    long unbreakable token overflow the width rather than break it.
+    """
+    parts: list[str] = []
+    line = ""
+
+    for piece in re.split(r"(?<= )", text):
+        if line and len(line) + len(piece) > 62:
+            parts.append(line)
+            line = piece
+        else:
+            line += piece
+
+    if line:
+        parts.append(line)
 
     return "\n".join(
-        f'    "{line} "' if index < len(lines) - 1 else f'    "{line}",'
-        for index, line in enumerate(lines)
+        f'    "{_escape(part)}"' if index < len(parts) - 1
+        else f'    "{_escape(part)}",'
+        for index, part in enumerate(parts)
     )
+
+
+def _escape(text: str) -> str:
+    """Quote for a double-quoted literal. Chunks contain both \\ and "."""
+    return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
 async def show(

@@ -276,9 +276,9 @@ class TestSchemaOwnershipRule:
     def _prompt(self):
         from backend.retrieval import sql_executor
 
-        # generate_sql_query is a StructuredTool; the body is on .func.
-        tool = sql_executor.generate_sql_query
-        src = inspect.getsource(getattr(tool, "func", tool))
+        # The prompt moved out of generate_sql_query into a pure builder,
+        # so its rules can be asserted without a network call.
+        src = inspect.getsource(sql_executor.build_generation_prompt)
         return " ".join(src.split())
 
     def test_it_names_the_table_the_measures_live_on(self):
@@ -330,8 +330,7 @@ class TestCountIsNotADistractor:
     def _prompt(self):
         from backend.retrieval import sql_executor
 
-        tool = sql_executor.generate_sql_query
-        src = inspect.getsource(getattr(tool, "func", tool))
+        src = inspect.getsource(sql_executor.build_generation_prompt)
         return " ".join(src.split())
 
     def test_it_warns_that_filter_numbers_are_not_the_count(self):

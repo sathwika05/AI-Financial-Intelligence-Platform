@@ -199,26 +199,19 @@ def get_database_schema(table_name: str = None)-> str:
     return SCHEMA
 
 
-@tool
-def generate_sql_query(
+def build_generation_prompt(
     question: str,
-    config: RunnableConfig,
     schema_info: str = None,
-):
-    """Generate a safe PostgreSQL SELECT query from a user question."""
+) -> str:
+    """The generator's prompt, built without calling anything.
 
-    llm = get_llm_client(
-        config,
-        LLMTier.MEDIUM,
-    )
-
-    logger.info(
-    f"[SQL_EXECUTOR] Question received by generate_sql_query: {question}"
-)
-
+    Separated from generate_sql_query so the rules can be asserted in a
+    test. A rule that lives only inside a network call is a rule that
+    gets deleted by accident.
+    """
     schema_to_use = schema_info if schema_info else SCHEMA
 
-    prompt = f"""
+    return f"""
 You are an expert PostgreSQL query generator.
 
 DATABASE SCHEMA:
@@ -264,9 +257,11 @@ CRITICAL RULES:
   "smallest market cap" -> ORDER BY market_cap ASC
 
 3. RANKING FIELD VALIDITY
-- When ordering or ranking by a numeric field, exclude NULL values for that
-  ranking field.
-- If zero or negative values would make the ranking meaningless, exclude them.
+- This rule applies ONLY when the metric decides which companies qualify —
+  "the five lowest P/E", "the ten largest by market cap". There a company
+  without a P/E is not a low-P/E company, so exclude NULL values for the
+  ranking field, and exclude zero or negative values where they would make
+  the ranking meaningless.
 
 Examples:
 - smallest market cap:
@@ -276,6 +271,21 @@ Examples:
 - lowest P/E ratio:
     pe_ratio IS NOT NULL
     AND pe_ratio > 0
+
+- Do NOT apply it when the question already fixes its cohort: a list of
+  companies, a sector, or a theme. There the metric describes the members,
+  it does not choose them, and dropping one is a wrong answer.
+- Return every company in the cohort, including any whose metric is NULL,
+  zero or negative. A NULL P/E is a fact about that company — Intel has
+  none because its EPS is negative — and the question asked about it.
+- "Rank AMD, INTC and NVDA on valuation and growth" must return three
+  rows. Two rows is not a partial answer, it is the wrong cohort.
+- For a cohort ranking, select exactly:
+      c.ticker, c.name, fm.pe_ratio, fm.eps, fm.revenue_growth
+  Those three measures are what the downstream ranker scores on, so all
+  three belong in the result whether or not the question names each one.
+- Do not add c.market_cap to a cohort ranking. It is not one of the
+  measures being ranked, and adding it changes the query being judged.
 
 4. CONDITIONS ON FINANCIAL MEASURES
 - Interpret what the question MEANS, not the exact words it uses. Ways of
@@ -378,6 +388,26 @@ Return only the SQL query.
 Do not return markdown.
 Do not explain the query.
 """.strip()
+
+
+@tool
+def generate_sql_query(
+    question: str,
+    config: RunnableConfig,
+    schema_info: str = None,
+):
+    """Generate a safe PostgreSQL SELECT query from a user question."""
+
+    llm = get_llm_client(
+        config,
+        LLMTier.MEDIUM,
+    )
+
+    logger.info(
+        f"[SQL_EXECUTOR] Question received by generate_sql_query: {question}"
+    )
+
+    prompt = build_generation_prompt(question, schema_info)
 
     response = llm.invoke(
         prompt,

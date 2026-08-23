@@ -84,6 +84,32 @@ def _is_infrastructure_error(exc: Exception) -> bool:
     )
 
 
+# Which RAGAS metrics decide pass or fail. Everything scored is still
+# reported; this only governs the gate.
+#
+# context_entity_recall is deliberately absent. It looks for the entities a
+# reference answer names inside the retrieved DOCUMENTS, which is the wrong
+# evidence source for half of what a mixed or sentiment answer must say:
+# valuation and growth claims come from financial_metrics, and no news
+# article contains a P/E ratio. In run a88968e8 it averaged 0.321 and
+# correlated -0.08 with the figures in the answer — editing the goldens did
+# not move it — while correlating +0.42 with how much of the cited evidence
+# retrieval returned. It also moved 0.643 -> 0.286 between runs on an
+# unedited question. A number that noisy, measuring against a source that
+# cannot hold the claim, should inform rather than decide.
+#
+# response_relevancy stays in. It was a candidate for removal when its
+# noncommittal cliff was zeroing eight questions, but that was the pipeline
+# hedging, and 9411cbd fixed it at the source.
+GATING_METRICS = frozenset({
+    "faithfulness",
+    "response_relevancy",
+    "context_precision",
+    "context_recall",
+    "noise_sensitivity",
+})
+
+
 class RagasEvaluator:
     """Evaluate answer grounding and retrieval quality with RAGAS."""
 
@@ -162,10 +188,11 @@ class RagasEvaluator:
             )
 
             # Higher is better for all metrics except noise_sensitivity.
+            # Every metric is reported; only GATING_METRICS decide pass.
             quality_values: list[float] = []
 
             for name, value in scores.items():
-                if value is None:
+                if value is None or name not in GATING_METRICS:
                     continue
 
                 quality_values.append(

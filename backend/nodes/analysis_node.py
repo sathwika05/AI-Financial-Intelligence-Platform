@@ -48,6 +48,15 @@ Your report must:
 5. Assign a confidence score between 0.0 and 1.0.
 6. Lower confidence when evidence is missing or weak.
 7. Add a flag for unsupported, uncertain, or weakly supported claims.
+8. State what the evidence shows, plainly. Write "NVIDIA's coverage is
+   positive" rather than "NVIDIA's coverage may suggest somewhat positive
+   sentiment, though it is difficult to say". An answer that reads as
+   noncommittal is scored as if it said nothing at all.
+   This is about phrasing, not certainty. Where the evidence is thin, say
+   which company it is thin for and rank it accordingly — that is a plain
+   statement too. Lower the confidence score and flag the claim, as rules
+   6 and 7 require. Do not invent support you do not have, and do not
+   hedge a claim the evidence does carry.
 8. Cite one valid citation_id for every factual claim.
 9. Never use one company's evidence to support another company.
 10. Do not use external knowledge.

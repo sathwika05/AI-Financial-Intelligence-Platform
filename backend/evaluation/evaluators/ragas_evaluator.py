@@ -395,9 +395,30 @@ class RagasEvaluator:
         metric: Any,
         sample: Any,
     ) -> float | None:
-        value = await metric.single_turn_ascore(
-            sample
-        )
+        """One metric's score, or None if it could not produce one.
+
+        None rather than an exception, because a metric that fails is a
+        measurement lost, not a judgement made — and the composite already
+        skips None, so it simply does not vote.
+
+        Without this, one metric raising discarded all six. RAGAS threw a
+        numpy error ("inhomogeneous shape") on six questions across four
+        runs — sentiment_008 twice, mixed_005, mixed_014, mixed_015 — and
+        each recorded 0.0 with no metrics, which the gate reads as a
+        failure rather than as the absence of a result.
+        """
+        try:
+            value = await metric.single_turn_ascore(
+                sample
+            )
+        except Exception:
+            logger.exception(
+                "[RAGAS_EVALUATOR] %s failed; the other metrics still "
+                "score",
+                type(metric).__name__,
+            )
+
+            return None
 
         numeric = float(value)
 

@@ -81,12 +81,6 @@ Return only valid JSON using this structure:
       "final_score": 0.87,
       "recommendation": "Strong Buy",
       "summary": "Evidence-grounded company analysis",
-      "key_metrics": {
-        "pe_ratio": 35.4,
-        "revenue_growth": "38%",
-        "eps": 2.5,
-        "market_cap": "3.3T"
-      },
       "evidence": [
         {
           "claim": "The company has strong revenue growth.",
@@ -372,6 +366,8 @@ async def run_llm_analysis(
                 "Analysis LLM response must be a JSON object"
             )
 
+        attach_ranked_metrics(report, ranked)
+
         report["_meta"] = {
             "intent": intent,
             "companies_ranked": len(ranked),
@@ -487,6 +483,39 @@ async def analysis_node(
         # Consumed — a later retry gets the fresh reviewer flags.
         "review_feedback": [],
     }
+
+
+
+def attach_ranked_metrics(
+    report: dict,
+    ranked: list[dict],
+) -> None:
+    """Fill each company's key_metrics from the ranking, in place.
+
+    The values are already on the ranked company, straight from SQL. Having
+    the analysis LLM restate them cost output tokens on every company — the
+    node is the slowest stage, and its time goes on tokens generated rather
+    than prompt size — and put a transcription step between a database value
+    and the screen. frontend/src/api/types.ts records what that produced:
+    market_cap arriving sometimes as a number and sometimes as a string,
+    revenue_growth pre-formatted as "85.2%".
+
+    A null stays null. Intel has no P/E because its EPS is negative, and
+    that absence is a fact about the company rather than a gap to fill.
+    """
+    metrics_by_ticker = {
+        company.get("ticker"): company.get("metrics") or {}
+        for company in ranked
+        if company.get("ticker")
+    }
+
+    for company in report.get("companies") or []:
+        metrics = metrics_by_ticker.get(
+            company.get("ticker")
+        )
+
+        if metrics is not None:
+            company["key_metrics"] = metrics
 
 
 def _get_sources_used(

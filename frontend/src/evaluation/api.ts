@@ -93,6 +93,22 @@ export interface RunMetrics {
 }
 
 /** Mirrors `serialize_provider` in backend/api/admin_llm_routes.py. */
+/** One question's result within a run.
+ *
+ * Persisted per question as the run goes, so a run that dies keeps what it
+ * already scored — see the incremental write in evaluation_routes.
+ */
+export interface QuestionResult {
+  question_id: string;
+  question: string;
+  expected_intent: string | null;
+  actual_intent: string | null;
+  overall_score: number | null;
+  passed: boolean | null;
+  aggregate_metrics: Record<string, number | null> | null;
+  error: string | null;
+}
+
 export interface Provider {
   id: string;
   name: string;
@@ -248,8 +264,15 @@ export function getRun(
   runId: string,
   signal?: AbortSignal,
 ): Promise<RunMetrics> {
-  return request<RunMetrics>(
-    `/api/evaluation/runs/${runId}`,
+  return request<RunMetrics>(`/api/evaluation/runs/${runId}`, {}, signal);
+}
+
+export function getRunQuestions(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<QuestionResult[]> {
+  return request<QuestionResult[]>(
+    `/api/evaluation/runs/${runId}/questions`,
     {},
     signal,
   );

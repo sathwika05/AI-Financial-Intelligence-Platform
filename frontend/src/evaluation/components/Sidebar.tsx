@@ -22,9 +22,10 @@ import {
 /**
  * Dashboard navigation.
  *
- * The sections and their order follow the design reference exactly. Most
- * entries are backed by real data; the one that is not — Per-Question
- * Results — opens a view that says so rather than showing invented rows.
+ * The sections and their order follow the design reference exactly, and
+ * every entry is backed by real data. Per-Question Results was the one that
+ * was not, until results were persisted per question rather than only as a
+ * run-level aggregate.
  *
  * There is no link back to the research console here, because the reference
  * has none. The brand mark serves that purpose.

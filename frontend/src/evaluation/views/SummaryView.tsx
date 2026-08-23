@@ -27,11 +27,7 @@ import {
   titleCase,
 } from "../format";
 import { readMetric } from "../metrics";
-import {
-  DonutChart,
-  GroupedBarChart,
-  LineChart,
-} from "../components/charts";
+import { DonutChart, GroupedBarChart, LineChart } from "../components/charts";
 import {
   EmptyState,
   Field,
@@ -42,6 +38,7 @@ import {
   UnavailablePanel,
 } from "../components/primitives";
 import { SERIES } from "../palette";
+import { PerQuestionPanel } from "./PerQuestionView";
 import { ROUTE_CARDS, RoutePerformanceCards } from "./RoutePerformance";
 import { NodeLatencyPanel } from "./NodeLatency";
 import { ToolSummaryPanel } from "./ToolSummary";
@@ -53,8 +50,6 @@ import { ToolSummaryPanel } from "./ToolSummary";
  */
 
 const CHART_RUN_LIMIT = 12;
-
-
 
 /**
  * Slice colours and the sub-label the reference puts under "Hybrid". Keyed by
@@ -226,7 +221,9 @@ export function SummaryView({
           icon={Layers3}
           tone="violet"
           footer={
-            run.status === "completed" ? "100% Completed" : titleCase(run.status)
+            run.status === "completed"
+              ? "100% Completed"
+              : titleCase(run.status)
           }
         />
         <KpiTile
@@ -379,9 +376,9 @@ export function SummaryView({
             />
           ) : (
             <p className="ev-note">
-              Two completed runs are needed before a trend means anything.
-              Runs recorded before usage tracking existed carry no cost or
-              token figures and leave a gap in the line.
+              Two completed runs are needed before a trend means anything. Runs
+              recorded before usage tracking existed carry no cost or token
+              figures and leave a gap in the line.
             </p>
           )}
         </Panel>
@@ -428,8 +425,8 @@ export function SummaryView({
           />
 
           <p className="ev-note" style={{ marginTop: 8 }}>
-            Claim-level counts — unsupported claims, missing citations,
-            invalid tickers — are not produced by any evaluator.
+            Claim-level counts — unsupported claims, missing citations, invalid
+            tickers — are not produced by any evaluator.
           </p>
         </Panel>
 
@@ -456,12 +453,7 @@ export function SummaryView({
           )}
         </Panel>
 
-        <UnavailablePanel
-          span={12}
-          icon={Target}
-          title="Per-Question Results"
-          reason="The runner evaluates every question individually — question text, expected and actual route, score, pass/fail, latency and cost — but only the run-level aggregate is persisted, so the table has no source. See Per-Question Results under Analytics for what storing it would take."
-        />
+        <PerQuestionPanel run={run} />
       </div>
     </>
   );

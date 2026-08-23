@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   EvaluationApiError,
+  getRunQuestions,
   listProviderModels,
   listProviders,
   listRuns,
   type Provider,
   type ProviderModel,
+  type QuestionResult,
   type RunMetrics,
 } from "./api";
 import { isTerminal } from "./metrics";
@@ -85,6 +87,70 @@ export function useRuns(): RunsState {
   }, []);
 
   return { runs, status, error, isRefreshing, reload };
+}
+
+export interface RunQuestionsState {
+  questions: QuestionResult[];
+  status: LoadStatus;
+  error: string | null;
+}
+
+/**
+ * Per-question results for one run.
+ *
+ * Keyed by run id in state rather than cleared on change, so a response that
+ * arrives after the selection moved on cannot paint over the newer run, and
+ * switching runs shows nothing rather than the previous run's questions.
+ *
+ * Every state write happens in a callback, matching useRuns: a synchronous
+ * write in the effect body is what the react-hooks rule objects to.
+ */
+export function useRunQuestions(runId: string | null): RunQuestionsState {
+  const [loaded, setLoaded] = useState<{
+    runId: string;
+    rows: QuestionResult[];
+  } | null>(null);
+  const [status, setStatus] = useState<LoadStatus>("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!runId) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    getRunQuestions(runId, controller.signal)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        setLoaded({ runId, rows: result });
+        setError(null);
+        setStatus("ready");
+      })
+      .catch((caught: unknown) => {
+        if (cancelled || isAbort(caught)) {
+          return;
+        }
+
+        setError(messageFor(caught, "Could not load per-question results."));
+        setStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [runId]);
+
+  return {
+    questions: loaded && loaded.runId === runId ? loaded.rows : [],
+    status: runId ? status : "idle",
+    error,
+  };
 }
 
 /**

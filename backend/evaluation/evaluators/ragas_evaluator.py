@@ -101,6 +101,16 @@ def _is_infrastructure_error(exc: Exception) -> bool:
 # response_relevancy stays in. It was a candidate for removal when its
 # noncommittal cliff was zeroing eight questions, but that was the pipeline
 # hedging, and 9411cbd fixed it at the source.
+# How much of each retrieved context to keep in the result.
+#
+# Enough to identify which chunk was retrieved, not enough to re-read the
+# corpus out of question_results. context_recall compares the reference's
+# claims against these; without them a 0.00 records that fifteen contexts
+# existed and nothing about what they were, and every explanation for a low
+# score is a guess. Three such guesses have already been tested and failed.
+CONTEXT_PREVIEW_CHARS = 240
+
+
 GATING_METRICS = frozenset({
     "faithfulness",
     "response_relevancy",
@@ -229,6 +239,14 @@ class RagasEvaluator:
                     "reference_context_count": len(
                         reference_contexts
                     ),
+                    "retrieved_contexts": [
+                        context[:CONTEXT_PREVIEW_CHARS]
+                        for context in contexts
+                    ],
+                    "reference_contexts_preview": [
+                        context[:CONTEXT_PREVIEW_CHARS]
+                        for context in reference_contexts
+                    ],
                 },
                 errors=[],
             )

@@ -47,3 +47,19 @@ class TestTheReportDoesNotReciteMetrics:
         """Trimming what is written must not touch the grounded part."""
         assert "citation_id" in SYSTEM_PROMPT
         assert "noncommittal" in SYSTEM_PROMPT.lower()
+
+
+class TestTheTwoCapsAgree:
+    """
+    Retrieval depth and the reranker's evidence budget are sequential caps.
+    Whichever is smaller decides how much evidence reaches the answer, so
+    raising one alone is invisible — which happened twice, in opposite
+    directions: run 97a171a1 raised the budget against a pool of nine, and
+    run 8a6c17f8 raised the pool to 25 while the budget still selected 15.
+    """
+
+    def test_the_reranker_can_use_what_retrieval_returns(self):
+        from backend.nodes.reranker_node import EVIDENCE_PER_COMPANY
+        from backend.retrieval.vector_search import CHUNKS_PER_COMPANY
+
+        assert EVIDENCE_PER_COMPANY >= CHUNKS_PER_COMPANY

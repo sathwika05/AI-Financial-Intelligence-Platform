@@ -22,12 +22,16 @@ logger = logging.getLogger(__name__)
 # budget scales with the number of companies that will actually be
 # reported instead of a fixed global top-k.
 TOP_K_FLOOR = 8
-# Raising this does nothing on its own. It budgets how many chunks the
-# reranker may SELECT, but it selects from vector_result.retrieved_chunks,
-# and that pool is already smaller than the budget: run 97a171a1 raised it
-# to 5 and every question still ended with nine contexts. The cap that
-# binds is the vector node's retrieval depth, upstream of here.
-EVIDENCE_PER_COMPANY = 3
+# Paired with CHUNKS_PER_COMPANY in vector_search: these are sequential
+# caps, not alternatives. This budgets how many chunks the reranker may
+# SELECT, and it selects from vector_result.retrieved_chunks, so whichever
+# is smaller decides.
+#
+# Raising this alone did nothing (run 97a171a1) because the pool was nine.
+# Raising the pool alone did nothing either (run 8a6c17f8): retrieval
+# returned top_k 25 and the reranker still selected 15, discarding what had
+# just been fetched. Both have to move.
+EVIDENCE_PER_COMPANY = 5
 MIN_EVIDENCE_PER_COMPANY = 2
 
 # How many retrieved documents each reported company must keep, when the

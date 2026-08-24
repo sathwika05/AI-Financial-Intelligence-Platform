@@ -7,6 +7,7 @@ from langsmith import traceable
 from sqlalchemy import text
 from rank_bm25 import BM25Plus
 
+from backend.retrieval.embedding_cache import embed_query_cached
 from backend.services.postgres_service import engine
 
 from backend.retrieval.query_filters import (
@@ -16,8 +17,10 @@ from backend.retrieval.query_filters import (
 
 logger = logging.getLogger(__name__)
 
+EMBEDDING_MODEL = "text-embedding-3-small"
+
 embeddings = OpenAIEmbeddings(
-    model="text-embedding-3-small"
+    model=EMBEDDING_MODEL
 )
 
 
@@ -26,7 +29,21 @@ embeddings = OpenAIEmbeddings(
 # The reranker applies the same idea to its evidence budget: a question
 # covering N companies needs evidence for each of them, not N slots shared
 # across the best-scoring one or two.
-CHUNKS_PER_COMPANY = 3
+# Five, not three. This is the cap that binds: the reranker selects from
+# what this returns, so raising its own evidence budget did nothing while
+# this stayed at three.
+#
+# Recording the retrieved contexts (422500a) showed retrieval returning a
+# median of about half the evidence the goldens themselves cite — mixed_002
+# got 2 of its 17, and a three-company sentiment question could see nine
+# chunks against the 14 its reference cites. Evidence that is never
+# retrieved cannot support an answer however good the pipeline is.
+#
+# Not free: every chunk reaches the analysis prompt, and that node is the
+# slowest stage in the graph. Measured by coverage — how many cited
+# contexts appear in the retrieved set — rather than by context_recall,
+# which moved 0.289 between two identical runs and would report noise.
+CHUNKS_PER_COMPANY = 5
 
 
 @traceable(
@@ -41,7 +58,11 @@ async def search_similar_chunks_raw(query: str, top_k: int = 20, filters: dict =
     Fetches more than needed for BM25 to rerank.
     """
 
-    query_embedding = await embeddings.aembed_query(query)
+    query_embedding = await embed_query_cached(
+        query,
+        embedder=embeddings,
+        model=EMBEDDING_MODEL,
+    )
 
     vector_str = "[" + ",".join(
         str(x) for x in query_embedding

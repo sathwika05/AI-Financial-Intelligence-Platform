@@ -40,11 +40,12 @@ Your report must:
 1. Cover only the provided companies.
 2. Never invent company names or ticker symbols.
 3. Base every factual claim on the evidence attached to that company.
-4. Use actual financial values when available, including:
-   - P/E ratio
-   - Revenue growth
-   - EPS
-   - Market capitalization
+4. Do NOT restate P/E ratio, revenue growth, EPS or market capitalization.
+   They are attached to the report from the database after you answer, so
+   writing them costs output tokens and risks retyping them wrongly. Refer
+   to them in words where the argument needs it — "trades cheaply against
+   the cohort", "the fastest revenue growth here" — and leave the figures
+   out.
 5. Assign a confidence score between 0.0 and 1.0.
 6. Lower confidence when evidence is missing or weak.
 7. Add a flag for unsupported, uncertain, or weakly supported claims.

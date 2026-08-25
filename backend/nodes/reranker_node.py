@@ -488,12 +488,16 @@ async def rerank_hybrid_contexts(
         the user's financial question.
 
         Rules:
-        - Select only useful evidence.
+        - Aim to return {top_k} pieces of evidence. The number is a
+          target, not a limit. Return fewer only when there is genuinely
+          nothing left to add, because what remains is duplicated or says
+          nothing about the question. An answer can only cite what you
+          keep, so evidence you drop is evidence it cannot use.
         - Do not invent facts.
         - Do not rewrite or modify evidence.
         - Prefer specific evidence over generic evidence.
         - Prefer evidence directly related to the named companies and metrics.
-        - Remove weak or duplicate evidence.
+        - Remove duplicates, and anything irrelevant to the question.
         - relevance_score must be between 0.0 and 1.0.
         - Return each candidate at most once.{coverage_rules}
         """.strip()

@@ -1,12 +1,18 @@
-import { useMemo, useState } from "react";
-import { PlayCircle, RefreshCw } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { CircleStop, PlayCircle, RefreshCw } from "lucide-react";
 import {
   DATASETS,
   EvaluationApiError,
+  INDEX_TYPES,
   QUESTION_SETS,
   RETRIEVAL_MODES,
+  RETRIEVAL_PIPELINES,
+  cancelRun,
+  pipelineToFlags,
   triggerRun,
+  type IndexType,
   type QuestionSet,
+  type RetrievalPipeline,
 } from "../api";
 import {
   questionSetLabel,
@@ -30,6 +36,7 @@ export function RunBar({
   onRefresh,
   isRefreshing,
   activeRunCount = 0,
+  activeRunIds = [],
 }: {
   onLaunched: (runId: string) => void;
   onRefresh: () => void;
@@ -37,9 +44,23 @@ export function RunBar({
   /** Runs still queued or running. The backend rejects a duplicate outright;
    *  this stops the reader from queuing one in the first place. */
   activeRunCount?: number;
+  /** Those same runs, so Stop knows what to cancel. */
+  activeRunIds?: string[];
 }) {
-  const { providers, status: providerStatus, error: providerError } =
-    useProviders();
+  const {
+    providers,
+    status: providerStatus,
+    error: providerError,
+    reload: reloadProviders,
+  } = useProviders();
+
+  // Refresh means "re-read everything the bar shows", not just the run list.
+  // The provider fetch is the one most likely to have failed, since it only
+  // happens on mount.
+  const handleRefresh = useCallback(() => {
+    reloadProviders();
+    onRefresh();
+  }, [reloadProviders, onRefresh]);
 
   // Null means "no explicit choice yet", which resolves to the provider's own
   // default below. Deriving rather than seeding avoids a render pass where
@@ -49,10 +70,19 @@ export function RunBar({
   const [retrievalMode, setRetrievalMode] = useState<string>(
     RETRIEVAL_MODES[0],
   );
+  // Not sent with the run: RunRequest has no index_type. See INDEX_TYPES.
+  const [indexType, setIndexType] = useState<IndexType>(INDEX_TYPES[0]);
   const [questionSet, setQuestionSet] = useState<QuestionSet>(
     QUESTION_SETS[0],
   );
   const [topK, setTopK] = useState(5);
+
+  // Retrieval pipeline switches. Both off is the baseline, so the default
+  // launch is the pipeline as it has always run.
+  const [isStopping, setIsStopping] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
+  const [pipeline, setPipeline] =
+    useState<RetrievalPipeline>("baseline");
 
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
@@ -112,6 +142,7 @@ export function RunBar({
         question_set: questionSet,
         company_filter: "all",
         top_k: topK,
+        ...pipelineToFlags(pipeline),
       });
 
       setLaunchNotice(
@@ -139,6 +170,31 @@ export function RunBar({
       : null);
 
   const hasActiveRun = activeRunCount > 0;
+
+  // Cancelling is cooperative: the run stops after the question already in
+  // flight, which on a mixed question can be several minutes. Say so rather
+  // than letting the reader think the click failed.
+  const handleStop = useCallback(async () => {
+    if (activeRunIds.length === 0) {
+      return;
+    }
+
+    setIsStopping(true);
+    setStopError(null);
+
+    try {
+      await Promise.all(activeRunIds.map((id) => cancelRun(id)));
+      onRefresh();
+    } catch (caught) {
+      setStopError(
+        caught instanceof EvaluationApiError
+          ? caught.message
+          : "Could not request cancellation.",
+      );
+    } finally {
+      setIsStopping(false);
+    }
+  }, [activeRunIds, onRefresh]);
 
   return (
     <div className="ev-runbar">
@@ -183,6 +239,40 @@ export function RunBar({
             {RETRIEVAL_MODES.map((mode) => (
               <option key={mode} value={mode}>
                 {retrievalLabel(mode)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="ev-control ev-control--wide">
+          <span className="ev-control__label">Retrieval Pipeline</span>
+          <select
+            className="ev-control__input"
+            value={pipeline}
+            onChange={(event) =>
+              setPipeline(event.target.value as RetrievalPipeline)
+            }
+          >
+            {RETRIEVAL_PIPELINES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="ev-control ev-control--medium">
+          <span className="ev-control__label">Index Type</span>
+          <select
+            className="ev-control__input"
+            value={indexType}
+            onChange={(event) =>
+              setIndexType(event.target.value as IndexType)
+            }
+          >
+            {INDEX_TYPES.map((name) => (
+              <option key={name} value={name}>
+                {name}
               </option>
             ))}
           </select>
@@ -238,13 +328,31 @@ export function RunBar({
             }}
           />
         </label>
+
       </div>
 
       <div className="ev-runbar__actions">
+        {hasActiveRun && (
+          <button
+            type="button"
+            className="ev-btn ev-btn--stop"
+            onClick={handleStop}
+            disabled={isStopping}
+            title={
+              activeRunCount === 1
+                ? "Stop the run after the question in flight"
+                : `Stop all ${activeRunCount} runs after their current question`
+            }
+          >
+            <CircleStop size={15} />
+            {isStopping ? "Stopping…" : "Stop"}
+          </button>
+        )}
+
         <button
           type="button"
           className="ev-btn ev-btn--ghost"
-          onClick={onRefresh}
+          onClick={handleRefresh}
           disabled={isRefreshing}
         >
           <RefreshCw size={15} />
@@ -273,13 +381,13 @@ export function RunBar({
         </button>
       </div>
 
-      {(blockingError || launchError) && (
+      {(blockingError || launchError || stopError) && (
         <p className="ev-runbar__message ev-runbar__message--error">
-          {blockingError ?? launchError}
+          {blockingError ?? launchError ?? stopError}
         </p>
       )}
 
-      {!blockingError && !launchError && hasActiveRun && (
+      {!blockingError && !launchError && !stopError && hasActiveRun && (
         <p className="ev-runbar__message">
           {activeRunCount === 1
             ? "A benchmark is already running. Queuing another would compete for the same pipeline."

@@ -18,6 +18,10 @@ export interface RunMetrics {
   retrieval_mode: string;
   question_set: string;
 
+  /** Which retrieval pipeline produced this run. */
+  rrf_enabled: boolean;
+  cross_encoder_enabled: boolean;
+
   status: string;
   total_requests: number;
   total_cost: number;
@@ -143,6 +147,10 @@ export interface RunRequest {
   question_set: QuestionSet;
   company_filter: string;
   top_k: number;
+
+  /** Both off is the baseline pipeline. Independent of each other. */
+  rrf_enabled: boolean;
+  cross_encoder_enabled: boolean;
 }
 
 /** Mirrors `RunResponse` from the 202 returned by POST /run. */
@@ -174,6 +182,81 @@ export const RETRIEVAL_MODES = [
 ] as const;
 
 export const DATASETS = ["SEC Filings", "Earnings Calls", "News"] as const;
+
+/**
+ * pgvector index types, for the launcher's Index Type selector.
+ *
+ * Display only: the selection is not part of RunRequest and does not reach
+ * the backend. The index in the database is IVFFlat with lists=100, created
+ * in the d915f0965263 migration, whatever is chosen here.
+ */
+export const INDEX_TYPES = ["Flat", "IVFFlat", "HNSW"] as const;
+
+/**
+ * The retrieval pipeline, as one choice rather than two checkboxes.
+ *
+ * The backend takes two independent booleans, but only these four
+ * combinations are meaningful to compare, and a single selector keeps the
+ * launcher honest about that: you pick the arm you are benchmarking, not two
+ * flags whose interaction you have to reason about. `toFlags` is the only
+ * place the mapping lives.
+ */
+export const RETRIEVAL_PIPELINES = [
+  {
+    value: "baseline",
+    label: "Baseline (dense only)",
+    rrf_enabled: false,
+    cross_encoder_enabled: false,
+  },
+  {
+    value: "rrf",
+    label: "RRF fusion",
+    rrf_enabled: true,
+    cross_encoder_enabled: false,
+  },
+  {
+    value: "cross_encoder",
+    label: "Cross-encoder rerank",
+    rrf_enabled: false,
+    cross_encoder_enabled: true,
+  },
+  {
+    value: "rrf_cross_encoder",
+    label: "RRF + Cross-encoder",
+    rrf_enabled: true,
+    cross_encoder_enabled: true,
+  },
+] as const;
+
+export type RetrievalPipeline = (typeof RETRIEVAL_PIPELINES)[number]["value"];
+
+/** The two flags a pipeline maps to. Unknown values fall back to baseline. */
+export function pipelineToFlags(value: RetrievalPipeline): {
+  rrf_enabled: boolean;
+  cross_encoder_enabled: boolean;
+} {
+  const found = RETRIEVAL_PIPELINES.find((p) => p.value === value);
+
+  return {
+    rrf_enabled: found?.rrf_enabled ?? false,
+    cross_encoder_enabled: found?.cross_encoder_enabled ?? false,
+  };
+}
+
+/** The inverse, for labelling a finished run from its stored flags. */
+export function flagsToPipelineLabel(
+  rrf: boolean,
+  crossEncoder: boolean,
+): string {
+  const found = RETRIEVAL_PIPELINES.find(
+    (p) => p.rrf_enabled === rrf && p.cross_encoder_enabled === crossEncoder,
+  );
+
+  return found ? found.label : "Baseline (dense only)";
+}
+
+
+export type IndexType = (typeof INDEX_TYPES)[number];
 
 export class EvaluationApiError extends Error {
   readonly status: number | null;
@@ -274,6 +357,18 @@ export function getRunQuestions(
   return request<QuestionResult[]>(
     `/api/evaluation/runs/${runId}/questions`,
     {},
+    signal,
+  );
+}
+
+/** Ask a queued or running benchmark to stop at its next question. */
+export function cancelRun(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<{ run_id: string; message: string }> {
+  return request<{ run_id: string; message: string }>(
+    `/api/evaluation/run/${runId}/cancel`,
+    { method: "POST" },
     signal,
   );
 }

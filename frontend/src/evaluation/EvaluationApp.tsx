@@ -202,6 +202,7 @@ export default function EvaluationApp() {
           onRefresh={reload}
           isRefreshing={isRefreshing}
           activeRunCount={inFlight.length}
+          activeRunIds={inFlight.map((run) => run.run_id)}
         />
 
         {hasActiveRun && (

@@ -415,7 +415,13 @@ export function findPreviousRun(
 }
 
 export function isTerminal(status: string): boolean {
-  return status === "completed" || status === "failed";
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    // A cancelled run is finished. Omitting it here would leave the run
+    // list polling a run that will never change again.
+    status === "cancelled"
+  );
 }
 
 /** Mean over the runs that reported the metric; null when none did. */

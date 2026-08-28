@@ -8,6 +8,7 @@ import {
   formatScore,
   questionSetLabel,
   retrievalLabel,
+  retrievalPipelineLabel,
   shortRunId,
 } from "../format";
 import { Layers3 } from "lucide-react";
@@ -98,7 +99,14 @@ export function RunsView({
                   {formatDuration(run.created_at, run.completed_at)}
                 </td>
                 <td>{run.provider_name ?? "—"}</td>
-                <td>{retrievalLabel(run.retrieval_mode)}</td>
+                <td>
+                  {retrievalLabel(run.retrieval_mode)}
+                  {retrievalPipelineLabel(run) && (
+                    <span className="ev-pipeline-pill">
+                      {retrievalPipelineLabel(run)}
+                    </span>
+                  )}
+                </td>
                 <td>{questionSetLabel(run.question_set)}</td>
                 <td className="ev-table__num num">{run.total_requests}</td>
                 <td className="ev-table__num num">

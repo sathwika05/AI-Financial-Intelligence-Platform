@@ -200,3 +200,28 @@ export function retrievalLabel(mode: string | null | undefined): string {
 
   return RETRIEVAL_LABELS[mode] ?? titleCase(mode);
 }
+
+
+/**
+ * The retrieval variant a run used, or null for the baseline.
+ *
+ * Null rather than "baseline" on purpose: every run recorded before these
+ * flags existed used the baseline pipeline, and tagging all of history with
+ * a new badge would imply a distinction that did not exist at the time.
+ */
+export function retrievalPipelineLabel(run: {
+  rrf_enabled?: boolean;
+  cross_encoder_enabled?: boolean;
+}): string | null {
+  const parts: string[] = [];
+
+  if (run.rrf_enabled) {
+    parts.push("RRF");
+  }
+
+  if (run.cross_encoder_enabled) {
+    parts.push("CE");
+  }
+
+  return parts.length > 0 ? parts.join(" + ") : null;
+}

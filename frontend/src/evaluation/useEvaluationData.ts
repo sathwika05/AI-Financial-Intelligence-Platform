@@ -177,23 +177,42 @@ export interface ProvidersState {
   providers: Provider[];
   status: LoadStatus;
   error: string | null;
+  reload: () => void;
 }
 
+/**
+ * The provider list, refetchable.
+ *
+ * Fetching once on mount left the launcher stranded whenever the API was
+ * down at that moment: the backend recovering did not repopulate the
+ * selector, because nothing asked it again, so the run bar sat on "None
+ * available" with a stale error until the tab itself was reloaded. The
+ * reload token is the same mechanism useRuns uses.
+ */
 export function useProviders(): ProvidersState {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    let cancelled = false;
 
     listProviders(controller.signal)
       .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
         setProviders(result);
+        // Clears the message left by an earlier failed attempt; without this
+        // a recovered fetch still renders the old error.
+        setError(null);
         setStatus("ready");
       })
       .catch((caught: unknown) => {
-        if (isAbort(caught)) {
+        if (cancelled || isAbort(caught)) {
           return;
         }
 
@@ -201,10 +220,17 @@ export function useProviders(): ProvidersState {
         setStatus("error");
       });
 
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [reloadToken]);
+
+  const reload = useCallback(() => {
+    setReloadToken((token) => token + 1);
   }, []);
 
-  return { providers, status, error };
+  return { providers, status, error, reload };
 }
 
 interface ModelsState {

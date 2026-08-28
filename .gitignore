@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+# Playwright MCP session artifacts: console logs, page snapshots and the
+# screenshots taken while driving the dashboard. Regenerated every session,
+# and they were being committed as churn on every UI change.
+.playwright-mcp/
+*.png

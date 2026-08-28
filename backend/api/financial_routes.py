@@ -3,7 +3,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from langchain_core.messages import HumanMessage
 from langsmith import traceable
 from pydantic import BaseModel, Field
@@ -11,7 +11,13 @@ from requests import session
 from sqlalchemy.ext.asyncio import AsyncSession
 from langchain_core.load import dumps
 
+from backend.config import settings
 from backend.graph.financial_graph import financial_graph
+from backend.security import events
+from backend.security.input_guard import InputGuard
+from backend.security.output_validator import OutputValidator
+from backend.security.pii import PIIDetector
+from backend.security.rate_limit import RateLimiter
 from backend.llm.llm_config_service import LLMConfigService
 from backend.observability.logging import query_run
 from backend.services.postgres_service import get_db
@@ -26,6 +32,17 @@ class FinancialQueryRequest(BaseModel):
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# One instance each: the patterns compile once rather than per request.
+# Everything here costs about 0.4ms in total, measured, against a pipeline
+# that takes 30 to 150 seconds.
+_input_guard = InputGuard()
+_pii = PIIDetector()
+_output_validator = OutputValidator()
+_rate_limiter = RateLimiter(
+    limit=settings.SECURITY_RATE_LIMIT,
+    window_seconds=settings.SECURITY_RATE_WINDOW_SECONDS,
+)
 
 # Traced separately from the route handler: @traceable adds a `config`
 # kwarg to the wrapped signature, which FastAPI would expose as a query
@@ -54,7 +71,11 @@ async def _run_financial_query(query: str, llm_runtime):
 
 
 @router.post("/api/retrieve/financial")
-async def financial_retrieval(request: FinancialQueryRequest, session: AsyncSession = Depends(get_db),):
+async def financial_retrieval(
+    request: FinancialQueryRequest,
+    http_request: Request,
+    session: AsyncSession = Depends(get_db),
+):
     """
     Unified hybrid retrieval endpoint.
     Flow:
@@ -80,7 +101,69 @@ async def financial_retrieval(request: FinancialQueryRequest, session: AsyncSess
     # apart from a benchmark running concurrently in the background.
     with query_run():
         try:
-            logger.info("[FINANCIAL_ROUTES] Query: %s", request.query,)
+            # ── Security, in order of cost ──────────────────────────────
+            #
+            # A query costs 30-150s and real provider spend, and preprod has
+            # no authentication, so the ceiling is about cost rather than
+            # login abuse. Fails open: see RateLimiter.
+            caller = (
+                http_request.client.host
+                if http_request.client
+                else "unknown"
+            )
+            decision = _rate_limiter.allow(caller)
+
+            if not decision.allowed:
+                await events.record(
+                    kind="rate_limited",
+                    detail=f"caller {caller}",
+                    query=request.query,
+                )
+
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        "Too many queries. Each one runs the full pipeline; "
+                        f"try again in {decision.retry_after} seconds."
+                    ),
+                    headers={"Retry-After": str(decision.retry_after)},
+                )
+
+            # Instructions aimed at the assistant rather than questions
+            # about the data. Tuned so ordinary finance wording — "act as
+            # both issuer and network", "ignore the previous quarter" —
+            # passes; see InputGuard.
+            verdict = _input_guard.inspect(request.query)
+
+            if verdict.blocked:
+                await events.record(
+                    kind="input_blocked",
+                    detail=verdict.pattern or "injection pattern",
+                    query=request.query,
+                )
+
+                raise HTTPException(status_code=400, detail=verdict.reason)
+
+            # Masked before the query reaches the provider or LangSmith.
+            # Traces are the copy that persists.
+            found_pii = _pii.detect(request.query)
+            safe_query = _input_guard.sanitize(
+                _pii.mask(request.query) if found_pii else request.query
+            )
+
+            if found_pii:
+                await events.record(
+                    kind="input_pii",
+                    detail=f"masked {sorted(found_pii)}",
+                    query=request.query,
+                )
+
+            # The LLM guard would run here. It is off by default because it
+            # is an API round trip — 1-3s against ~0.4ms for everything
+            # above. Enable with SECURITY_LLM_GUARD_ENABLED=true; see
+            # backend/security/llm_guard.py.
+
+            logger.info("[FINANCIAL_ROUTES] Query: %s", safe_query,)
 
             llm_config_service = LLMConfigService(session)
 
@@ -96,7 +179,7 @@ async def financial_retrieval(request: FinancialQueryRequest, session: AsyncSess
                         )
 
             result = await _run_financial_query(
-                request.query,
+                safe_query,
                 llm_runtime,
             )
             # print(json.dumps(json.loads(dumps(result)), indent=2))
@@ -116,13 +199,51 @@ async def financial_retrieval(request: FinancialQueryRequest, session: AsyncSess
                     dumps(result),
                 )
 
+            # The report is checked on the way out as well as the query on
+            # the way in. Personal data is masked and the report still goes,
+            # because the analysis around it remains useful; a leaked
+            # credential blocks it, because no version of that report is
+            # worth returning.
+            final_report = result.get("final_report")
+            validation = _output_validator.validate(
+                json.dumps(final_report, default=str)
+                if final_report is not None
+                else ""
+            )
+
+            if validation.findings:
+                await events.record(
+                    kind="output_blocked" if validation.blocked else "output_pii",
+                    detail="; ".join(validation.findings),
+                    query=safe_query,
+                )
+
+            if validation.blocked:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "The generated report was withheld because it "
+                        "contained credential-like content."
+                    ),
+                )
+
+            if validation.findings:
+                final_report = json.loads(validation.output)
+
             return {
-                "query":  request.query,
+                "query":  safe_query,
                 "provider": llm_runtime.provider_name,
-                "final_report": result.get("final_report"),
+                "final_report": final_report,
                 "ranked_companies": result.get("ranked_companies", []),
                 "scoring_result": result.get("scoring_result"),
             }
+
+        except HTTPException:
+            # A deliberate refusal — rate limit, blocked input, withheld
+            # report. Without this the broad handler below turns every one
+            # of them into an opaque 500, so a caller cannot tell "you are
+            # sending too many" from "the pipeline fell over".
+            raise
 
         except RuntimeError as exc:
             logger.exception(

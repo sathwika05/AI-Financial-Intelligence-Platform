@@ -7,6 +7,7 @@ from backend.observability.logging import RunTagFilter
 
 
 
+from backend.config import settings
 from backend.services.postgres_service import engine, Base, enable_pgvector
 from backend.services.redis_service import ping_redis
 from backend.models import db_models  
@@ -75,33 +76,82 @@ async def lifespan(app: FastAPI):
 
     logger.info("Application shutting down")
 
-app = FastAPI(title="Financial Intelligence Pipeline", lifespan=lifespan)
+# Which routers each deployment mode is allowed to mount.
+#
+# "portfolio" is the public, unauthenticated preprod: the UI screen and
+# nothing else. Everything omitted here either mutates provider
+# configuration, re-indexes the corpus, or launches benchmarks that spend
+# real provider credit -- none of which can be exposed without a login.
+#
+# The absence is the control. Unlinking a route from the UI leaves it
+# reachable by anyone who guesses the path.
+DEPLOYMENT_MODES = ("portfolio", "full")
 
-app.include_router(admin_llm_router)
-app.include_router(sql_router)
-app.include_router(vector_router)
-app.include_router(financial_router)
-app.include_router(evaluation_router)
+
+def build_app(*, deployment_mode: str | None = None) -> FastAPI:
+    """
+    Assemble the application for one deployment mode.
+
+    Split out of module scope so the mounted surface is testable: the whole
+    point of the mode is which routes do not exist, and that cannot be
+    asserted against an app that was built at import time.
+    """
+    mode = deployment_mode or settings.DEPLOYMENT_MODE
+
+    if mode not in DEPLOYMENT_MODES:
+        # Loudly, rather than falling through to the permissive branch: a
+        # misspelled "portfolio" is exactly how a public deployment ends up
+        # serving the admin router.
+        raise ValueError(
+            f"Unknown DEPLOYMENT_MODE {mode!r}; "
+            f"expected one of {DEPLOYMENT_MODES}."
+        )
+
+    application = FastAPI(
+        title="Financial Intelligence Pipeline",
+        lifespan=lifespan,
+    )
+
+    # The UI screen's own endpoint, in every mode.
+    application.include_router(financial_router)
+
+    if mode == "full":
+        application.include_router(admin_llm_router)
+        application.include_router(sql_router)
+        application.include_router(vector_router)
+        application.include_router(evaluation_router)
+
+    _register_health(application)
+
+    return application
 
 
-@app.get("/health")
-async def health():
-    db_status = "connected"
-    redis_status = "connected"
+def _register_health(application: FastAPI) -> None:
+    @application.get("/health")
+    async def health():
+        db_status = "connected"
+        redis_status = "connected"
 
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-    except Exception as e:
-        db_status = f"error: {str(e)}"
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+        except Exception:
+            # The exception text carries the connection target, and this
+            # endpoint is public in portfolio mode. Logged, not returned.
+            logger.exception("Health check: database unreachable")
+            db_status = "error"
 
-    try:
-        ping_redis()
-    except Exception as e:
-        redis_status = f"error: {str(e)}"
+        try:
+            ping_redis()
+        except Exception:
+            logger.exception("Health check: redis unreachable")
+            redis_status = "error"
 
-    return {
-        "status": "ok",
-        "db": db_status,
-        "redis": redis_status
-    }
+        return {
+            "status": "ok",
+            "db": db_status,
+            "redis": redis_status,
+        }
+
+
+app = build_app()

@@ -8,8 +8,18 @@ class Settings(BaseSettings):
     REDIS_URL: str
     APP_ENV: str = "development"
 
+    # Which routers get mounted. "portfolio" is the public unauthenticated
+    # preprod: the UI screen and nothing else. "full" is production, where
+    # the admin, indexing and evaluation surfaces are reachable.
+    DEPLOYMENT_MODE: str = "full"
+
     OPENAI_API_KEY: str = ""
-    ADMIN_API_KEY: str = "admin-secret-key"
+
+    # No default: this repo is public, and the previous value
+    # ("admin-secret-key") was therefore a published credential guarding
+    # /api/index/documents. Empty means the admin routes refuse rather
+    # than accept a key everyone can read.
+    ADMIN_API_KEY: str = ""
     ALPHA_VANTAGE_API_KEY: str = ""
 
 

@@ -7,6 +7,7 @@ from langsmith import traceable
 from sqlalchemy import text
 from rank_bm25 import BM25Plus
 
+from backend.retrieval import cross_encoder, fusion, lexical_search
 from backend.retrieval.embedding_cache import embed_query_cached
 from backend.services.postgres_service import engine
 
@@ -185,7 +186,9 @@ async def search_similar_chunks(
     query:    str,
     top_k:    int       = 5,
     filters:  dict      = None,
-    keywords: list[str] = None
+    keywords: list[str] = None,
+    rrf_enabled: bool = False,
+    cross_encoder_enabled: bool = False,
 ) -> list:
     """
     Full vector retrieval pipeline:
@@ -234,18 +237,59 @@ async def search_similar_chunks(
         filters = filters
     )
 
-    if not rows:
-        logger.warning("[VECTOR_SEARCH] No rows returned")
-        return []
+    # A cross-encoder that only ever sees top_k has nothing to rerank, so
+    # the stage feeding it keeps the wider pool and the cross-encoder makes
+    # the final cut instead.
+    shortlist_k = fetch_k if cross_encoder_enabled else top_k
 
-    # Step 2 — BM25 reranking
-    reranked = bm25_rerank(rows, keywords or [], top_k)
+    if rrf_enabled:
+        # Step 2a — independent corpus-wide lexical ranking, fused by rank.
+        #
+        # This replaces the BM25 rerank rather than following it: that
+        # stage only reorders what pgvector returned, so once a list that
+        # can disagree is being fused in, reordering by the same signal
+        # adds nothing.
+        lexical_rows = await lexical_search.search_chunks_lexical(
+            keywords = keywords or [],
+            top_k    = fetch_k,
+            filters  = filters,
+        )
+
+        fused = fusion.reciprocal_rank_fusion(
+            [rows, lexical_rows],
+            key=lambda row: row.id,
+        )
+
+        ranked = [result.item for result in fused][:shortlist_k]
+
+        logger.info(
+            "[VECTOR_SEARCH] rrf dense=%s lexical=%s fused=%s",
+            len(rows),
+            len(lexical_rows),
+            len(fused),
+        )
+    else:
+        if not rows:
+            logger.warning("[VECTOR_SEARCH] No rows returned")
+            return []
+
+        # Step 2 — BM25 reranking
+        ranked = bm25_rerank(rows, keywords or [], shortlist_k)
+
+    if cross_encoder_enabled:
+        # Step 3 — cross-encoder rerank. Fails open: a model that will not
+        # load returns the ranking it was given.
+        ranked = cross_encoder.rerank(
+            query = query,
+            rows  = ranked,
+            top_k = top_k,
+        )
 
     logger.info(
-        f"[VECTOR_SEARCH] Final: {len(reranked)} chunks"
+        f"[VECTOR_SEARCH] Final: {len(ranked)} chunks"
     )
 
-    return reranked    
+    return ranked
 
 
 # ── LangGraph Tool ─────────────────────────────────────────
@@ -274,12 +318,24 @@ async def retrieve_similar(
         filters  = await extract_filters(query, config)
         keywords = generate_ranking_keywords(query, config)
 
+        # Per-run retrieval switches, carried on the same `configurable`
+        # channel the nodes already read llm_runtime from. Absent means off,
+        # so any caller that does not set them gets today's pipeline.
+        flags = (
+            (config.get("configurable") or {}).get("retrieval_flags")
+            or {}
+        )
 
         rows = await search_similar_chunks(
             query = query, 
             top_k = top_k,
             filters = filters,
-            keywords= keywords)
+            keywords= keywords,
+            rrf_enabled=bool(flags.get("rrf_enabled")),
+            cross_encoder_enabled=bool(
+                flags.get("cross_encoder_enabled")
+            ),
+        )
 
         if not rows:
             return (

@@ -196,13 +196,18 @@ class TestAsyncEngine:
 
         assert inspect.iscoroutinefunction(sql_executor._run_select)
 
-    def test_run_select_uses_the_application_async_engine(self):
+    def test_run_select_uses_an_async_engine(self):
         """
         Not a second sync engine. The sync one that remains serves only
         get_sector_vocabulary, which is read from a synchronous tool.
+
+        The engine is now read_engine, which is the SELECT-only role when
+        READONLY_DATABASE_URL is set and the application engine otherwise.
+        Both are async; what this guards against is a sync one reappearing,
+        because being sync is what made the auto-fix path unreachable.
         """
         import inspect
 
         src = inspect.getsource(sql_executor._run_select)
-        assert "async_engine.connect()" in src
-        assert "_engine.connect()" not in src.replace("async_engine.connect()", "")
+        assert "read_engine.connect()" in src
+        assert "create_engine(" not in src

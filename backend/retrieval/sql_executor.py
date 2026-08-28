@@ -10,11 +10,28 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 import logging
 from sqlalchemy import create_engine, text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from backend.config import settings
 from backend.llm.llm_context import get_llm_client
 from backend.llm.llm_tiers import LLMTier
+from backend.config import settings
 from backend.services.postgres_service import engine as async_engine
+
+# Generated SQL runs here, so it runs with the narrowest privileges
+# available. validate_sql_query enumerates forbidden keywords, which cannot
+# cover COPY, GRANT, pg_sleep, pg_read_file or pg_catalog reads; a
+# SELECT-only role covers all of them at once, and cannot be argued with the
+# way a prompt can.
+#
+# Falls back to the application engine when the role is not configured, so a
+# checkout without it still runs. scripts/create_readonly_role.sql creates
+# the role.
+read_engine = (
+    create_async_engine(settings.READONLY_DATABASE_URL)
+    if settings.READONLY_DATABASE_URL
+    else async_engine
+)
 
 
 ALLOWED_TABLES = ["companies", "financial_metrics", "documents"]
@@ -57,7 +74,7 @@ async def _run_select(query: str) -> dict[str, Any]:
     path unreachable, since fix_sql_error is a coroutine that cannot be
     awaited from a sync caller.
     """
-    async with async_engine.connect() as conn:
+    async with read_engine.connect() as conn:
         result = await conn.execute(text(query))
 
         columns = list(result.keys())

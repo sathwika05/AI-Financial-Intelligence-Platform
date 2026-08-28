@@ -25,6 +25,11 @@ class BenchmarkStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+    # Stopped on purpose. Distinct from FAILED, which means the run broke:
+    # a cancelled run's scored questions are valid, there are just fewer
+    # of them than the question set holds.
+    CANCELLED = "cancelled"
+
 
 class BenchmarkConfig(BaseModel):
     """

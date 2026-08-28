@@ -102,6 +102,15 @@ class RunRequest(BaseModel):
 
     company_filter: str = "all"
 
+    # Retrieval pipeline switches, independent of each other.
+    #
+    # Both off is the pipeline as it has always run, so an unchanged client
+    # keeps the baseline. They are per-run rather than per-deployment so
+    # that baseline, RRF only, cross-encoder only and both can be launched
+    # as four runs and compared against each other.
+    rrf_enabled: bool = False
+    cross_encoder_enabled: bool = False
+
     top_k: int = Field(
         default=5,
         ge=1,
@@ -136,6 +145,11 @@ class MetricsResponse(BaseModel):
     model: str
     retrieval_mode: str
     question_set: str
+
+    # Which retrieval pipeline produced this run, so the dashboard can
+    # tell a baseline run from an RRF one.
+    rrf_enabled: bool = False
+    cross_encoder_enabled: bool = False
 
     status: str
     total_requests: int
@@ -288,6 +302,12 @@ async def _find_active_duplicate(
             BenchmarkRun.retrieval_mode == request.retrieval_mode,
             BenchmarkRun.question_set == request.question_set,
             BenchmarkRun.company_filter == request.company_filter,
+            # Part of the match, or the four-way retrieval comparison
+            # cannot be launched: run two would be refused as a duplicate
+            # of run one despite measuring a different pipeline.
+            BenchmarkRun.rrf_enabled == request.rrf_enabled,
+            BenchmarkRun.cross_encoder_enabled
+            == request.cross_encoder_enabled,
         )
         .order_by(
             desc(BenchmarkRun.created_at)
@@ -296,6 +316,87 @@ async def _find_active_duplicate(
     )
 
     return result.scalar_one_or_none()
+
+
+def _scored_question_count(benchmark_result) -> int:
+    """
+    How many questions this run actually graded.
+
+    Not the question set's size: those agree on every run that finishes,
+    but a cancelled run stops early and the difference is the whole point.
+    Cancelled run f55fda6e reported 30 requests having scored 1.
+    """
+    return len(benchmark_result.question_results)
+
+
+async def _request_cancellation(
+    *,
+    run_id: UUID,
+    session: AsyncSession,
+) -> BenchmarkRun:
+    """
+    Raise the cancel flag on a run that is still in flight.
+
+    Only the flag is written. The runner reads it between questions and
+    stops there, so the run ends at a question boundary with everything it
+    scored intact — rather than mid-question, which is what restarting the
+    container used to do.
+    """
+    result = await session.execute(
+        select(BenchmarkRun).where(
+            BenchmarkRun.run_id == run_id
+        )
+    )
+
+    benchmark_run = result.scalar_one_or_none()
+
+    if benchmark_run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No benchmark run {run_id}.",
+        )
+
+    # Refuse anything already finished: there is nothing in flight to stop,
+    # and the flag would misreport how the run actually ended.
+    if benchmark_run.status not in ("queued", "running"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Run {run_id} is already {benchmark_run.status} and "
+                f"cannot be cancelled."
+            ),
+        )
+
+    benchmark_run.cancel_requested = True
+
+    await session.commit()
+
+    return benchmark_run
+
+
+@router.post(
+    "/run/{run_id}/cancel",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def cancel_benchmark_run(
+    run_id: UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """
+    Ask a queued or running benchmark to stop at its next question boundary.
+    """
+    await _request_cancellation(
+        run_id=run_id,
+        session=session,
+    )
+
+    return {
+        "run_id": str(run_id),
+        "message": (
+            "Cancellation requested. The run stops after the question "
+            "currently in flight."
+        ),
+    }
 
 
 @router.post(
@@ -364,6 +465,9 @@ async def trigger_benchmark_run(
             question_set=request.question_set,
             company_filter=request.company_filter,
 
+            rrf_enabled=request.rrf_enabled,
+            cross_encoder_enabled=request.cross_encoder_enabled,
+
             status="queued",
 
             total_requests=0,
@@ -400,6 +504,9 @@ async def trigger_benchmark_run(
             retrieval_mode=request.retrieval_mode,
             question_set=request.question_set,
             company_filter=request.company_filter,
+
+            rrf_enabled=request.rrf_enabled,
+            cross_encoder_enabled=request.cross_encoder_enabled,
 
             top_k=request.top_k,
 
@@ -463,6 +570,9 @@ async def _execute_benchmark(
     question_set: str,
     company_filter: str,
 
+    rrf_enabled: bool = False,
+    cross_encoder_enabled: bool = False,
+
     top_k: int,
 
     benchmark_version: str,
@@ -517,6 +627,16 @@ async def _execute_benchmark(
                         "benchmark_run_id": str(
                             run_id
                         ),
+
+                        # Read by retrieve_similar. Absent or false is
+                        # the pipeline exactly as it ran before these
+                        # existed.
+                        "retrieval_flags": {
+                            "rrf_enabled": rrf_enabled,
+                            "cross_encoder_enabled": (
+                                cross_encoder_enabled
+                            ),
+                        },
                     },
 
                     # These values are propagated to LangSmith traces.
@@ -540,6 +660,8 @@ async def _execute_benchmark(
                         "dataset": dataset,
                         "question_set": question_set,
                         "retrieval_mode": retrieval_mode,
+                        "rrf_enabled": rrf_enabled,
+                        "cross_encoder_enabled": cross_encoder_enabled,
                     },
                 }
 
@@ -563,6 +685,36 @@ async def _execute_benchmark(
                 )
 
                 running_cost = {"cost": 0.0, "questions": 0}
+
+                async def cancel_requested() -> bool:
+                    """Read the flag the cancel endpoint raises.
+
+                    Its own short-lived session, for the same reason
+                    persist_one uses one: the run's session is long-lived,
+                    and this has to see a commit made by a different
+                    request while the run is still in flight.
+                    """
+                    try:
+                        async with AsyncSessionLocal() as probe:
+                            flag = await probe.scalar(
+                                select(
+                                    BenchmarkRun.cancel_requested
+                                ).where(
+                                    BenchmarkRun.run_id == run_id
+                                )
+                            )
+
+                        return bool(flag)
+
+                    except Exception:
+                        # A database hiccup must not stop a paid-for run;
+                        # the next question asks again.
+                        logger.exception(
+                            "[BENCHMARK] Could not read the cancel flag "
+                            "for run_id=%s; the run continues",
+                            run_id,
+                        )
+                        return False
 
                 async def persist_one(question_result):
                     """Write one question's result as soon as it exists.
@@ -623,6 +775,7 @@ async def _execute_benchmark(
                     runnable_config=runnable_config,
                     run_id=run_id,
                     on_question_result=persist_one,
+                    should_cancel=cancel_requested,
                 )
 
                 
@@ -636,7 +789,9 @@ async def _execute_benchmark(
                     benchmark_result.status.value
                 )
                 benchmark_run.total_requests = (
-                    benchmark_result.total_questions
+                    _scored_question_count(
+                        benchmark_result
+                    )
                 )
                 benchmark_run.total_cost = (
                     aggregate.get("total_cost")
@@ -1193,6 +1348,11 @@ def _build_metrics_response(
         ),
         question_set=(
             run.question_set or ""
+        ),
+
+        rrf_enabled=bool(run.rrf_enabled),
+        cross_encoder_enabled=bool(
+            run.cross_encoder_enabled
         ),
 
         status=run.status,

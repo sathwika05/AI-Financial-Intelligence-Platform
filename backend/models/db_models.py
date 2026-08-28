@@ -307,6 +307,16 @@ class BenchmarkRun(Base):
         default=0.0,
     )
 
+    # Raised by the cancel endpoint, read by the runner between questions.
+    # Server-side default so rows written before this column existed read
+    # as "not cancelled" rather than NULL.
+    cancel_requested = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+
     # Run-level dashboard KPIs.
     pass_rate = Column(
         Float,
@@ -315,6 +325,24 @@ class BenchmarkRun(Base):
     route_accuracy = Column(
         Float,
         nullable=True,
+    )
+
+    # Which retrieval pipeline produced this run.
+    #
+    # Both off is the baseline that every run before these existed used,
+    # hence the false server_default: an old row is not unknown, it is
+    # known to have been the baseline.
+    rrf_enabled = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    cross_encoder_enabled = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
     )
 
     benchmark_version = Column(

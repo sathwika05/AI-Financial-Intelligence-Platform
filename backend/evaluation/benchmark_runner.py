@@ -110,6 +110,7 @@ class BenchmarkRunner:
         on_question_result: Callable[
             [QuestionEvaluationResult], Awaitable[None]
         ] | None = None,
+        should_cancel: Callable[[], Awaitable[bool]] | None = None,
     ) -> BenchmarkRunResult:
         """
         Execute every question in config.question_set.
@@ -121,6 +122,11 @@ class BenchmarkRunner:
         persist as the run goes. A hundred questions is seven hours; when
         the Docker daemon stopped during run 64671f10, 76 scored questions
         were lost because the only write came after the loop.
+
+        should_cancel is awaited before each question. Cancellation is
+        cooperative and never interrupts a question already in flight: its
+        API spend is paid either way, and a half-graded question helps
+        nobody. A cancelled run keeps everything it scored.
         """
         result = BenchmarkRunResult(
             run_id=run_id,
@@ -145,7 +151,21 @@ class BenchmarkRunner:
                 result.total_questions,
             )
 
+            cancelled = False
+
             for question in questions:
+                if should_cancel is not None and await should_cancel():
+                    cancelled = True
+
+                    logger.info(
+                        "[BENCHMARK] Cancelled run_id=%s after %s of %s "
+                        "questions",
+                        run_id,
+                        len(result.question_results),
+                        result.total_questions,
+                    )
+                    break
+
                 question_result = await self._run_question(
                     question=question,
                     benchmark_config=config,
@@ -182,7 +202,11 @@ class BenchmarkRunner:
                 )
             )
 
-            result.status = BenchmarkStatus.COMPLETED
+            result.status = (
+                BenchmarkStatus.CANCELLED
+                if cancelled
+                else BenchmarkStatus.COMPLETED
+            )
 
         except Exception as exc:
             logger.exception(

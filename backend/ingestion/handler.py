@@ -119,9 +119,14 @@ async def handle_object(
     store: Store,
     persist: Persist,
     index: Index,
-) -> None:
+) -> int:
     """
-    Read s3://bucket/key, store it, and index it.
+    Read s3://bucket/key, store it, index it, and return the document id.
+
+    The id is returned rather than swallowed so the caller can record that
+    indexing finished. Doing that here would mean this function knowing
+    about document status, which is a database concern and not a question
+    of what is worth indexing.
 
     Raises SkippedObject when there is nothing to index, and lets every
     other failure propagate: the consumer decides whether to delete the
@@ -153,3 +158,5 @@ async def handle_object(
     await index(document_id)
 
     logger.info("[INGEST] Indexed document %s", document_id)
+
+    return document_id

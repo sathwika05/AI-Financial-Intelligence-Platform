@@ -18,7 +18,7 @@ import logging
 import signal
 from typing import Any, Awaitable, Callable
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from backend.ingestion.consumer import consume_once
 from backend.ingestion.dedupe import find_duplicate_document, hash_content
@@ -30,6 +30,51 @@ from backend.services.postgres_service import AsyncSessionLocal
 
 
 logger = logging.getLogger(__name__)
+
+
+# Where a document is in its ingestion. Not read by retrieval -- these
+# exist so a failed ingestion can be found and retried, rather than
+# discovered by someone asking a question and getting nothing.
+STATUS_PROCESSING = "processing"
+STATUS_READY = "ready"
+
+
+async def _existing_document(session, *, source_url, content_hash):
+    """The row a duplicate check matched, so its status can be read."""
+    if source_url:
+        row = await session.scalar(
+            select(Document).where(Document.source_url == source_url).limit(1)
+        )
+
+        if row is not None:
+            return row
+
+    if content_hash:
+        return await session.scalar(
+            select(Document).where(Document.content_hash == content_hash).limit(1)
+        )
+
+    return None
+
+
+async def _mark_ready(document_id: int, *, session_factory=None) -> None:
+    """
+    Record that this document is indexed and retrievable.
+
+    Called only after indexing returns without raising, which is the
+    whole point: the gap between the row and its chunks is the state this
+    column exists to name.
+    """
+    factory = session_factory or AsyncSessionLocal
+
+    async with factory() as session:
+        await session.execute(
+            update(Document)
+            .where(Document.id == document_id)
+            .values(status=STATUS_READY)
+        )
+
+        await session.commit()
 
 
 async def _raise_on_failed_index(
@@ -80,6 +125,23 @@ async def _persist_document(
         )
 
         if duplicate:
+            existing = await _existing_document(
+                session, source_url=source_url, content_hash=content_hash
+            )
+
+            # A row whose indexing never finished is not a duplicate, it
+            # is a retry. SQS redelivers a message whose work failed, and
+            # by then the row exists; skipping it would delete the message
+            # and strand the document in `processing` with no chunks and
+            # nothing left to retry it.
+            if existing is not None and existing.status != STATUS_READY:
+                logger.info(
+                    "[INGEST] Document %s is %s, not ready; reindexing it",
+                    existing.id,
+                    existing.status,
+                )
+                return existing.id
+
             raise SkippedObject(
                 f"{document.get('title') or 'document'} is already in the "
                 f"corpus (matched on {duplicate})."
@@ -110,6 +172,9 @@ async def _persist_document(
             # The identity the next delivery of this document is
             # recognised by. Without it, a re-upload has nothing to match.
             content_hash=content_hash,
+            # Not ready: the row exists before a single chunk does, and
+            # claiming otherwise is what made a failed ingestion invisible.
+            status=STATUS_PROCESSING,
         )
 
         session.add(row)
@@ -123,7 +188,7 @@ async def _persist_document(
 async def _handle(ref: ObjectRef, *, store) -> None:
     """One object, with SkippedObject swallowed so the message is deleted."""
     try:
-        await handle_object(
+        document_id = await handle_object(
             ref,
             store=store,
             persist=_persist_document,
@@ -132,6 +197,12 @@ async def _handle(ref: ObjectRef, *, store) -> None:
     except SkippedObject as skipped:
         # Handled: a retry would skip it again, so the message should go.
         logger.info("[INGEST] %s", skipped)
+
+        return
+
+    # Only now, with indexing returned and nothing raised, is the document
+    # actually retrievable.
+    await _mark_ready(document_id)
 
 
 async def run() -> None:

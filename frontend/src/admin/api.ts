@@ -111,3 +111,75 @@ export function startIndexing(request: IndexRequest): Promise<IndexAccepted> {
     body: JSON.stringify(request),
   });
 }
+
+/* ── Ingestion ──────────────────────────────────────────────
+ *
+ * Two of these three work with no AWS configured, which is the point:
+ * the S3 path cannot be exercised locally, but what EDGAR returns and
+ * whether Docling can read a given file both can.
+ */
+
+export interface EdgarFiling {
+  accession: string;
+  form: string;
+  filing_date: string;
+  document: string;
+  url: string;
+}
+
+export interface StoredDocument {
+  id: number;
+  title: string | null;
+  doc_type: string | null;
+  source: string | null;
+  status: string;
+  ticker: string | null;
+  chunks: number;
+  created_at: string | null;
+}
+
+export interface UploadAccepted {
+  document_id: number;
+  title: string | null;
+  characters: number;
+  status: string;
+  message: string;
+}
+
+export function previewFilings(
+  ticker: string,
+  forms: string,
+  limit: number,
+): Promise<{ ticker: string; filings: EdgarFiling[] }> {
+  const query = new URLSearchParams({
+    ticker,
+    forms,
+    limit: String(limit),
+  });
+
+  return send(`/api/ingestion/edgar/filings?${query}`);
+}
+
+export function listDocuments(
+  limit = 25,
+): Promise<{ documents: StoredDocument[] }> {
+  return send(`/api/ingestion/documents?limit=${limit}`);
+}
+
+export function uploadDocument(
+  file: File,
+  ticker: string,
+): Promise<UploadAccepted> {
+  const form = new FormData();
+
+  form.append("file", file);
+
+  if (ticker.trim()) {
+    form.append("ticker", ticker.trim());
+  }
+
+  // No Content-Type header: the browser sets it, and it has to include
+  // the multipart boundary it generated. Setting it by hand produces a
+  // body the server cannot parse.
+  return send("/api/ingestion/documents", { method: "POST", body: form });
+}

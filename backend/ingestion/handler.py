@@ -62,48 +62,44 @@ def _needs_parsing(key: str) -> bool:
     return key.lower().endswith(_PARSEABLE)
 
 
-async def _document_from_file(ref: ObjectRef, store: Store) -> dict:
+async def document_from_bytes(
+    *,
+    filename: str,
+    body: bytes,
+    provenance: dict | None = None,
+) -> dict:
     """
-    A parseable object -- an uploaded PDF, an EDGAR filing -- as a document.
+    Parse a document's bytes into the row the corpus stores.
 
-    Provenance comes from two places, and the order matters. The key
-    always says something (source, ticker, a title from the filename),
-    but a collector that knows more hangs it on the object as metadata:
-    the filing URL that is its duplicate identity, the form, the date.
-    Explicit metadata therefore wins, and a hand-uploaded file with none
-    at all still indexes on what the key alone provides.
+    Shared by the two ways bytes reach this system -- an object read from
+    S3, and a file handed straight to the API -- so that a document
+    uploaded through the browser is parsed, normalised and typed exactly
+    as one that arrived through the queue. A second implementation would
+    drift, and the drift would show up as a document that answers
+    differently depending on how it was loaded.
 
     Parsing is CPU-bound -- roughly a third of a second per document, far
     longer under OCR -- so it goes to a worker thread rather than blocking
-    the loop that is also polling the queue.
+    the loop that is also serving requests or polling the queue.
     """
     from backend.ingestion.extract import UnreadableDocument, extract_text
-
-    body, metadata = await store.get_object(ref.bucket, ref.key)
-    filename = ref.key.rsplit("/", 1)[-1]
 
     try:
         text = await asyncio.to_thread(extract_text, body, filename=filename)
     except UnreadableDocument as exc:
-        # Corrupt or password-protected. Neither becomes readable on the
-        # tenth delivery, so this is a skip and not a failure: retrying
-        # would hold the message until the redrive policy parks it, and
-        # delay every document queued behind it.
-        logger.error("[INGEST] s3://%s/%s: %s", ref.bucket, ref.key, exc)
+        # Corrupt or password-protected. Neither becomes readable on a
+        # retry, so this is a skip and not a failure.
+        logger.error("[INGEST] %s: %s", filename, exc)
 
-        raise SkippedObject(
-            f"s3://{ref.bucket}/{ref.key} could not be parsed."
-        ) from exc
+        raise SkippedObject(f"{filename} could not be parsed.") from exc
 
-    document = dict(metadata_from_key(ref.key))
-
-    # Only non-empty metadata overrides the key: S3 returns "" for an
-    # absent value, and an empty ticker is worse than a derived one.
-    document.update({k: v for k, v in (metadata or {}).items() if v})
+    document = dict(provenance or {})
 
     # A form says more than "filing", and doc_type is what the corpus is
     # filtered by.
-    document["doc_type"] = document.get("form") or "filing"
+    document["doc_type"] = (
+        document.get("form") or document.get("doc_type") or "filing"
+    )
 
     # Normalised here rather than after chunking, which would be too late:
     # the chunk boundaries would already have been drawn around the page
@@ -111,6 +107,32 @@ async def _document_from_file(ref: ObjectRef, store: Store) -> dict:
     document["content"] = normalize_document(text)
 
     return document
+
+
+async def _document_from_file(ref: ObjectRef, store: Store) -> dict:
+    """
+    A parseable object in the bucket, as a document.
+
+    Provenance comes from two places, and the order matters. The key
+    always says something (source, ticker, a title from the filename),
+    but a collector that knows more hangs it on the object as metadata:
+    the filing URL that is its duplicate identity, the form, the date.
+    Explicit metadata therefore wins, and a hand-uploaded file with none
+    at all still indexes on what the key alone provides.
+    """
+    body, metadata = await store.get_object(ref.bucket, ref.key)
+
+    provenance = dict(metadata_from_key(ref.key))
+
+    # Only non-empty metadata overrides the key: S3 returns "" for an
+    # absent value, and an empty ticker is worse than a derived one.
+    provenance.update({k: v for k, v in (metadata or {}).items() if v})
+
+    return await document_from_bytes(
+        filename=ref.key.rsplit("/", 1)[-1],
+        body=body,
+        provenance=provenance,
+    )
 
 
 async def handle_object(

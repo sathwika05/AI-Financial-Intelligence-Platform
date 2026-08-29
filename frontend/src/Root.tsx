@@ -6,7 +6,7 @@ import { authRequired, fetchMe } from "./auth/api";
 import { readToken, readUser, type SessionUser } from "./auth/session";
 import { AdminShell } from "./admin/AdminShell";
 import { ProvidersScreen } from "./admin/ProvidersScreen";
-import { IndexingScreen } from "./admin/IndexingScreen";
+import { IngestionScreen } from "./admin/IngestionScreen";
 import { useHashRoute } from "./lib/router";
 
 /**
@@ -116,10 +116,10 @@ export default function Root() {
     );
   }
 
-  if (path === "/indexing") {
+  if (path === "/ingestion") {
     return (
-      <AdminShell activeId="indexing" user={user} onNavigate={navigate}>
-        <IndexingScreen />
+      <AdminShell activeId="ingestion" user={user} onNavigate={navigate}>
+        <IngestionScreen />
       </AdminShell>
     );
   }

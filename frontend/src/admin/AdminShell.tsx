@@ -40,11 +40,11 @@ export const ADMIN_NAV: AdminNavItem[] = [
     path: "/providers",
   },
   {
-    id: "indexing",
-    label: "Indexing",
-    detail: "Chunk and embed",
+    id: "ingestion",
+    label: "Ingestion",
+    detail: "Upload, EDGAR, corpus",
     icon: Database,
-    path: "/indexing",
+    path: "/ingestion",
   },
   {
     id: "evaluation",

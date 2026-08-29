@@ -6,7 +6,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from sqlalchemy import text
 
 from backend.services.postgres_service import engine
-from backend.ingestion.chunking import chunk_text
+from backend.ingestion.chunking import (
+    SectionChunk,
+    chunk_uid,
+    chunk_with_sections,
+)
 from backend.ingestion.document_loader import (
     load_document_by_id,
     load_unindexed_documents,
@@ -31,6 +35,37 @@ def to_pgvector(vector: list[float]) -> str:
     return "[" + ",".join(str(x) for x in vector) + "]"
 
 
+def chunk_rows(
+    *,
+    document_id: int,
+    chunks: list[SectionChunk],
+    vectors: list[list[float]],
+) -> list[dict]:
+    """
+    The rows to write for one document.
+
+    Split out from the insert so what gets stored can be checked without
+    a database or an embedding call. A null chunk_uid is indistinguishable
+    from a chunk written before the column existed, so getting this wrong
+    is not visible later.
+    """
+    return [
+        {
+            "document_id": document_id,
+            "chunk_index": index,
+            "content": chunk.content,
+            "embedding": to_pgvector(vector),
+            "chunk_uid": chunk_uid(
+                document_id=document_id,
+                chunk_index=index,
+                content=chunk.content,
+            ),
+            "section": chunk.section,
+        }
+        for index, (chunk, vector) in enumerate(zip(chunks, vectors))
+    ]
+
+
 async def embed_document(document_id: int) -> dict:
     """Embed a single document and store chunks in document_chunks."""
 
@@ -42,7 +77,7 @@ async def embed_document(document_id: int) -> dict:
             "error": f"Document {document_id} not found",
         }
 
-    chunks = chunk_text(doc["content"])
+    chunks = chunk_with_sections(doc["content"])
 
     if not chunks:
         return {
@@ -51,7 +86,7 @@ async def embed_document(document_id: int) -> dict:
         }
 
     try:
-        vectors = await embed_with_retry(chunks)
+        vectors = await embed_with_retry([chunk.content for chunk in chunks])
         logger.info(f"[INDEXING] Embedded {len(chunks)} chunks for doc {document_id}")
 
     except Exception as e:
@@ -71,20 +106,19 @@ async def embed_document(document_id: int) -> dict:
                 {"document_id": document_id},
             )
 
-            for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+            for row in chunk_rows(
+                document_id=document_id, chunks=chunks, vectors=vectors
+            ):
                 await conn.execute(
                     text("""
                         INSERT INTO document_chunks
-                            (document_id, chunk_index, content, embedding)
+                            (document_id, chunk_index, content, embedding,
+                             chunk_uid, section)
                         VALUES
-                            (:document_id, :chunk_index, :content, CAST(:embedding AS vector))
+                            (:document_id, :chunk_index, :content,
+                             CAST(:embedding AS vector), :chunk_uid, :section)
                     """),
-                    {
-                        "document_id": document_id,
-                        "chunk_index": i,
-                        "content": chunk,
-                        "embedding": to_pgvector(vector),
-                    },
+                    row,
                 )
 
 

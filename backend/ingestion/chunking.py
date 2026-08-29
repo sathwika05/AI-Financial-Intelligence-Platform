@@ -64,3 +64,98 @@ def chunk_text(content: str) -> list[str]:
 
 
 
+
+
+import hashlib
+import re
+from dataclasses import dataclass
+
+
+# A Markdown ATX heading: what Docling emits for a filing's section
+# titles. Matched at the start of a line so a "#" inside a sentence is
+# left alone.
+_HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*$")
+
+
+@dataclass(frozen=True)
+class SectionChunk:
+    """One chunk, and the heading it fell under."""
+
+    content: str
+    section: str | None
+
+
+def chunk_uid(*, document_id: int, chunk_index: int, content: str) -> str:
+    """
+    A chunk's identity, stable across reindexing.
+
+    The primary key is an autoincrementing integer that changes every time
+    a document is reindexed, so nothing could answer "did this document's
+    chunks actually change?" -- which is the question a consistency check
+    has to ask.
+
+    Position is part of the identity, and so is the document: boilerplate
+    repeats across filings, and two documents sharing a sentence must not
+    share a chunk identity or one document's reindex would appear to
+    change the other's.
+    """
+    material = f"{document_id}:{chunk_index}:{content}"
+
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def chunk_with_sections(content: str) -> list[SectionChunk]:
+    """
+    Chunk a document, remembering which heading each chunk fell under.
+
+    Docling recovers a filing's headings; until now the chunker threw them
+    away, leaving a passage about margins with nothing to say it came from
+    Item 7.
+
+    Splitting happens per section rather than over the whole document, so
+    a chunk never straddles a section boundary. For a document with no
+    headings -- every news article in this corpus -- that degenerates to
+    exactly one section and the same chunks chunk_text would produce.
+    """
+    if not content or not content.strip():
+        return []
+
+    chunks: list[SectionChunk] = []
+
+    for section, body in _sections(content):
+        for piece in chunk_text(body):
+            chunks.append(SectionChunk(content=piece, section=section))
+
+    return chunks
+
+
+def _sections(content: str) -> list[tuple[str | None, str]]:
+    """
+    Split text into (heading, body) pairs.
+
+    The heading line itself is dropped from the body: it is metadata now,
+    and leaving it in as well spends embedding budget twice on the same
+    words.
+    """
+    sections: list[tuple[str | None, str]] = []
+
+    current: str | None = None
+    body: list[str] = []
+
+    for line in content.split("\n"):
+        match = _HEADING.match(line)
+
+        if not match:
+            body.append(line)
+            continue
+
+        if any(part.strip() for part in body):
+            sections.append((current, "\n".join(body)))
+
+        current = match.group(2).strip() or None
+        body = []
+
+    if any(part.strip() for part in body):
+        sections.append((current, "\n".join(body)))
+
+    return sections

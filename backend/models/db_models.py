@@ -171,6 +171,20 @@ class Document(Base):
     # company-scoped and leaves it null.
     relevance_score = Column(Float)
 
+    # Where this document is in its ingestion. The row is written before
+    # a single chunk exists, so without this a document whose embedding
+    # failed is indistinguishable from one that worked -- both are a row
+    # with no chunks. Not read by retrieval.
+    #
+    #   processing  stored, not yet indexed
+    #   ready       indexed and retrievable
+    status = Column(
+        String(16),
+        nullable=False,
+        server_default="ready",
+        index=True,
+    )
+
     created_at = Column(
         DateTime,
         server_default=func.now(),
@@ -201,6 +215,18 @@ class DocumentChunk(Base):
 
     # Position of this chunk inside its source document.
     chunk_index = Column(Integer)
+
+    # A chunk identity that survives reindexing, derived from the
+    # document, the position and the content. The primary key does not:
+    # it is reassigned every time a document is reindexed, which leaves
+    # "did this document's chunks actually change?" unanswerable.
+    # Nullable because every chunk written before this column predates it.
+    chunk_uid = Column(String(64), index=True)
+
+    # The heading this chunk fell under, where the document had any.
+    # Docling recovers a filing's sections; without this a passage about
+    # margins has nothing to say it came from Item 7.
+    section = Column(String)
 
     # Text used for retrieval and answer generation.
     content = Column(Text)

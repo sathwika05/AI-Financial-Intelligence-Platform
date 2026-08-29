@@ -7,6 +7,10 @@ from backend.observability.logging import RunTagFilter
 
 
 
+from fastapi import Depends
+
+from backend.auth.dependencies import require_role
+from backend.auth.roles import Role
 from backend.config import settings
 from backend.services.postgres_service import engine, Base, enable_pgvector
 from backend.services.redis_service import ping_redis
@@ -116,8 +120,25 @@ def build_app(*, deployment_mode: str | None = None) -> FastAPI:
     # Signing in, in every mode: every other router now needs a token.
     application.include_router(auth_router)
 
-    # The UI screen's own endpoint, in every mode.
-    application.include_router(financial_router)
+    # The console's endpoint, in every mode -- but guarded only where there
+    # is a login to guard it with.
+    #
+    # Portfolio mode is the public demo: anyone with the link asks a
+    # question without signing in, and the rate limiter is the control, as
+    # financial_routes has always said ("preprod has no authentication, so
+    # the ceiling is about cost rather than login abuse"). Full mode sits
+    # behind a login, so the same route requires the analyst role.
+    #
+    # Attached at mount rather than on the route, so the mode is the single
+    # place this is decided and the route table can be asserted against.
+    application.include_router(
+        financial_router,
+        dependencies=(
+            []
+            if mode == "portfolio"
+            else [Depends(require_role(Role.ANALYST))]
+        ),
+    )
 
     if mode == "full":
         application.include_router(admin_llm_router)
@@ -125,12 +146,12 @@ def build_app(*, deployment_mode: str | None = None) -> FastAPI:
         application.include_router(vector_router)
         application.include_router(evaluation_router)
 
-    _register_health(application)
+    _register_health(application, mode)
 
     return application
 
 
-def _register_health(application: FastAPI) -> None:
+def _register_health(application: FastAPI, mode: str) -> None:
     @application.get("/health")
     async def health():
         db_status = "connected"
@@ -155,6 +176,10 @@ def _register_health(application: FastAPI) -> None:
             "status": "ok",
             "db": db_status,
             "redis": redis_status,
+            # The frontend cannot tell which deployment it is talking to.
+            # Without this it shows a sign-in page on the public demo,
+            # where there are no accounts to sign in with.
+            "auth_required": mode != "portfolio",
         }
 
 

@@ -153,21 +153,27 @@ export default function App({ user }: { user: SessionUser }) {
             </a>
           )}
 
-          <span className="masthead__user">
-            <span className="masthead__user-email">{user.email}</span>
-            <span className="masthead__user-role">{user.role}</span>
-          </span>
+          {/* Absent on the public demo, which has no accounts: an empty
+              address and a sign-out that ends nothing. */}
+          {user.email && (
+            <>
+              <span className="masthead__user">
+                <span className="masthead__user-email">{user.email}</span>
+                <span className="masthead__user-role">{user.role}</span>
+              </span>
 
-          <button
-            type="button"
-            className="masthead__signout"
-            onClick={() => {
-              clearSession();
-              window.location.reload();
-            }}
-          >
-            Sign out
-          </button>
+              <button
+                type="button"
+                className="masthead__signout"
+                onClick={() => {
+                  clearSession();
+                  window.location.reload();
+                }}
+              >
+                Sign out
+              </button>
+            </>
+          )}
         </div>
       </header>
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import App from "./App";
 import EvaluationApp from "./evaluation/EvaluationApp";
 import { LoginPage } from "./auth/LoginPage";
-import { fetchMe } from "./auth/api";
+import { authRequired, fetchMe } from "./auth/api";
 import { readToken, readUser, type SessionUser } from "./auth/session";
 import { useHashRoute } from "./lib/router";
 
@@ -26,6 +26,24 @@ export default function Root() {
   // A stored token can be expired or revoked. Ask the server whose it is
   // rather than trusting what localStorage claims about the role.
   const [checked, setChecked] = useState(() => readToken() === null);
+
+  // A portfolio deployment has no accounts. Everyone is an analyst there,
+  // and the rate limiter is what protects the endpoint.
+  const [needsAuth, setNeedsAuth] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    authRequired().then((required) => {
+      if (!cancelled) {
+        setNeedsAuth(required);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (checked) {
@@ -57,10 +75,14 @@ export default function Root() {
     };
   }, [checked]);
 
-  if (!checked) {
+  if (!checked || needsAuth === null) {
     // Nothing rendered rather than a flash of the sign-in page for someone
-    // who is already signed in.
+    // who is already signed in, or on a deployment with no login at all.
     return null;
+  }
+
+  if (!needsAuth) {
+    return <App user={{ email: "", role: "analyst" }} />;
   }
 
   if (!user) {

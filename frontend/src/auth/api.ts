@@ -65,3 +65,28 @@ export async function fetchMe(): Promise<{ email: string; role: Role } | null> {
 
   return (await response.json()) as { email: string; role: Role };
 }
+
+
+/**
+ * Whether this deployment has a login at all.
+ *
+ * The public portfolio demo serves the console unauthenticated, so asking
+ * for credentials there would be asking for accounts that do not exist.
+ * Defaults to requiring auth: if /health cannot be reached, showing the
+ * sign-in page is the safer wrong answer.
+ */
+export async function authRequired(): Promise<boolean> {
+  try {
+    const response = await fetch("/health");
+
+    if (!response.ok) {
+      return true;
+    }
+
+    const body = (await response.json()) as { auth_required?: boolean };
+
+    return body.auth_required !== false;
+  } catch {
+    return true;
+  }
+}

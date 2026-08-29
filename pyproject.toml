@@ -15,6 +15,7 @@ dependencies = [
     # replaced with PandasCompare.
     "datacompy>=0.17.2,<1.0",
     "datasets>=5.0.0",
+    "docling>=2.0",
     "email-validator>=2.2",
     "fastapi>=0.136.1",
     "greenlet>=3.5.0",
@@ -35,6 +36,8 @@ dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
     "pyjwt>=2.10",
+    # Text extraction for PDFs uploaded to the raw bucket by hand. Pure
+    # Python, so it adds no system libraries to the Fargate image.
     "python-dotenv>=1.2.2",
     "ragas>=0.4.3,<0.5",
     "rank-bm25>=0.2.2",

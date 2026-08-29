@@ -17,6 +17,15 @@ RUN uv sync --frozen
 RUN uv run python -c "from sentence_transformers import CrossEncoder; \
     CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
 
+# Bake Docling's layout, table and OCR weights in, for the same reason.
+#
+# The ingestion worker parses an uploaded filing the moment it lands. If
+# the models are not already here it downloads them mid-message, which
+# means the first upload after every deploy is slow and needs reachable
+# network to a third party -- and a Fargate task in a private subnet may
+# not have one.
+RUN uv run docling-tools models download layout tableformer rapidocr
+
 COPY . .
 
 CMD ["uv", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

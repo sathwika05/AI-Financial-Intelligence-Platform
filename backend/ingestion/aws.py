@@ -115,8 +115,43 @@ class ObjectStore:
 
         logger.info("[INGEST] Wrote s3://%s/%s", self.bucket, key)
 
-    async def get_json(self, bucket: str, key: str) -> dict:
-        """Read one raw document back, by the reference the event carried."""
+    async def put_bytes(
+        self,
+        key: str,
+        body: bytes,
+        *,
+        content_type: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """
+        Write one raw document exactly as it was collected.
+
+        Metadata rides on the object because the worker reads nothing
+        else: the filing URL that is its duplicate identity, the form and
+        the date are all lost otherwise. S3 requires those values to be
+        strings, so they are coerced rather than left to fail at the call.
+        """
+        await asyncio.to_thread(
+            _client("s3").put_object,
+            Bucket=self.bucket,
+            Key=key,
+            Body=body,
+            ContentType=content_type or "application/octet-stream",
+            Metadata={
+                str(k): str(v) for k, v in (metadata or {}).items() if v
+            },
+        )
+
+        logger.info("[INGEST] Wrote s3://%s/%s (%s bytes)", self.bucket, key, len(body))
+
+    async def get_object(self, bucket: str, key: str) -> tuple[bytes, dict]:
+        """
+        One object's bytes and whatever provenance was stored with it.
+
+        S3 lowercases metadata keys and returns them without the
+        x-amz-meta- prefix, so what comes back here is what the collector
+        put in.
+        """
         response = await asyncio.to_thread(
             _client("s3").get_object,
             Bucket=bucket,
@@ -125,7 +160,26 @@ class ObjectStore:
 
         body = await asyncio.to_thread(response["Body"].read)
 
-        return json.loads(body.decode("utf-8"))
+        return body, dict(response.get("Metadata") or {})
+
+    async def get_bytes(self, bucket: str, key: str) -> bytes:
+        """
+        Read one object back, by the reference the event carried.
+
+        Bytes rather than text, because a PDF is not text and decoding one
+        as UTF-8 raises before it can be parsed.
+        """
+        response = await asyncio.to_thread(
+            _client("s3").get_object,
+            Bucket=bucket,
+            Key=key,
+        )
+
+        return await asyncio.to_thread(response["Body"].read)
+
+    async def get_json(self, bucket: str, key: str) -> dict:
+        """One raw document, as the fetcher wrote it."""
+        return json.loads((await self.get_bytes(bucket, key)).decode("utf-8"))
 
 
 def aws_ingestion_configured() -> bool:

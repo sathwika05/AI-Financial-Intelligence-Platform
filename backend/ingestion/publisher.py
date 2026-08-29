@@ -28,6 +28,10 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 # Documents belonging to no company still need a home in the layout.
 _UNASSIGNED = "_unassigned"
 
+# What a document is credited to when its key does not name a source --
+# which is the case for anything uploaded by hand.
+_MANUAL = "manual"
+
 
 class Store(Protocol):
     async def put_json(self, key: str, payload: dict) -> None: ...
@@ -88,3 +92,34 @@ async def publish_document(
     await store.put_json(key, payload)
 
     return key
+
+
+def metadata_from_key(key: str) -> dict:
+    """
+    What a key says about the document stored under it.
+
+    The inverse of object_key, and the only source of this information for
+    a PDF uploaded by hand: a fetcher writes source and ticker into the
+    JSON body, but nobody types a JSON body alongside an `aws s3 cp`.
+
+    Tolerant of a key that does not follow the layout. Someone will drop a
+    file at the top of the bucket, and that should index as an
+    unattributed document rather than fail -- an unknown ticker already
+    stores fine, it just cannot be filtered by company.
+    """
+    segments = [part for part in key.split("/") if part]
+
+    if not segments:
+        return {"source": _MANUAL, "ticker": None, "title": ""}
+
+    # The filename without its extension: what a person named the upload,
+    # and the most useful title available for one.
+    title = segments[-1].rsplit(".", 1)[0]
+
+    source = segments[0] if len(segments) >= 2 else _MANUAL
+    ticker = segments[1] if len(segments) >= 3 else None
+
+    if ticker == _UNASSIGNED:
+        ticker = None
+
+    return {"source": source, "ticker": ticker, "title": title}

@@ -51,7 +51,13 @@ def chunk_text(content: str) -> list[str]:
         logger.warning("[CHUNKING] Empty content received")
         return []
     chunks = text_splitter.split_text(content)
-    chunks = [c.lstrip(". \n") for c in chunks if c.strip()]  
+
+    # Whitespace only. An earlier version also stripped leading periods, to
+    # tidy an artefact of the sentence separator; measured over the whole
+    # corpus it never once fired on real prose, and meanwhile it rewrote
+    # any chunk that legitimately began with one -- ".75 percent" became
+    # "75 percent", which in a filing is a different number.
+    chunks = [c.strip() for c in chunks if c.strip()]
     logger.info(f"[CHUNKING] Split into {len(chunks)} chunks")
     return chunks
 

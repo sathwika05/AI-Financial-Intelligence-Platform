@@ -23,10 +23,12 @@ import {
   parseModelSnapshot,
   questionSetLabel,
   retrievalLabel,
+  retrievalPipelineLabel,
   shortRunId,
   titleCase,
 } from "../format";
 import { readMetric } from "../metrics";
+import { RetrievalPipelineDiagram } from "../components/RetrievalPipelineDiagram";
 import { DonutChart, GroupedBarChart, LineChart } from "../components/charts";
 import {
   EmptyState,
@@ -147,7 +149,19 @@ function RunHeader({ run }: { run: RunMetrics }) {
         <Field label="Questions" value={String(run.total_requests)} />
         <Field label="Provider" value={run.provider_name} />
         <Field label="Dataset" value={run.dataset} />
-        <Field label="Retrieval" value={retrievalLabel(run.retrieval_mode)} />
+        <Field
+          label="Retrieval"
+          value={
+            <>
+              {retrievalLabel(run.retrieval_mode)}
+              {retrievalPipelineLabel(run) && (
+                <span className="ev-pipeline-pill">
+                  {retrievalPipelineLabel(run)}
+                </span>
+              )}
+            </>
+          }
+        />
         <Field
           label="Question Set"
           value={questionSetLabel(run.question_set)}
@@ -383,12 +397,19 @@ export function SummaryView({
           )}
         </Panel>
 
-        <UnavailablePanel
+        <Panel
           span={3}
           icon={Filter}
-          title="Retrieval Pipeline Overview"
-          reason="Stage counts are not recorded. The retrieval layer does not report how many candidates survive metadata filtering, BM25, vector search, RRF fusion and reranking, so the funnel has no source."
-        />
+          title="Retrieval Pipeline"
+          note="(stages this run used)"
+          tone="violet"
+          link={{
+            label: "Compare Retrieval",
+            onClick: () => onNavigate("retrieval"),
+          }}
+        >
+          <RetrievalPipelineDiagram run={run} />
+        </Panel>
 
         {run.tool_summary && <ToolSummaryPanel summary={run.tool_summary} />}
 

@@ -245,7 +245,7 @@ export function RunBar({
         </label>
 
         <label className="ev-control ev-control--wide">
-          <span className="ev-control__label">Retrieval Pipeline</span>
+          <span className="ev-control__label">RAG Reranking</span>
           <select
             className="ev-control__input"
             value={pipeline}

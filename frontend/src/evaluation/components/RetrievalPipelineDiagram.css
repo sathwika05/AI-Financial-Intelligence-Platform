@@ -1,0 +1,80 @@
+/* Retrieval path for one run. Wraps rather than scrolls: five stages do not
+   fit a half-width panel, and a horizontally scrolled diagram hides the last
+   stage, which is the one the optional flags change. */
+
+.ev-pipe {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ev-pipe__flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ev-pipe__stage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ev-pipe__box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 11px;
+  min-width: 92px;
+  border: 1px solid #3c5468;
+  border-radius: 5px;
+  background: #16283a;
+}
+
+.ev-pipe__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #dce8f2;
+  line-height: 1.2;
+}
+
+.ev-pipe__detail {
+  font-size: 9px;
+  color: #7f929f;
+  line-height: 1.3;
+}
+
+.ev-pipe__arrow {
+  font-size: 12px;
+  color: #4d6577;
+  flex: none;
+}
+
+/* Off, not broken: the stage exists in the pipeline and this run skipped it.
+   Dashed rather than merely faint, so the distinction survives at a glance
+   and does not read as a rendering failure. */
+.ev-pipe__stage--off .ev-pipe__box {
+  border-style: dashed;
+  border-color: #2f4152;
+  background: transparent;
+}
+
+.ev-pipe__stage--off .ev-pipe__label {
+  color: #6d818f;
+  font-weight: 500;
+}
+
+.ev-pipe__stage--off .ev-pipe__detail {
+  color: #586a77;
+}
+
+.ev-pipe__caption {
+  margin: 0;
+  font-size: 10.5px;
+  color: #7f929f;
+  line-height: 1.4;
+}

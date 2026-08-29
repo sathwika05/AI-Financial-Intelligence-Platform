@@ -42,7 +42,7 @@ import "./AdminScreens.css";
  */
 export function IngestionScreen() {
   return (
-    <div className="screen">
+    <div className="screen screen--wide">
       <header className="screen__head">
         <h1 className="screen__title">Ingestion</h1>
         <p className="screen__lede">
@@ -52,8 +52,15 @@ export function IngestionScreen() {
         </p>
       </header>
 
-      <UploadPanel />
-      <EdgarPanel />
+      {/* The two ways a document gets in, side by side: they are
+          alternatives, not steps, and stacking them read as an order to
+          follow. What arrived goes underneath, where a seven-column
+          table has the width it needs. */}
+      <div className="screen__pair">
+        <UploadPanel />
+        <EdgarPanel />
+      </div>
+
       <DocumentsPanel />
       <ReindexPanel />
     </div>
@@ -100,7 +107,7 @@ function UploadPanel() {
   }
 
   return (
-    <section>
+    <section className="screen__pane">
       <h2 className="screen__name">Upload a filing</h2>
 
       <form className="screen__card" onSubmit={submit}>
@@ -188,7 +195,7 @@ function EdgarPanel() {
   }
 
   return (
-    <section>
+    <section className="screen__pane">
       <h2 className="screen__name">Look up SEC EDGAR filings</h2>
 
       <form className="screen__card" onSubmit={submit}>
@@ -316,7 +323,7 @@ function DocumentsPanel() {
   }, [load]);
 
   return (
-    <section>
+    <section className="screen__pane">
       <h2 className="screen__name">Recent documents</h2>
 
       <div className="screen__col-actions">
@@ -433,7 +440,7 @@ function ReindexPanel() {
   }
 
   return (
-    <section>
+    <section className="screen__pane">
       <h2 className="screen__name">Re-index stored documents</h2>
 
       <form className="screen__card" onSubmit={submit}>

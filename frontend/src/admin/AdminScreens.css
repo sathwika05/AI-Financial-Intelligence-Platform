@@ -338,3 +338,42 @@
   font-size: 11.5px;
   color: var(--text);
 }
+
+/* ── Side-by-side panels ────────────────────────────────────
+ *
+ * For a screen whose panels are independent things you might do, rather
+ * than steps in a sequence. Stacked in one narrow column they read as an
+ * order to follow, and leave most of the window empty.
+ *
+ * Scoped to a modifier rather than widening .screen, because the other
+ * admin screens are single forms that should stay narrow: a text input
+ * stretched across 1200px is harder to use, not easier.
+ */
+.screen--wide {
+  max-width: 1240px;
+}
+
+.screen__pair {
+  display: grid;
+  /* auto-fit so the pair collapses to one column on a narrow window
+     without a media query naming a specific device width. */
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.screen__pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Grid items default to min-width:auto, which lets a wide table push
+     its column past the track and the page sideways. */
+  min-width: 0;
+}
+
+/* Inside a pair the card fills its column. The 540px cap exists to stop a
+   lone form stretching across a wide screen, and a column already does
+   that job. */
+.screen__pair .screen__card {
+  max-width: none;
+}

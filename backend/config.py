@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     # anyone holding this repo mint an admin token for any deployment.
     JWT_SECRET: str = ""
     JWT_EXPIRE_HOURS: int = 12
+
+    # The S3 -> SQS -> Fargate ingestion path. Terraform sets these on the
+    # task; empty means the AWS path is off and the fetcher writes straight
+    # to Postgres, which is what every local run does.
+    AWS_REGION: str = "us-east-1"
+    RAW_BUCKET: str = ""
+    PROCESSED_BUCKET: str = ""
+    INGESTION_QUEUE_URL: str = ""
     ALPHA_VANTAGE_API_KEY: str = ""
 
 

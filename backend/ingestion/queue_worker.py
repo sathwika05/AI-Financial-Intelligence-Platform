@@ -21,6 +21,7 @@ from typing import Any, Awaitable, Callable
 from sqlalchemy import select
 
 from backend.ingestion.consumer import consume_once
+from backend.ingestion.dedupe import find_duplicate_document, hash_content
 from backend.ingestion.events import ObjectRef
 from backend.ingestion.handler import SkippedObject, handle_object
 from backend.ingestion.indexing_service import embed_document
@@ -51,15 +52,39 @@ async def _raise_on_failed_index(
         )
 
 
-async def _persist_document(document: dict) -> int:
+async def _persist_document(
+    document: dict,
+    *,
+    session_factory=AsyncSessionLocal,
+) -> int:
     """
     Write one raw document to the documents table.
+
+    Raises SkippedObject when the corpus already holds it. That is not a
+    failure: overwriting an object in S3 fires a second notification, the
+    fetcher sees the same article on its next run, and a person re-uploads
+    a filing they think did not work. Letting the insert hit the unique
+    constraint instead would leave the message undeleted, redelivered, and
+    eventually dead-lettered -- for a document already safely indexed.
 
     Resolves the ticker to a company where it can: a document with no
     company still indexes and is still retrievable, it just cannot be
     filtered by company.
     """
-    async with AsyncSessionLocal() as session:
+    async with session_factory() as session:
+        content_hash = hash_content(document.get("content"))
+        source_url = document.get("source_url")
+
+        duplicate = await find_duplicate_document(
+            session, source_url, content_hash
+        )
+
+        if duplicate:
+            raise SkippedObject(
+                f"{document.get('title') or 'document'} is already in the "
+                f"corpus (matched on {duplicate})."
+            )
+
         company_id = None
         ticker = (document.get("ticker") or "").strip().upper()
 
@@ -81,7 +106,10 @@ async def _persist_document(document: dict) -> int:
             content=document.get("content"),
             doc_type=document.get("doc_type") or "news",
             source=document.get("source") or "s3",
-            source_url=document.get("source_url"),
+            source_url=source_url,
+            # The identity the next delivery of this document is
+            # recognised by. Without it, a re-upload has nothing to match.
+            content_hash=content_hash,
         )
 
         session.add(row)

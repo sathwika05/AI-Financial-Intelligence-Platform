@@ -125,3 +125,15 @@ variable "log_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "sec_user_agent" {
+  description = <<-EOT
+    Identifies this deployment to SEC EDGAR, which rejects anonymous
+    requests. Format is a name and a contact address, for example
+    "Example Research team@example.com". Leave empty to disable the
+    EDGAR collector entirely.
+  EOT
+
+  type    = string
+  default = ""
+}

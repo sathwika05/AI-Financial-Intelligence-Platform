@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     INGESTION_QUEUE_URL: str = ""
     ALPHA_VANTAGE_API_KEY: str = ""
 
+    # SEC EDGAR requires a User-Agent naming the caller and a contact
+    # address. Empty means the EDGAR collector is off: it refuses to call
+    # rather than sending an anonymous request, which SEC rejects and
+    # which gets the whole address blocked when it is a shared one.
+    SEC_USER_AGENT: str = ""
+
 
     # Security. Everything in backend/security is on except the LLM guard,
     # which costs an API round trip per query — about 1-3s against ~0.4ms

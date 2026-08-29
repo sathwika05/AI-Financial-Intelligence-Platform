@@ -229,6 +229,13 @@ locals {
     { name = "INGESTION_QUEUE_URL", value = aws_sqs_queue.ingestion.id },
     { name = "RAW_BUCKET", value = aws_s3_bucket.docs["raw"].id },
     { name = "PROCESSED_BUCKET", value = aws_s3_bucket.docs["processed"].id },
+    // SEC requires every EDGAR request to name its caller and give a
+    // contact address. Not a secret -- it is sent in the clear on every
+    // request, and it exists so SEC can get in touch, not to authorise
+    // anything. Empty turns the collector off rather than sending an
+    // anonymous request, which SEC refuses and which gets the address
+    // blocked for everyone behind it.
+    { name = "SEC_USER_AGENT", value = var.sec_user_agent },
   ]
 
   app_secrets = [

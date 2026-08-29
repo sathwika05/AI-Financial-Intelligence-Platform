@@ -1,3 +1,4 @@
+import type { SessionUser } from "../auth/session";
 import { useMemo, useState } from "react";
 import { useHashRoute } from "../lib/router";
 import { findPreviousRun, isTerminal } from "./metrics";
@@ -46,7 +47,7 @@ function viewFromPath(path: string): string {
   return segment && isValidView(segment) ? segment : DEFAULT_VIEW;
 }
 
-export default function EvaluationApp() {
+export default function EvaluationApp({ user }: { user: SessionUser }) {
   const [path, navigate] = useHashRoute();
   const view = viewFromPath(path);
 
@@ -191,6 +192,7 @@ export default function EvaluationApp() {
       <Sidebar
         activeView={view}
         onNavigate={(next) => navigate(`/evaluation/${next}`)}
+        role={user.role}
       />
 
       <div className="ev-main">

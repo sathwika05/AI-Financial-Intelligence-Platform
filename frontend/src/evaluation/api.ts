@@ -1,3 +1,4 @@
+import { onUnauthorized, withAuth } from "../auth/session";
 /**
  * Evaluation API surface.
  *
@@ -309,7 +310,7 @@ async function request<T>(
   let response: Response;
 
   try {
-    response = await fetch(path, { ...init, signal });
+    response = await fetch(path, { ...withAuth(init), signal });
   } catch (caught) {
     if (caught instanceof DOMException && caught.name === "AbortError") {
       throw caught;
@@ -318,6 +319,13 @@ async function request<T>(
     throw new EvaluationApiError(
       "Could not reach the evaluation service. Is the backend running?",
     );
+  }
+
+  if (response.status === 401) {
+    // The token expired or was revoked. Every screen reads the session on
+    // mount, so clearing and reloading is what returns the reader to the
+    // sign-in page without threading a flag through unrelated components.
+    onUnauthorized();
   }
 
   if (!response.ok) {

@@ -1,3 +1,4 @@
+import { withAuth } from "../auth/session";
 import type { FinancialQueryResponse } from "./types";
 
 const ENDPOINT = "/api/retrieve/financial";
@@ -56,9 +57,11 @@ export async function runFinancialQuery(
 
   try {
     response = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
+      ...withAuth({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      }),
       signal,
     });
   } catch (error) {

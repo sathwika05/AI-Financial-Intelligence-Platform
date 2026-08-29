@@ -39,6 +39,24 @@ export interface NavItem {
   icon: IconComponent;
   /** Renders as an outbound link with a ↗ marker instead of a view route. */
   href?: string;
+  /** Hidden from analysts: the routes behind it require the admin role. */
+  adminOnly?: boolean;
+}
+
+/**
+ * Hiding an item is a courtesy, not a control. The routes behind Providers
+ * and Settings are guarded server-side by require_role(ADMIN); this only
+ * saves an analyst from clicking into a screen that would 403.
+ */
+export function visibleSections(role: string): NavSection[] {
+  if (role === "admin") {
+    return NAV_SECTIONS;
+  }
+
+  return NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.adminOnly),
+  })).filter((section) => section.items.length > 0);
 }
 
 export interface NavSection {
@@ -67,7 +85,12 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "metrics", label: "Metrics", icon: Sparkles },
       { id: "retrieval-modes", label: "Retrieval Modes", icon: Search },
-      { id: "providers", label: "Models (Providers)", icon: BrainCircuit },
+      {
+        id: "providers",
+        label: "Models (Providers)",
+        icon: BrainCircuit,
+        adminOnly: true,
+      },
       { id: "errors", label: "Error Analysis", icon: TriangleAlert },
       { id: "trends", label: "Trend Analysis", icon: TrendingUp },
     ],
@@ -92,7 +115,7 @@ export const NAV_SECTIONS: NavSection[] = [
         // deep link that might point at the wrong project.
         href: "https://smith.langchain.com/",
       },
-      { id: "settings", label: "Settings", icon: Settings },
+      { id: "settings", label: "Settings", icon: Settings, adminOnly: true },
     ],
   },
 ];
@@ -160,9 +183,11 @@ function useHealth(): { report: HealthReport | null; reachable: boolean } {
 export function Sidebar({
   activeView,
   onNavigate,
+  role,
 }: {
   activeView: string;
   onNavigate: (view: string) => void;
+  role: string;
 }) {
   const { report, reachable } = useHealth();
 
@@ -198,7 +223,7 @@ export function Sidebar({
       </a>
 
       <div className="ev-sidebar__scroll">
-        {NAV_SECTIONS.map((section) => (
+        {visibleSections(role).map((section) => (
           <div key={section.title} className="ev-navgroup">
             <p className="ev-navgroup__title">{section.title}</p>
 

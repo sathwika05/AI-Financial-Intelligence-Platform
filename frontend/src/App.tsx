@@ -1,3 +1,4 @@
+import { clearSession, type SessionUser } from "./auth/session";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Check, Database, Scale } from "lucide-react";
 import { Logo } from "./components/Logo";
@@ -18,7 +19,7 @@ import "./App.css";
 
 type Status = "idle" | "running" | "error" | "done";
 
-export default function App() {
+export default function App({ user }: { user: SessionUser }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -146,9 +147,27 @@ export default function App() {
             </span>
           </span>
 
-          <a className="masthead__link" href="#/evaluation">
-            Evaluation dashboard
-          </a>
+          {user.role === "admin" && (
+            <a className="masthead__link" href="#/evaluation">
+              Evaluation dashboard
+            </a>
+          )}
+
+          <span className="masthead__user">
+            <span className="masthead__user-email">{user.email}</span>
+            <span className="masthead__user-role">{user.role}</span>
+          </span>
+
+          <button
+            type="button"
+            className="masthead__signout"
+            onClick={() => {
+              clearSession();
+              window.location.reload();
+            }}
+          >
+            Sign out
+          </button>
         </div>
       </header>
 

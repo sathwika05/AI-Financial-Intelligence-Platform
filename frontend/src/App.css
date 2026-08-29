@@ -82,6 +82,10 @@
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+  /* Absorbs the free space, so the identity and sign-out sit hard right.
+     This used to live on .masthead__link, which is hidden from analysts —
+     leaving their masthead bunched against the brand. */
+  margin-right: auto;
 }
 
 .masthead__title {
@@ -104,7 +108,6 @@
 /* Crossing to the evaluation dashboard: a way out of this screen, not part
    of the brand. */
 .masthead__link {
-  margin-left: auto;
   flex: none;
   padding: 5px 11px;
   padding: 6px 12px;
@@ -242,4 +245,54 @@
   .hero {
     padding-top: var(--space-5);
   }
+}
+
+/* Signed-in identity in the masthead. Present on every screen, because the
+   role decides what the reader can reach and a dashboard that hides who you
+   are makes a 403 baffling. */
+.masthead__user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  margin-left: 18px;
+  line-height: 1.2;
+}
+
+.masthead__user-email {
+  font-size: 12.5px;
+  font-weight: 550;
+  /* Literal, matching .masthead__title: the surface is the dark brand band,
+     so the light-surface text tokens render near-black on navy. */
+  color: #ffffff;
+}
+
+.masthead__user-role {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(215, 231, 243, 0.82);
+}
+
+.masthead__signout {
+  margin-left: 12px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.masthead__signout:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+
+.masthead__signout:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

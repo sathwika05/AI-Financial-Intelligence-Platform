@@ -2,6 +2,25 @@ FROM python:3.13-slim
 
 WORKDIR /code
 
+# System libraries OpenCV links against.
+#
+# Docling pulls in opencv-python through its table-structure model, and
+# the wheel links libxcb.so.1, libGL.so.1 and libglib -- none of which
+# python:3.13-slim ships. Without them `import cv2` raises at the moment
+# the first document is parsed, which also leaves Docling reporting "no
+# OCR engine found", because rapidocr imports cv2 too.
+#
+# Verified with ldd rather than guessed: every one of these is named in
+# cv2's link table. (opencv-python-headless would remove the need for
+# them and shrink the image, but it means overriding a transitive
+# dependency Docling declares itself.)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libxcb1 \
+        libgl1 \
+        libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install uv
 
 COPY pyproject.toml uv.lock ./

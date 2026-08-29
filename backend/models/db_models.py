@@ -236,6 +236,59 @@ class RetrievalLog(Base):
 # ---------------------------------------------------------------------------
 
 
+class User(Base):
+    """
+    A person who can sign in.
+
+    Two roles only -- see backend/auth/roles.py. The password is stored as
+    a bcrypt hash; nothing anywhere keeps the plaintext.
+    """
+
+    __tablename__ = "users"
+
+    id = Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # Case-insensitive in practice: the login path lowercases before
+    # looking up, so "A@b.com" and "a@b.com" are the same account.
+    email = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    password_hash = Column(
+        String,
+        nullable=False,
+    )
+
+    # "admin" or "analyst". Stored as text rather than a database enum so
+    # adding a role later does not need a migration on this column.
+    role = Column(
+        String,
+        nullable=False,
+        default="analyst",
+    )
+
+    # Disabling beats deleting: it keeps the audit trail intact and stops
+    # the login immediately.
+    is_active = Column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+
 class BenchmarkRun(Base):
     """
     One row per benchmark run.

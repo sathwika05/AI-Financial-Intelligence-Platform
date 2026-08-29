@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     # /api/index/documents. Empty means the admin routes refuse rather
     # than accept a key everyone can read.
     ADMIN_API_KEY: str = ""
+
+    # Signs access tokens. No default: a shared fallback secret would let
+    # anyone holding this repo mint an admin token for any deployment.
+    JWT_SECRET: str = ""
+    JWT_EXPIRE_HOURS: int = 12
     ALPHA_VANTAGE_API_KEY: str = ""
 
 

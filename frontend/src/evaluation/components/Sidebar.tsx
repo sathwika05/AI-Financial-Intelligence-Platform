@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import {
+  ArrowLeft,
   Activity,
   BarChart3,
   BrainCircuit,
@@ -27,8 +28,10 @@ import {
  * was not, until results were persisted per question rather than only as a
  * run-level aggregate.
  *
- * There is no link back to the research console here, because the reference
- * has none. The brand mark serves that purpose.
+ * "Back to admin" returns to the rail. The comment here used to say the
+ * brand mark served that purpose, which was true when the app was two peer
+ * surfaces; once the rail existed, entering this dashboard made four
+ * destinations disappear behind a logo.
  */
 
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
@@ -220,6 +223,14 @@ export function Sidebar({
           <span className="ev-brand__title">Financial Intelligence</span>
           <span className="ev-brand__subtitle">AI Evaluation Dashboard</span>
         </span>
+      </a>
+
+      {/* The dashboard replaces the admin rail rather than nesting inside
+          it, so this is the only way back. It used to be the brand mark
+          alone, which is a logo before it is a control. */}
+      <a className="ev-back" href="#/">
+        <ArrowLeft size={15} className="ev-back__icon" aria-hidden="true" />
+        Back to admin
       </a>
 
       <div className="ev-sidebar__scroll">

@@ -1,0 +1,213 @@
+/* The admin rail. Dark against the console's light page, so the frame and
+   the content it frames never read as one surface. */
+
+.admin {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.admin__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 14px 16px;
+  background: linear-gradient(
+    180deg,
+    var(--brand-navy) 0%,
+    var(--brand-navy-light) 100%
+  );
+  border-right: 1px solid rgba(125, 211, 235, 0.16);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* ── Brand ─────────────────────────────────────────────────── */
+
+.admin__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 14px;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(125, 211, 235, 0.14);
+  margin-bottom: 10px;
+}
+
+.admin__brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.admin__brand-name {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  color: #ffffff;
+  line-height: 1.15;
+}
+
+.admin__brand-sub {
+  font-size: 10.5px;
+  color: rgba(215, 231, 243, 0.68);
+  line-height: 1.25;
+}
+
+/* ── Items ─────────────────────────────────────────────────── */
+
+.admin__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: rgba(215, 231, 243, 0.86);
+  transition: background 0.13s ease, color 0.13s ease;
+}
+
+.admin__item:hover {
+  background: rgba(125, 211, 235, 0.09);
+  color: #ffffff;
+}
+
+/* The active item is filled rather than merely tinted: at this size a
+   background wash alone is easy to miss against the gradient. */
+.admin__item--on {
+  background: rgba(125, 211, 235, 0.16);
+  color: #ffffff;
+}
+
+.admin__item:focus-visible {
+  outline: 2px solid rgba(125, 211, 235, 0.75);
+  outline-offset: -2px;
+}
+
+.admin__icon {
+  flex: none;
+  opacity: 0.9;
+}
+
+.admin__item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.admin__item-label {
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.2;
+}
+
+.admin__item-detail {
+  font-size: 10.5px;
+  color: rgba(215, 231, 243, 0.6);
+  line-height: 1.25;
+}
+
+.admin__item--on .admin__item-detail {
+  color: rgba(215, 231, 243, 0.78);
+}
+
+/* ── Footer ────────────────────────────────────────────────── */
+
+.admin__footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid rgba(125, 211, 235, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.admin__who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 4px;
+  min-width: 0;
+}
+
+.admin__email {
+  font-size: 12px;
+  font-weight: 550;
+  color: #ffffff;
+  line-height: 1.25;
+  /* Long addresses must not widen the rail or spill over the sign-out. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin__role {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(215, 231, 243, 0.66);
+}
+
+.admin__signout {
+  width: 100%;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: rgba(215, 231, 243, 0.92);
+  background: rgba(8, 47, 73, 0.55);
+  border: 1px solid rgba(125, 211, 235, 0.3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+
+.admin__signout:hover {
+  background: rgba(14, 116, 144, 0.42);
+  color: #ffffff;
+}
+
+.admin__signout:focus-visible {
+  outline: 2px solid rgba(125, 211, 235, 0.75);
+  outline-offset: 2px;
+}
+
+/* ── Content ───────────────────────────────────────────────── */
+
+.admin__content {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .admin {
+    grid-template-columns: 1fr;
+  }
+
+  .admin__rail {
+    position: static;
+    height: auto;
+  }
+
+  .admin__nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .admin__item-detail {
+    display: none;
+  }
+}

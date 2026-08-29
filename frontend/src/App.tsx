@@ -19,7 +19,15 @@ import "./App.css";
 
 type Status = "idle" | "running" | "error" | "done";
 
-export default function App({ user }: { user: SessionUser }) {
+export default function App({
+  user,
+  inShell = false,
+}: {
+  user: SessionUser;
+  /** Rendered inside the admin rail, which already shows identity and
+   *  navigation. Suppresses the masthead's own copies of both. */
+  inShell?: boolean;
+}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -136,46 +144,50 @@ export default function App({ user }: { user: SessionUser }) {
 
   return (
     <div className="app">
-      <header className="masthead">
-        <div className="shell masthead__inner">
-          <Logo size={36} />
+      {/* The admin rail carries the brand, identity and navigation, so
+          inside it the masthead would be a second copy of all three. */}
+      {!inShell && (
+        <header className="masthead">
+          <div className="shell masthead__inner">
+            <Logo size={36} />
 
-          <span className="masthead__brand">
-            <span className="masthead__title">Financial Intelligence</span>
-            <span className="masthead__subtitle">
-              AI-powered company research and evidence-backed financial analysis
-            </span>
-          </span>
-
-          {user.role === "admin" && (
-            <a className="masthead__link" href="#/evaluation">
-              Evaluation dashboard
-            </a>
-          )}
-
-          {/* Absent on the public demo, which has no accounts: an empty
-              address and a sign-out that ends nothing. */}
-          {user.email && (
-            <>
-              <span className="masthead__user">
-                <span className="masthead__user-email">{user.email}</span>
-                <span className="masthead__user-role">{user.role}</span>
+            <span className="masthead__brand">
+              <span className="masthead__title">Financial Intelligence</span>
+              <span className="masthead__subtitle">
+                AI-powered company research and evidence-backed financial analysis
               </span>
+            </span>
 
-              <button
-                type="button"
-                className="masthead__signout"
-                onClick={() => {
-                  clearSession();
-                  window.location.reload();
-                }}
-              >
-                Sign out
-              </button>
-            </>
-          )}
-        </div>
-      </header>
+            {!inShell && user.role === "admin" && (
+              <a className="masthead__link" href="#/evaluation">
+                Evaluation dashboard
+              </a>
+            )}
+
+            {/* Absent on the public demo, which has no accounts: an empty
+                address and a sign-out that ends nothing. */}
+            {!inShell && user.email && (
+              <>
+                <span className="masthead__user">
+                  <span className="masthead__user-email">{user.email}</span>
+                  <span className="masthead__user-role">{user.role}</span>
+                </span>
+
+                <button
+                  type="button"
+                  className="masthead__signout"
+                  onClick={() => {
+                    clearSession();
+                    window.location.reload();
+                  }}
+                >
+                  Sign out
+                </button>
+              </>
+            )}
+          </div>
+        </header>
+      )}
 
       <main className="shell app__main">
         {status === "idle" && (

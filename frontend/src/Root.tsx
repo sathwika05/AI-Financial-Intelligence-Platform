@@ -4,6 +4,9 @@ import EvaluationApp from "./evaluation/EvaluationApp";
 import { LoginPage } from "./auth/LoginPage";
 import { authRequired, fetchMe } from "./auth/api";
 import { readToken, readUser, type SessionUser } from "./auth/session";
+import { AdminShell } from "./admin/AdminShell";
+import { ProvidersScreen } from "./admin/ProvidersScreen";
+import { IndexingScreen } from "./admin/IndexingScreen";
 import { useHashRoute } from "./lib/router";
 
 /**
@@ -20,7 +23,7 @@ import { useHashRoute } from "./lib/router";
  * saves the reader from a wall of 401s.
  */
 export default function Root() {
-  const [path] = useHashRoute();
+  const [path, navigate] = useHashRoute();
   const [user, setUser] = useState<SessionUser | null>(() => readUser());
 
   // A stored token can be expired or revoked. Ask the server whose it is
@@ -92,9 +95,38 @@ export default function Root() {
   // The dashboard is an admin surface: every route behind it now requires
   // the admin role, so an analyst who types the URL would get a screen of
   // 401s. Send them to the console they can actually use.
+  //
+  // It renders outside the rail, because it carries its own dense sidebar
+  // and two columns of navigation is one too many.
   if (path.startsWith("/evaluation") && user.role === "admin") {
     return <EvaluationApp user={user} />;
   }
 
-  return <App user={user} />;
+  // An analyst has exactly one screen, so a rail listing one destination
+  // would be furniture rather than navigation.
+  if (user.role !== "admin") {
+    return <App user={user} />;
+  }
+
+  if (path === "/providers") {
+    return (
+      <AdminShell activeId="providers" user={user} onNavigate={navigate}>
+        <ProvidersScreen />
+      </AdminShell>
+    );
+  }
+
+  if (path === "/indexing") {
+    return (
+      <AdminShell activeId="indexing" user={user} onNavigate={navigate}>
+        <IndexingScreen />
+      </AdminShell>
+    );
+  }
+
+  return (
+    <AdminShell activeId="home" user={user} onNavigate={navigate}>
+      <App user={user} inShell />
+    </AdminShell>
+  );
 }

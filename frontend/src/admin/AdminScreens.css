@@ -1,0 +1,340 @@
+/* Shared by the admin screens inside the rail. Light, document-like — the
+   same surface as the console, so moving between them is one product. */
+
+.screen {
+  max-width: 940px;
+  padding: 34px 32px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.screen__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.screen__title {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -0.018em;
+  color: var(--text-strong);
+}
+
+.screen__lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.screen__note {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.screen__footnote {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-subtle);
+}
+
+/* ── Messages ──────────────────────────────────────────────── */
+
+.screen__error,
+.screen__ok {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+
+.screen__error {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger);
+}
+
+.screen__ok {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+  border-color: var(--color-success);
+}
+
+/* ── Table ─────────────────────────────────────────────────── */
+
+.screen__table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.screen__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.screen__table th {
+  padding: 11px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.screen__table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  color: var(--text);
+}
+
+.screen__table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Disabled providers stay legible: they are still configurable, just not
+   in use, so they must not read as unavailable. */
+.screen__table tr.is-off .screen__name {
+  color: var(--text-dim);
+}
+
+.screen__name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  line-height: 1.25;
+}
+
+.screen__slug {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+
+.screen__col-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Pills ─────────────────────────────────────────────────── */
+
+.screen__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.screen__pill--ok {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+  border-color: var(--color-success);
+}
+
+.screen__pill--warn {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+  border-color: var(--color-warning);
+}
+
+.screen__pill--default {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* ── Buttons ───────────────────────────────────────────────── */
+
+.screen__btn,
+.screen__submit {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.13s ease, border-color 0.13s ease;
+}
+
+.screen__btn {
+  margin-left: 8px;
+  padding: 6px 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+}
+
+.screen__btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+
+.screen__btn--primary:not(:disabled) {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.screen__btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.screen__btn:disabled,
+.screen__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.screen__btn:focus-visible,
+.screen__submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Form ──────────────────────────────────────────────────── */
+
+.screen__card {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  max-width: 540px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+}
+
+.screen__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.screen__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.screen__input {
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-strong);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.screen__input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--color-primary-ring);
+}
+
+.screen__hint {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+
+.screen__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 10px 18px;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.screen__submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/* ── Aside ─────────────────────────────────────────────────── */
+
+.screen__aside {
+  display: flex;
+  gap: 11px;
+  max-width: 62ch;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.screen__aside-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-dim);
+}
+
+.screen__aside-title {
+  margin: 0 0 3px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.screen__aside-body {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+/* Model tiers, stacked. Three short rows read faster here than a comma
+   list, because the tier name is what the reader is scanning for. */
+.screen__tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.screen__tier {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.screen__tier-name {
+  min-width: 52px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.screen__tier-model {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--text);
+}

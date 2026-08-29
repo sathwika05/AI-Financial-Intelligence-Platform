@@ -19,6 +19,7 @@ from backend.api.evaluation_routes import (
     router as evaluation_router,
 )
 from backend.api.admin_llm_routes import router as admin_llm_router
+from backend.api.auth_routes import router as auth_router
 
 import logging
 
@@ -111,6 +112,9 @@ def build_app(*, deployment_mode: str | None = None) -> FastAPI:
         title="Financial Intelligence Pipeline",
         lifespan=lifespan,
     )
+
+    # Signing in, in every mode: every other router now needs a token.
+    application.include_router(auth_router)
 
     # The UI screen's own endpoint, in every mode.
     application.include_router(financial_router)

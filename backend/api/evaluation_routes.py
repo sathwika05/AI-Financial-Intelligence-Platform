@@ -31,6 +31,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.dependencies import require_role
+from backend.auth.roles import Role
 from backend.evaluation.benchmark_runner import (
     BenchmarkRunner,
 )
@@ -65,6 +67,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/evaluation",
+    dependencies=[Depends(require_role(Role.ADMIN))],
     tags=["evaluation"],
 )
 

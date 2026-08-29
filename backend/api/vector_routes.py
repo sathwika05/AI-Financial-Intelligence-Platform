@@ -8,12 +8,13 @@
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from fastapi.security import APIKeyHeader
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.dependencies import require_role
+from backend.auth.roles import Role
 from backend.config import settings
 from backend.graph.vector_graph import vector_graph
 from backend.ingestion.indexing_service import embed_all_documents, embed_document
@@ -25,17 +26,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["vector"])
 
 
-# ── Admin auth ─────────────────────────────────────────────
-
-API_KEY_HEADER = APIKeyHeader(name="X-Admin-Key")
-
-def verify_admin(api_key: str=Depends(API_KEY_HEADER)):
-    if api_key!= settings.ADMIN_API_KEY:
-        raise HTTPException(
-            status_code=403,
-            detail="Unauthorized"
-        )
-    return api_key
+# Indexing is guarded by require_role(Role.ADMIN) on the route itself.
+# A shared X-Admin-Key used to sit on top of it, which carried no identity,
+# no expiry and no revocation -- and once ADMIN_API_KEY lost its published
+# default, the header check refused the admin it existed to admit.
 
 # ── Request models ─────────────────────────────────────────
 
@@ -48,7 +42,9 @@ class IndexRequest(BaseModel):
 
 # ── Retrieval endpoint ─────────────────────────────────────
 
-@router.post("/api/retrieve/vector")
+@router.post(
+    "/api/retrieve/vector",
+    dependencies=[Depends(require_role(Role.ADMIN))],)
 async def vector_retrieval(
     request: QueryRequest,
     session: AsyncSession = Depends(get_db),
@@ -83,11 +79,12 @@ async def vector_retrieval(
 
 # ── Indexing endpoint (admin only) ─────────────────────────
 
-@router.post("/api/index/documents")
+@router.post(
+    "/api/index/documents",
+    dependencies=[Depends(require_role(Role.ADMIN))],)
 async def index_documents(
     request: IndexRequest,
     background_tasks: BackgroundTasks,
-    _: str = Depends(verify_admin)
 ):
     """Admin only — trigger document indexing."""
     if request.document_id:

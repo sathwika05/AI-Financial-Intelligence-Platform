@@ -11,6 +11,8 @@ from requests import session
 from sqlalchemy.ext.asyncio import AsyncSession
 from langchain_core.load import dumps
 
+from backend.auth.dependencies import require_role
+from backend.auth.roles import Role
 from backend.config import settings
 from backend.graph.financial_graph import financial_graph
 from backend.security import events
@@ -70,7 +72,9 @@ async def _run_financial_query(query: str, llm_runtime):
     return {**final_state, **usage.totals()}
 
 
-@router.post("/api/retrieve/financial")
+@router.post(
+    "/api/retrieve/financial",
+    dependencies=[Depends(require_role(Role.ANALYST))],)
 async def financial_retrieval(
     request: FinancialQueryRequest,
     http_request: Request,

@@ -1,10 +1,12 @@
 
 
 
-from fastapi import APIRouter
+from fastapi import Depends, APIRouter
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
+from backend.auth.dependencies import require_role
+from backend.auth.roles import Role
 from backend.graph.sql_graph import sql_graph
 
 
@@ -15,7 +17,9 @@ class QueryRequest(BaseModel):
 router = APIRouter()
 
 
-@router.post("/api/retrieve/sql")
+@router.post(
+    "/api/retrieve/sql",
+    dependencies=[Depends(require_role(Role.ADMIN))],)
 async def retrieve_sql(request: QueryRequest):
     result = await sql_graph.ainvoke({
        'messages': [HumanMessage(content=request.query)],

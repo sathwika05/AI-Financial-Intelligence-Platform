@@ -6,6 +6,8 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.dependencies import require_role
+from backend.auth.roles import Role
 from backend.models.db_models import LLMModel, LLMProvider
 from backend.llm.encryption_service import encryption_service
 from backend.services.postgres_service import get_db
@@ -63,7 +65,10 @@ def serialize_provider(provider: LLMProvider) -> dict:
     }
 
 
-@router.post("/providers")
+@router.post(
+    "/providers",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def create_provider(
     payload: ProviderCreateRequest,
     session: AsyncSession = Depends(get_db),
@@ -121,7 +126,10 @@ async def create_provider(
         ) from exc
 
 
-@router.get("/providers")
+@router.get(
+    "/providers",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def list_providers(
     session: AsyncSession = Depends(get_db),
 ):
@@ -137,7 +145,10 @@ async def list_providers(
     ]
 
 
-@router.patch("/providers/{provider_id}")
+@router.patch(
+    "/providers/{provider_id}",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def update_provider(
     provider_id: UUID,
     payload: ProviderUpdateRequest,
@@ -180,7 +191,10 @@ async def update_provider(
     return serialize_provider(provider)
 
 
-@router.post("/providers/{provider_id}/set-default")
+@router.post(
+    "/providers/{provider_id}/set-default",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def set_default_provider(
     provider_id: UUID,
     session: AsyncSession = Depends(get_db),
@@ -216,7 +230,10 @@ async def set_default_provider(
     return serialize_provider(provider)
 
 
-@router.post("/providers/{provider_id}/toggle")
+@router.post(
+    "/providers/{provider_id}/toggle",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def toggle_provider(
     provider_id: UUID,
     session: AsyncSession = Depends(get_db),
@@ -243,7 +260,10 @@ async def toggle_provider(
     return serialize_provider(provider)
 
 
-@router.delete("/providers/{provider_id}")
+@router.delete(
+    "/providers/{provider_id}",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def delete_provider(
     provider_id: UUID,
     session: AsyncSession = Depends(get_db),
@@ -273,7 +293,10 @@ async def delete_provider(
     }
 
 
-@router.post("/providers/{provider_id}/models")
+@router.post(
+    "/providers/{provider_id}/models",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def create_model(
     provider_id: UUID,
     payload: ModelCreateRequest,
@@ -335,7 +358,10 @@ async def create_model(
         ) from exc
 
 
-@router.get("/providers/{provider_id}/models")
+@router.get(
+    "/providers/{provider_id}/models",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def list_provider_models(
     provider_id: UUID,
     session: AsyncSession = Depends(get_db),
@@ -349,7 +375,10 @@ async def list_provider_models(
     return list(result.scalars().all())
 
 
-@router.patch("/models/{model_id}")
+@router.patch(
+    "/models/{model_id}",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def update_model(
     model_id: UUID,
     payload: ModelUpdateRequest,
@@ -377,7 +406,10 @@ async def update_model(
     return model
 
 
-@router.delete("/models/{model_id}")
+@router.delete(
+    "/models/{model_id}",
+    dependencies=[Depends(require_role(Role.ADMIN))],
+)
 async def delete_model(
     model_id: UUID,
     session: AsyncSession = Depends(get_db),

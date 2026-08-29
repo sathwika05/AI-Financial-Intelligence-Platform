@@ -400,7 +400,7 @@ export function SummaryView({
         <Panel
           span={3}
           icon={Filter}
-          title="Retrieval Pipeline"
+          title="RAG Reranking"
           note="(stages this run used)"
           tone="violet"
           link={{

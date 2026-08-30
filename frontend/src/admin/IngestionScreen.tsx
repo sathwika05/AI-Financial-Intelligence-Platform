@@ -224,6 +224,11 @@ function EdgarPanel() {
             value={ticker}
             onChange={(event) => setTicker(event.target.value)}
           />
+          <span className="screen__hint">
+            Resolved to the company's Central Index Key, which is what
+            EDGAR is addressed by — there is no endpoint that takes a
+            ticker.
+          </span>
         </label>
 
         <label className="screen__field">

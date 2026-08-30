@@ -377,6 +377,14 @@
 /* Inside a pair the card fills its column. The 540px cap exists to stop a
    lone form stretching across a wide screen, and a column already does
    that job. */
+/* Every hint reserves two lines inside a pair, so the field below it
+   starts at the same height in both cards. Without this the alignment
+   depends on each hint happening to wrap identically, which lasts until
+   someone edits a word. */
+.screen__pair .screen__hint {
+  min-height: 2.7em;
+}
+
 .screen__pair .screen__card {
   max-width: none;
   /* Grow into whatever height the taller card set. The controls stay at

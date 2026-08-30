@@ -557,3 +557,25 @@
 .screen__check strong {
   font-weight: 600;
 }
+
+/* A small square control for dismissing something, sized to sit on a
+   heading line without setting its height. */
+.screen__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.screen__icon-btn:hover {
+  color: var(--text);
+  border-color: var(--line-strong, var(--line));
+}

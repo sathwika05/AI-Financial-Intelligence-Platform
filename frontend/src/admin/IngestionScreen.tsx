@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   Upload,
+  X,
 } from "lucide-react";
 import {
   AdminApiError,
@@ -303,6 +304,23 @@ function EdgarPanel() {
         <p className="screen__note">
           EDGAR lists no filings of those forms for that company.
         </p>
+      )}
+
+      {filings && filings.length > 0 && (
+        <div className="screen__pane-head">
+          <span className="screen__count">
+            {filings.length} filing{filings.length === 1 ? "" : "s"}
+          </span>
+          <button
+            type="button"
+            className="screen__icon-btn"
+            onClick={() => setFilings(null)}
+            aria-label="Clear these results"
+            title="Clear these results"
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
 
       {filings && filings.length > 0 && (

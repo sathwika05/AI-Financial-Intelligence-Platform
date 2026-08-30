@@ -82,7 +82,7 @@ export function IngestionScreen() {
 
       <div className="screen__pair">
         <CollectPanel />
-        <SchedulerPanel />
+        <S3PipelinePanel />
       </div>
 
       <DocumentsPanel />
@@ -1012,7 +1012,7 @@ function ReseedPanel() {
 }
 
 /**
- * The route this deployment does not take.
+ * The bucket route: what it is, and what has come through it.
  *
  * A panel rather than a loose note, so it sits level with Collect
  * opposite: both are about filling the corpus without watching each
@@ -1022,7 +1022,7 @@ function ReseedPanel() {
  * Nothing to press. It describes what runs elsewhere, and saying which
  * configuration is missing is the useful part.
  */
-function SchedulerPanel() {
+function S3PipelinePanel() {
   const [events, setEvents] = useState<IngestionEvent[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1053,7 +1053,7 @@ function SchedulerPanel() {
   return (
     <section className="screen__pane screen__pane--fill">
       <div className="screen__pane-head">
-        <h2 className="screen__name">Scheduled indexing</h2>
+        <h2 className="screen__name">S3 pipeline</h2>
         <button
           type="button"
           className="screen__btn"

@@ -531,3 +531,29 @@
   gap: 24px;
   min-width: 0;
 }
+
+/* A set of choices, laid out like the fields around it. */
+.screen__fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.screen__checks {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.screen__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.screen__check strong {
+  font-weight: 600;
+}

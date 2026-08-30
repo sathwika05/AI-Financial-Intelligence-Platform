@@ -214,16 +214,14 @@ async def preview_filings(
 
     headers = _edgar_headers(settings.SEC_USER_AGENT)
 
-    wanted = tuple(
-        part.strip().upper() for part in forms.split(",") if part.strip()
-    )
+    wanted = _require_known_forms(forms.split(","))
 
     try:
         return {
             "ticker": ticker.strip().upper(),
             "filings": await _preview(
                 ticker,
-                forms=wanted or ("10-K",),
+                forms=wanted,
                 limit=max(1, min(limit, 50)),
                 fetch=http_fetch,
                 headers=headers,
@@ -544,6 +542,14 @@ RESEED_CONFIRMATION = "replace the corpus"
 # size should be a decision rather than a side effect.
 MAX_FILINGS_PER_RUN = 25
 
+# The forms worth asking for, and the only ones accepted.
+#
+# A bad form is the quietest mistake available here: recent_filings
+# matches nothing, the run reports success having done nothing, and the
+# only trace is a log line. Restricting the field is cheaper than
+# explaining the silence afterwards.
+SUPPORTED_FORMS = ("10-K", "10-Q", "8-K")
+
 
 class CollectRequest(BaseModel):
     tickers: list[str] = Field(min_length=1, max_length=MAX_FILINGS_PER_RUN)
@@ -553,6 +559,41 @@ class CollectRequest(BaseModel):
 
 class ReseedRequest(BaseModel):
     confirm: str = Field(default="", max_length=64)
+
+
+def _require_known_forms(forms: list[str]) -> tuple[str, ...]:
+    """
+    Normalise the requested forms, or refuse them.
+
+    Refusing an empty list too: asking for nothing matches nothing, which
+    is indistinguishable from a company having filed nothing.
+    """
+    cleaned = tuple(
+        form.strip().upper() for form in forms if form and form.strip()
+    )
+
+    if not cleaned:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Choose at least one form. Available: "
+                + ", ".join(SUPPORTED_FORMS)
+                + "."
+            ),
+        )
+
+    unknown = [form for form in cleaned if form not in SUPPORTED_FORMS]
+
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{', '.join(unknown)} is not a form this fetches. "
+                "Available: " + ", ".join(SUPPORTED_FORMS) + "."
+            ),
+        )
+
+    return cleaned
 
 
 def _require_sane_run_size(tickers: list[str], *, limit: int) -> int:
@@ -725,15 +766,16 @@ async def collect_filings_job(
     known = await _known_tickers(session)
     tickers = [_require_known_ticker(t, known) for t in request.tickers]
 
+    forms = _require_known_forms(request.forms)
+
     total = _require_sane_run_size(tickers, limit=request.limit)
 
     headers = _edgar_headers(settings.SEC_USER_AGENT)
-    forms = tuple(f.strip().upper() for f in request.forms if f.strip())
 
     async def run() -> None:
         summary = await _collect_many(
             tickers,
-            forms=forms or ("10-K",),
+            forms=forms,
             limit=request.limit,
             index_one=_index_ticker,
             headers=headers,

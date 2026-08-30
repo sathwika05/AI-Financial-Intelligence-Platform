@@ -206,7 +206,7 @@ function UploadPanel() {
 function EdgarPanel() {
   const companies = useCompanies();
   const [ticker, setTicker] = useState("");
-  const [forms, setForms] = useState("10-K,10-Q");
+  const [forms, setForms] = useState<string[]>(["10-K", "10-Q"]);
   const [busy, setBusy] = useState(false);
   const [filings, setFilings] = useState<EdgarFiling[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -219,7 +219,7 @@ function EdgarPanel() {
     setError(null);
 
     try {
-      const response = await previewFilings(ticker.trim(), forms, 10);
+      const response = await previewFilings(ticker.trim(), forms.join(","), 10);
 
       setFilings(response.filings);
     } catch (caught) {
@@ -263,19 +263,29 @@ function EdgarPanel() {
           </span>
         </label>
 
-        <label className="screen__field">
-          <span className="screen__label">Forms</span>
-          <input
-            className="screen__input"
-            type="text"
-            value={forms}
-            onChange={(event) => setForms(event.target.value)}
-          />
-          <span className="screen__hint">
-            Comma separated. A 10-K is the annual report, a 10-Q the
-            quarterly one; an 8-K discloses a single material event.
-          </span>
-        </label>
+        <fieldset className="screen__field screen__fieldset">
+          <legend className="screen__label">Forms</legend>
+          <div className="screen__checks">
+            {FORM_TYPES.map(({ code, label }) => (
+              <label key={code} className="screen__check">
+                <input
+                  type="checkbox"
+                  checked={forms.includes(code)}
+                  onChange={(event) =>
+                    setForms((current) =>
+                      event.target.checked
+                        ? [...current, code]
+                        : current.filter((f) => f !== code),
+                    )
+                  }
+                />
+                <span>
+                  <strong>{code}</strong> {label}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         {error && (
           <p className="screen__error" role="alert">
@@ -707,10 +717,19 @@ function IndexButton({ filing }: { filing: EdgarFiling }) {
 // run is visible before it is started, rather than arriving as a refusal.
 const MAX_FILINGS_PER_RUN = 25;
 
+// Matches SUPPORTED_FORMS on the server. Checkboxes rather than a text
+// field: a mistyped form matches nothing at EDGAR, so the run reports
+// success having fetched nothing at all.
+const FORM_TYPES = [
+  { code: "10-K", label: "Annual report" },
+  { code: "10-Q", label: "Quarterly report" },
+  { code: "8-K", label: "Material event" },
+];
+
 function CollectPanel() {
   const companies = useCompanies();
   const [tickers, setTickers] = useState<string[]>([]);
-  const [forms, setForms] = useState("10-K,10-Q");
+  const [forms, setForms] = useState<string[]>(["10-K"]);
   const [limit, setLimit] = useState("2");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -722,7 +741,12 @@ function CollectPanel() {
     const wanted = tickers;
 
     if (wanted.length === 0) {
-      setError("Name at least one company.");
+      setError("Choose at least one company.");
+      return;
+    }
+
+    if (forms.length === 0) {
+      setError("Choose at least one form.");
       return;
     }
 
@@ -731,11 +755,7 @@ function CollectPanel() {
     setError(null);
 
     try {
-      const accepted = await collectFilings(
-        wanted,
-        forms.split(",").map((f) => f.trim()).filter(Boolean),
-        Number(limit) || 1,
-      );
+      const accepted = await collectFilings(wanted, forms, Number(limit) || 1);
 
       setResult(accepted.message);
     } catch (caught) {
@@ -788,15 +808,29 @@ function CollectPanel() {
           </span>
         </label>
 
-        <label className="screen__field">
-          <span className="screen__label">Forms</span>
-          <input
-            className="screen__input"
-            type="text"
-            value={forms}
-            onChange={(event) => setForms(event.target.value)}
-          />
-        </label>
+        <fieldset className="screen__field screen__fieldset">
+          <legend className="screen__label">Forms</legend>
+          <div className="screen__checks">
+            {FORM_TYPES.map(({ code, label }) => (
+              <label key={code} className="screen__check">
+                <input
+                  type="checkbox"
+                  checked={forms.includes(code)}
+                  onChange={(event) =>
+                    setForms((current) =>
+                      event.target.checked
+                        ? [...current, code]
+                        : current.filter((f) => f !== code),
+                    )
+                  }
+                />
+                <span>
+                  <strong>{code}</strong> {label}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <label className="screen__field">
           <span className="screen__label">Filings per company</span>

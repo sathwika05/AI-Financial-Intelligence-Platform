@@ -1139,8 +1139,10 @@ function EventsPanel() {
             <tbody>
               {events.map((event) => (
                 <tr key={event.id}>
-                  <td className="screen__slug">
-                    {event.at ? event.at.replace("T", " ").slice(0, 19) : "—"}
+                  <td>
+                    <span className="screen__slug">
+                      {event.at ? event.at.replace("T", " ").slice(0, 19) : "—"}
+                    </span>
                   </td>
                   <td>{event.source}</td>
                   <td>

@@ -122,15 +122,20 @@
 }
 
 /* A quiet secondary value beside a primary one. display:block because it
-   normally sits under the name it belongs to.
-   
-   Only ever on a span. Put it on a <td> and the cell leaves table layout,
-   stops sharing the row's vertical alignment, and the column drifts a few
-   pixels off every other column in the row. */
+   normally sits under the name it belongs to. */
 .screen__slug {
   display: block;
   font-size: 11.5px;
   color: var(--text-subtle);
+}
+
+/* Meant for a span, and put on a <td> twice now -- a comment saying not
+   to did not stop it. display:block on a cell takes it out of table
+   layout: it stops sharing the row's vertical alignment, and the row's
+   border stops partway across. This makes the mistake cost nothing,
+   rather than relying on nobody making it. */
+td.screen__slug {
+  display: table-cell;
 }
 
 .screen__col-actions {

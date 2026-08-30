@@ -60,16 +60,22 @@ export function IngestionScreen() {
         </p>
       </header>
 
-      {/* The two ways a document gets in, side by side: they are
-          alternatives, not steps, and stacking them read as an order to
-          follow. What arrived goes underneath, where a seven-column
-          table has the width it needs. */}
+      {/* Left column: the two ways you bring documents in yourself.
+          Right column: EDGAR, and the note about the route it is not
+          taking. Collect sits under Upload because the right column runs
+          longer, and leaving it below the pair left this side blank.
+
+          What arrived goes underneath both, where a seven-column table
+          has the width it needs. */}
       <div className="screen__pair">
-        <UploadPanel />
+        <div className="screen__stack">
+          <UploadPanel />
+          <CollectPanel />
+        </div>
+
         <EdgarPanel />
       </div>
 
-      <CollectPanel />
       <DocumentsPanel />
 
       {/* Repair and replace, side by side. One re-runs indexing over

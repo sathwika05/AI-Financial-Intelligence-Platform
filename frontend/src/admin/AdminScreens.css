@@ -523,3 +523,11 @@
   font-size: 11.5px;
   line-height: 1.5;
 }
+
+/* Two panels sharing one column of a pair. */
+.screen__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}

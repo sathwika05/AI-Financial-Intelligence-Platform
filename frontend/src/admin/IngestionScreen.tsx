@@ -1075,14 +1075,7 @@ function SchedulerPanel() {
         </p>
       )}
 
-      {events && events.length === 0 && (
-        <p className="screen__note">
-          Nothing has come through the bucket yet. Every object that
-          arrives lands here, whether it was stored or not.
-        </p>
-      )}
-
-      {events && events.length > 0 && (
+      {events && (
         <div className="screen__table-wrap">
           <table className="screen__table">
             <thead>

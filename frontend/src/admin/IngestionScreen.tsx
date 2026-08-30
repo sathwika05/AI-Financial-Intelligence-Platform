@@ -1050,7 +1050,7 @@ function SchedulerPanel() {
   return (
     <section className="screen__pane">
       <div className="screen__pane-head">
-        <h2 className="screen__name">Scheduled indexing</h2>
+        <h2 className="screen__name">S3 &amp; SQS</h2>
         <button
           type="button"
           className="screen__btn"
@@ -1062,27 +1062,12 @@ function SchedulerPanel() {
         </button>
       </div>
       <p className="screen__sublede">
-        The same filings, collected on a schedule rather than by hand —
-        on a deployment that has a bucket.
+        Filings written to the raw S3 bucket, where the bucket
+        notification puts each one on an SQS queue for the ingestion
+        worker — which keeps the original file, worth having if extraction
+        ever improves. Needs RAW_BUCKET and INGESTION_QUEUE_URL, so it
+        does not run here.
       </p>
-
-    <aside className="screen__aside">
-      <Info size={15} className="screen__aside-icon" aria-hidden="true" />
-      <div>
-        <p className="screen__aside-title">
-          The scheduled collector takes a different route.
-        </p>
-        <p className="screen__aside-body">
-          It writes each filing to the S3 raw bucket and lets the bucket
-          notification hand it to the ingestion worker, which keeps the
-          original file in object storage — worth having if extraction
-          ever improves and a document is worth re-reading. It needs
-          RAW_BUCKET and INGESTION_QUEUE_URL, so it does not run here.
-          Either route produces the same row, so indexing a filing now
-          does not stop the collector recognising it later.
-        </p>
-      </div>
-    </aside>
 
       {error && (
         <p className="screen__error" role="alert">

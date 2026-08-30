@@ -73,7 +73,10 @@ export function IngestionScreen() {
           <CollectPanel />
         </div>
 
-        <EdgarPanel />
+        <div className="screen__stack">
+          <EdgarPanel />
+          <SchedulerPanel />
+        </div>
       </div>
 
       <DocumentsPanel />
@@ -329,23 +332,6 @@ function EdgarPanel() {
       )}
 
 
-      <aside className="screen__aside">
-        <Info size={15} className="screen__aside-icon" aria-hidden="true" />
-        <div>
-          <p className="screen__aside-title">
-            The scheduled collector takes a different route.
-          </p>
-          <p className="screen__aside-body">
-            It writes each filing to the S3 raw bucket and lets the bucket
-            notification hand it to the ingestion worker, which keeps the
-            original file in object storage — worth having if extraction
-            ever improves and a document is worth re-reading. It needs
-            RAW_BUCKET and INGESTION_QUEUE_URL, so it does not run here.
-            Either route produces the same row, so indexing a filing now
-            does not stop the collector recognising it later.
-          </p>
-        </div>
-      </aside>
     </section>
   );
 }
@@ -944,6 +930,47 @@ function ReseedPanel() {
           {busy ? "Starting…" : "Delete and rebuild"}
         </button>
       </form>
+    </section>
+  );
+}
+
+/**
+ * The route this deployment does not take.
+ *
+ * A panel rather than a loose note, so it sits level with Collect
+ * opposite: both are about filling the corpus without watching each
+ * filing, and the difference is only whether a queue and a bucket are
+ * doing it.
+ *
+ * Nothing to press. It describes what runs elsewhere, and saying which
+ * configuration is missing is the useful part.
+ */
+function SchedulerPanel() {
+  return (
+    <section className="screen__pane">
+      <h2 className="screen__name">Scheduled indexing</h2>
+      <p className="screen__sublede">
+        The same filings, collected on a schedule rather than by hand —
+        on a deployment that has a bucket.
+      </p>
+
+    <aside className="screen__aside">
+      <Info size={15} className="screen__aside-icon" aria-hidden="true" />
+      <div>
+        <p className="screen__aside-title">
+          The scheduled collector takes a different route.
+        </p>
+        <p className="screen__aside-body">
+          It writes each filing to the S3 raw bucket and lets the bucket
+          notification hand it to the ingestion worker, which keeps the
+          original file in object storage — worth having if extraction
+          ever improves and a document is worth re-reading. It needs
+          RAW_BUCKET and INGESTION_QUEUE_URL, so it does not run here.
+          Either route produces the same row, so indexing a filing now
+          does not stop the collector recognising it later.
+        </p>
+      </div>
+    </aside>
     </section>
   );
 }

@@ -234,3 +234,37 @@ export function indexFiling(
     body: JSON.stringify(filing),
   });
 }
+
+export interface JobAccepted {
+  message: string;
+}
+
+/** Index recent filings for several companies. Additive and repeatable. */
+export function collectFilings(
+  tickers: string[],
+  forms: string[],
+  limit: number,
+): Promise<JobAccepted> {
+  return send<JobAccepted>("/api/ingestion/edgar/collect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tickers, forms, limit }),
+  });
+}
+
+/**
+ * Rebuild the corpus from Alpha Vantage and Finnhub.
+ *
+ * Destructive: the tables are emptied and refilled with data fetched now.
+ * The server refuses without the exact phrase, which is the point — this
+ * must not be reachable by one stray click.
+ */
+export const RESEED_CONFIRMATION = "replace the corpus";
+
+export function reseedCorpus(confirm: string): Promise<JobAccepted> {
+  return send<JobAccepted>("/api/ingestion/seed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm }),
+  });
+}

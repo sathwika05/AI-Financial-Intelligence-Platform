@@ -492,3 +492,233 @@ async def index_filing(request: EdgarFilingRequest, background: BackgroundTasks)
             "refresh the list to see it become ready."
         ),
     }
+
+
+# ── Long-running jobs ───────────────────────────────────────
+#
+# Two buttons, doing very different things.
+#
+# Collecting EDGAR filings adds to the corpus. A duplicate is skipped, a
+# failure loses nothing, and running it twice changes nothing.
+#
+# Reseeding replaces the corpus. seeds/seed_data.py TRUNCATEs documents,
+# document_chunks, financial_metrics and companies with RESTART IDENTITY,
+# then refetches live data -- which will not match what was there, because
+# market caps move and news is replaced. The benchmark corpus and the SQL
+# ground truth derived from it do not survive it.
+#
+# So one is a button and the other needs a phrase typed out. The
+# difference in cost between a wrong click on each is the difference
+# between nothing and a day's work.
+
+RESEED_CONFIRMATION = "replace the corpus"
+
+
+class CollectRequest(BaseModel):
+    tickers: list[str] = Field(min_length=1, max_length=40)
+    forms: list[str] = Field(default=["10-K", "10-Q"], max_length=8)
+    limit: int = Field(default=3, ge=1, le=20)
+
+
+class ReseedRequest(BaseModel):
+    confirm: str = Field(default="", max_length=64)
+
+
+def _require_confirmation(confirm: str) -> None:
+    """
+    Refuse a reseed that was not typed out in full.
+
+    Not a formality. Accepting "yes", or anything close, would make this a
+    click -- and the click destroys the corpus every benchmark in this
+    repository was measured against.
+    """
+    if (confirm or "").strip() != RESEED_CONFIRMATION:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Reseeding empties the documents, document_chunks, "
+                "financial_metrics and companies tables and refetches live "
+                "data, which will not match what was there. The benchmark "
+                "corpus and the ground truth built from it do not survive "
+                f'it. Type "{RESEED_CONFIRMATION}" to confirm.'
+            ),
+        )
+
+
+async def _index_ticker(
+    ticker: str,
+    *,
+    forms: tuple[str, ...],
+    limit: int,
+    headers: dict,
+) -> int:
+    """
+    Index a company's recent filings, and report how many were stored.
+
+    Takes the direct route rather than S3, so this works on a deployment
+    with no bucket -- which is the one the button is being pressed on.
+    """
+    from backend.ingestion.edgar import cik_for_ticker, http_fetch, recent_filings
+    from backend.ingestion.queue_worker import _mark_ready, _persist_document
+    from backend.ingestion.indexing_service import embed_document
+
+    cik = await cik_for_ticker(ticker, fetch=http_fetch, headers=headers)
+
+    filings = await recent_filings(
+        cik,
+        fetch=http_fetch,
+        forms=forms,
+        ticker=ticker,
+        limit=limit,
+        headers=headers,
+    )
+
+    stored = 0
+
+    for filing in filings:
+        try:
+            document = await _prepare_edgar_filing(
+                {
+                    "cik": filing.cik,
+                    "accession": filing.accession,
+                    "form": filing.form,
+                    "filing_date": filing.filing_date,
+                    "primary_document": filing.primary_document,
+                    "ticker": filing.ticker,
+                },
+                fetch=http_fetch,
+                headers=headers,
+            )
+
+            document_id = await _persist_document(document)
+        except SkippedObject:
+            # Already held. Not a failure -- it is the answer.
+            continue
+        except HTTPException as exc:
+            logger.warning(
+                "[INGEST] %s %s skipped: %s", ticker, filing.accession, exc.detail
+            )
+            continue
+
+        result = await embed_document(document_id)
+
+        if result.get("success"):
+            await _mark_ready(document_id)
+            stored += 1
+        else:
+            logger.error(
+                "[INGEST] %s failed to index: %s", filing.accession, result.get("error")
+            )
+
+    return stored
+
+
+async def _collect_many(
+    tickers: list[str],
+    *,
+    forms: tuple[str, ...],
+    limit: int,
+    index_one,
+    headers: dict | None = None,
+) -> dict:
+    """
+    Run one ticker after another, and keep going when one fails.
+
+    Twenty tickers and one typo should leave nineteen collected. Which
+    failed is reported rather than logged, because whoever pressed the
+    button is the person who can fix a typo.
+    """
+    indexed = 0
+    failed: list[str] = []
+
+    for ticker in tickers:
+        try:
+            indexed += await index_one(
+                ticker, forms=forms, limit=limit, headers=headers or {}
+            )
+        except Exception:
+            logger.exception("[INGEST] %s failed; continuing", ticker)
+            failed.append(ticker)
+
+    return {"indexed": indexed, "failed": failed}
+
+
+@router.post("/edgar/collect", status_code=202)
+async def collect_filings_job(request: CollectRequest, background: BackgroundTasks):
+    """
+    Index recent filings for several companies at once.
+
+    Runs in the background: each filing is a rate-limited download and a
+    round of embedding calls, and a browser should not hold a request open
+    for that. Watch the document list to see them arrive.
+    """
+    headers = _edgar_headers(settings.SEC_USER_AGENT)
+
+    tickers = [t.strip().upper() for t in request.tickers if t.strip()]
+    forms = tuple(f.strip().upper() for f in request.forms if f.strip())
+
+    async def run() -> None:
+        summary = await _collect_many(
+            tickers,
+            forms=forms or ("10-K",),
+            limit=request.limit,
+            index_one=_index_ticker,
+            headers=headers,
+        )
+
+        logger.info(
+            "[INGEST] EDGAR collection finished: %s indexed, failed=%s",
+            summary["indexed"],
+            summary["failed"] or "none",
+        )
+
+    background.add_task(run)
+
+    return {
+        "tickers": tickers,
+        "forms": list(forms),
+        "message": (
+            f"Collecting up to {request.limit} filing(s) for "
+            f"{len(tickers)} compan{'y' if len(tickers) == 1 else 'ies'}. "
+            "This runs in the background; refresh the document list to "
+            "watch them arrive."
+        ),
+    }
+
+
+@router.post("/seed", status_code=202)
+async def reseed_job(request: ReseedRequest, background: BackgroundTasks):
+    """
+    Rebuild the corpus from Alpha Vantage and Finnhub.
+
+    Destructive, and not undoable from here: the tables are emptied and
+    refilled with data fetched now, which is not the data that was there.
+    Restoring the previous corpus means seeds/snapshot.py, from a
+    snapshot taken before this ran.
+
+    The TRUNCATE and the inserts share one transaction, so a run that
+    fails partway leaves the old corpus intact. A run that succeeds
+    replaces it.
+    """
+    _require_confirmation(request.confirm)
+
+    async def run() -> None:
+        from seeds.seed_data import seed
+
+        logger.warning("[INGEST] Reseeding the corpus from live sources")
+
+        try:
+            await seed()
+            logger.warning("[INGEST] Reseed complete")
+        except Exception:
+            logger.exception("[INGEST] Reseed failed; the previous corpus stands")
+
+    background.add_task(run)
+
+    return {
+        "message": (
+            "Reseeding from Alpha Vantage and Finnhub. The previous corpus "
+            "is gone once this succeeds. Regenerate the SQL ground truth "
+            "afterwards, and take a fresh snapshot before benchmarking."
+        ),
+    }

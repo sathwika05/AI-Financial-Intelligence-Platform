@@ -442,3 +442,51 @@
      start its card higher and make the pair unequal again. */
   min-height: 2.9em;
 }
+
+/* ── The destructive panel ──────────────────────────────────
+ *
+ * The only thing on this screen that removes data. It looks unlike
+ * everything around it on purpose: the cost of a wrong click here is the
+ * corpus and a day rebuilding the ground truth, and nothing else on the
+ * page costs more than a duplicate that gets skipped.
+ */
+.screen__card--danger {
+  border-color: #e5b4b4;
+  background: #fffafa;
+}
+
+.screen__warn {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: #fdeeee;
+  color: #7f1d1d;
+}
+
+.screen__warn-title {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.screen__warn-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.screen__submit--danger {
+  background: #b42318;
+}
+
+.screen__submit--danger:hover:not(:disabled) {
+  background: #912018;
+}
+
+/* Disabled until the phrase is typed, and it must look disabled — a
+   button that looks ready but refuses teaches people to click twice. */
+.screen__submit--danger:disabled {
+  background: #d6a2a2;
+  cursor: not-allowed;
+}

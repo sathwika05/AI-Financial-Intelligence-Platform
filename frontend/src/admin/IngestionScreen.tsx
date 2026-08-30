@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Database,
+  AlertTriangle,
   Download,
   FileUp,
   Info,
@@ -10,9 +11,12 @@ import {
 } from "lucide-react";
 import {
   AdminApiError,
+  collectFilings,
   indexFiling,
   listDocuments,
   previewFilings,
+  reseedCorpus,
+  RESEED_CONFIRMATION,
   startIndexing,
   uploadDocument,
   type EdgarFiling,
@@ -82,8 +86,10 @@ export function IngestionScreen() {
         </div>
       </aside>
 
+      <CollectPanel />
       <DocumentsPanel />
       <ReindexPanel />
+      <ReseedPanel />
     </div>
   );
 }
@@ -643,5 +649,224 @@ function IndexButton({ filing }: { filing: EdgarFiling }) {
         </span>
       )}
     </>
+  );
+}
+
+/**
+ * Index recent filings for several companies in one go.
+ *
+ * The single Index button in the lookup is for one filing you have looked
+ * at. This is for filling the corpus: name the companies and walk away.
+ * Additive and repeatable — a filing already held is skipped, so running
+ * it twice costs nothing but the lookups.
+ */
+function CollectPanel() {
+  const [tickers, setTickers] = useState("AAPL, MSFT, NVDA");
+  const [forms, setForms] = useState("10-K,10-Q");
+  const [limit, setLimit] = useState("2");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+
+    const wanted = tickers
+      .split(/[\s,]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+
+    if (wanted.length === 0) {
+      setError("Name at least one company.");
+      return;
+    }
+
+    setBusy(true);
+    setResult(null);
+    setError(null);
+
+    try {
+      const accepted = await collectFilings(
+        wanted,
+        forms.split(",").map((f) => f.trim()).filter(Boolean),
+        Number(limit) || 1,
+      );
+
+      setResult(accepted.message);
+    } catch (caught) {
+      setError(
+        caught instanceof AdminApiError
+          ? caught.message
+          : "Could not start collection.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="screen__pane">
+      <h2 className="screen__name">Collect filings for several companies</h2>
+      <p className="screen__sublede">
+        The same thing the Index button does, for a list of companies at
+        once. A filing already held is skipped.
+      </p>
+
+      <form className="screen__card" onSubmit={submit}>
+        <label className="screen__field">
+          <span className="screen__label">Companies</span>
+          <input
+            className="screen__input"
+            type="text"
+            value={tickers}
+            onChange={(event) => setTickers(event.target.value)}
+          />
+          <span className="screen__hint">
+            Tickers, separated by commas or spaces.
+          </span>
+        </label>
+
+        <label className="screen__field">
+          <span className="screen__label">Forms</span>
+          <input
+            className="screen__input"
+            type="text"
+            value={forms}
+            onChange={(event) => setForms(event.target.value)}
+          />
+        </label>
+
+        <label className="screen__field">
+          <span className="screen__label">Most recent per company</span>
+          <input
+            className="screen__input"
+            type="number"
+            min={1}
+            max={20}
+            value={limit}
+            onChange={(event) => setLimit(event.target.value)}
+          />
+          <span className="screen__hint">
+            A 10-K is a large document; start small. Each one is a
+            rate-limited download and a round of embedding calls.
+          </span>
+        </label>
+
+        {error && (
+          <p className="screen__error" role="alert">
+            {error}
+          </p>
+        )}
+
+        {result && (
+          <p className="screen__ok" role="status">
+            {result}
+          </p>
+        )}
+
+        <button type="submit" className="screen__submit" disabled={busy}>
+          <Download size={15} />
+          {busy ? "Starting…" : "Collect and index"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+/**
+ * Rebuild the corpus from Alpha Vantage and Finnhub.
+ *
+ * Deliberately the least convenient thing on the screen. It empties four
+ * tables and refetches live data that will not match what was there, so
+ * the benchmark corpus and the ground truth built from it do not survive
+ * it. The phrase has to be typed; there is no button that does this on
+ * its own.
+ */
+function ReseedPanel() {
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const armed = confirm.trim() === RESEED_CONFIRMATION;
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+
+    setBusy(true);
+    setResult(null);
+    setError(null);
+
+    try {
+      const accepted = await reseedCorpus(confirm.trim());
+
+      setResult(accepted.message);
+      setConfirm("");
+    } catch (caught) {
+      setError(
+        caught instanceof AdminApiError
+          ? caught.message
+          : "Could not start the reseed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="screen__pane">
+      <h2 className="screen__name">Rebuild the corpus from live sources</h2>
+
+      <form className="screen__card screen__card--danger" onSubmit={submit}>
+        <div className="screen__warn">
+          <AlertTriangle size={15} aria-hidden="true" />
+          <div>
+            <p className="screen__warn-title">This deletes the corpus.</p>
+            <p className="screen__warn-body">
+              Every document, chunk, company and financial metric is
+              removed, then refetched from Alpha Vantage and Finnhub. The
+              new data will not match the old — market caps move and news
+              is replaced — so the benchmark baseline and the SQL ground
+              truth derived from it no longer apply. Take a snapshot first
+              if you want the current corpus back.
+            </p>
+          </div>
+        </div>
+
+        <label className="screen__field">
+          <span className="screen__label">
+            Type <code>{RESEED_CONFIRMATION}</code> to confirm
+          </span>
+          <input
+            className="screen__input"
+            type="text"
+            value={confirm}
+            placeholder={RESEED_CONFIRMATION}
+            onChange={(event) => setConfirm(event.target.value)}
+          />
+        </label>
+
+        {error && (
+          <p className="screen__error" role="alert">
+            {error}
+          </p>
+        )}
+
+        {result && (
+          <p className="screen__ok" role="status">
+            {result}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          className="screen__submit screen__submit--danger"
+          disabled={busy || !armed}
+        >
+          <AlertTriangle size={15} />
+          {busy ? "Starting…" : "Delete and rebuild"}
+        </button>
+      </form>
+    </section>
   );
 }

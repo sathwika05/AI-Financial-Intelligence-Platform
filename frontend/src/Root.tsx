@@ -116,7 +116,10 @@ export default function Root() {
     );
   }
 
-  if (path === "/ingestion") {
+  // The screen was called Indexing until the upload and EDGAR panels
+  // joined it. An old link matched no branch and fell through to Home,
+  // which looks like the screen was deleted rather than renamed.
+  if (path === "/ingestion" || path === "/indexing") {
     return (
       <AdminShell activeId="ingestion" user={user} onNavigate={navigate}>
         <IngestionScreen />

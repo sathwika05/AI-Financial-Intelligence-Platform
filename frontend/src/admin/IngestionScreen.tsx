@@ -843,12 +843,11 @@ function CollectPanel() {
             onChange={(event) => setLimit(event.target.value)}
           />
           <span className="screen__hint">
-            Counted across all the forms above, not per form — and a
-            company files three 10-Qs a year to one 10-K, so asking for 2
-            of both usually returns two quarterlies and no annual report.
-            For a 10-K, ask for that form alone. Each filing is a
-            rate-limited download and a round of embedding calls, so start
-            small.
+            Counted across all the forms, not per form — a company files
+            three 10-Qs a year to one 10-K, so asking for 2 of both
+            usually returns two quarterlies and no annual report.
+            Companies × filings must come to {MAX_FILINGS_PER_RUN} or
+            fewer, and one 10-K is around 1,500 chunks.
           </span>
         </label>
 

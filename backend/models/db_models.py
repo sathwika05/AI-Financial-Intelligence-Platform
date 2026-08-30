@@ -1039,3 +1039,42 @@ class LLMModel(Base):
             name="uq_provider_model_tier",
         ),
     )
+
+
+class IngestionEvent(Base):
+    """
+    One attempt to bring a file into the corpus, however it ended.
+
+    Everything else visible about ingestion is an outcome: a documents
+    row, a status, a chunk count. A file that produced no row produced no
+    trace either — a duplicate, an unreadable PDF, a filing whose text
+    could not be read — and those are exactly the cases someone needs to
+    see.
+
+    Not read by retrieval. It exists so "did that work?" has an answer
+    that does not involve reading a server log.
+    """
+
+    __tablename__ = "ingestion_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Which door the file came through: upload, sec_edgar, or s3 for the
+    # bucket path. The route, not the publisher.
+    source = Column(String(32), nullable=False, index=True)
+
+    # What was attempted: a filename, an accession number, an object key.
+    reference = Column(String, nullable=False)
+
+    # One of ingestion.events_log.OUTCOMES.
+    outcome = Column(String(16), nullable=False, index=True)
+
+    # Why, for anything that is not "indexed". The only thing that makes
+    # a failed row actionable.
+    detail = Column(Text)
+
+    # Set only when a document was actually stored.
+    document_id = Column(Integer, ForeignKey("documents.id"))
+    chunks = Column(Integer)
+
+    created_at = Column(DateTime, server_default=func.now(), index=True)

@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth.dependencies import require_role
 from backend.auth.roles import Role
 from backend.config import settings
+from backend.ingestion.events_log import record_attempt
 from backend.ingestion.handler import SkippedObject, document_from_bytes
 from backend.models.db_models import Company, Document, DocumentChunk
 from backend.services.postgres_service import get_db
@@ -265,15 +266,33 @@ async def upload_document(
         ticker = _require_known_ticker(ticker, await _known_tickers(session))
 
     body = await file.read()
+    name = file.filename or "(unnamed)"
 
-    document = await _prepare_upload(
-        filename=file.filename or "", body=body, ticker=ticker
-    )
+    try:
+        document = await _prepare_upload(
+            filename=file.filename or "", body=body, ticker=ticker
+        )
+    except HTTPException as exc:
+        # The file could not be read at all. Recorded, because otherwise
+        # it leaves no trace anywhere the operator can see.
+        await record_attempt(
+            source="upload",
+            reference=name,
+            outcome="empty" if "no text" in str(exc.detail) else "unreadable",
+            detail=str(exc.detail),
+        )
+        raise
 
     try:
         document_id = await _persist_document(document)
     except SkippedObject as exc:
         # Already in the corpus. Not an error -- it is the answer.
+        await record_attempt(
+            source="upload",
+            reference=name,
+            outcome="duplicate",
+            detail=str(exc),
+        )
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     async def index() -> None:
@@ -283,10 +302,12 @@ async def upload_document(
 
         if result.get("success"):
             await _mark_ready(document_id)
-            logger.info(
-                "[INGEST] Indexed uploaded document %s (%s chunks)",
-                document_id,
-                result.get("chunks"),
+            await record_attempt(
+                source="upload",
+                reference=name,
+                outcome="indexed",
+                document_id=document_id,
+                chunks=result.get("chunks"),
             )
         else:
             # The row stays `processing`, which is what makes this
@@ -295,6 +316,13 @@ async def upload_document(
                 "[INGEST] Uploaded document %s failed to index: %s",
                 document_id,
                 result.get("error"),
+            )
+            await record_attempt(
+                source="upload",
+                reference=name,
+                outcome="failed",
+                detail=str(result.get("error")),
+                document_id=document_id,
             )
 
     background.add_task(index)
@@ -674,6 +702,8 @@ async def _index_ticker(
     stored = 0
 
     for filing in filings:
+        label = f"{filing.ticker or filing.cik} {filing.form} {filing.filing_date}"
+
         try:
             document = await _prepare_edgar_filing(
                 {
@@ -689,12 +719,26 @@ async def _index_ticker(
             )
 
             document_id = await _persist_document(document)
-        except SkippedObject:
-            # Already held. Not a failure -- it is the answer.
+        except SkippedObject as exc:
+            # Already held. Not a failure -- it is the answer, and it is
+            # the outcome most likely to be mistaken for nothing having
+            # happened.
+            await record_attempt(
+                source="sec_edgar",
+                reference=label,
+                outcome="duplicate",
+                detail=str(exc),
+            )
             continue
         except HTTPException as exc:
             logger.warning(
                 "[INGEST] %s %s skipped: %s", ticker, filing.accession, exc.detail
+            )
+            await record_attempt(
+                source="sec_edgar",
+                reference=label,
+                outcome="empty" if "no text" in str(exc.detail) else "unreadable",
+                detail=str(exc.detail),
             )
             continue
 
@@ -703,9 +747,23 @@ async def _index_ticker(
         if result.get("success"):
             await _mark_ready(document_id)
             stored += 1
+            await record_attempt(
+                source="sec_edgar",
+                reference=label,
+                outcome="indexed",
+                document_id=document_id,
+                chunks=result.get("chunks"),
+            )
         else:
             logger.error(
                 "[INGEST] %s failed to index: %s", filing.accession, result.get("error")
+            )
+            await record_attempt(
+                source="sec_edgar",
+                reference=label,
+                outcome="failed",
+                detail=str(result.get("error")),
+                document_id=document_id,
             )
 
     return stored
@@ -896,5 +954,45 @@ async def list_companies(session: AsyncSession = Depends(get_db)):
     return {
         "companies": [
             {"ticker": ticker, "name": name} for ticker, name in rows
+        ]
+    }
+
+
+@router.get("/events")
+async def list_events(
+    limit: int = 25,
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    What happened to each file that was attempted.
+
+    Every other view of ingestion shows outcomes — a stored document, its
+    status, its chunk count. This shows attempts, so the ones that stored
+    nothing are visible too: a duplicate, an unreadable file, a filing
+    with no text in it.
+    """
+    from backend.models.db_models import IngestionEvent
+
+    rows = await session.execute(
+        select(IngestionEvent)
+        .order_by(desc(IngestionEvent.id))
+        .limit(max(1, min(limit, 200)))
+    )
+
+    events = rows.scalars().all()
+
+    return {
+        "events": [
+            {
+                "id": event.id,
+                "source": event.source,
+                "reference": event.reference,
+                "outcome": event.outcome,
+                "detail": event.detail,
+                "document_id": event.document_id,
+                "chunks": event.chunks,
+                "at": event.created_at.isoformat() if event.created_at else None,
+            }
+            for event in events
         ]
     }

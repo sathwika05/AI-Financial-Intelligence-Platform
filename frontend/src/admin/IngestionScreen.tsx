@@ -16,12 +16,14 @@ import {
   indexFiling,
   listCompanies,
   listDocuments,
+  listIngestionEvents,
   previewFilings,
   reseedCorpus,
   RESEED_CONFIRMATION,
   startIndexing,
   uploadDocument,
   type EdgarFiling,
+  type IngestionEvent,
   type KnownCompany,
   type StoredDocument,
 } from "./api";
@@ -81,6 +83,8 @@ export function IngestionScreen() {
       </div>
 
       <DocumentsPanel />
+
+      <EventsPanel />
 
       {/* Repair and replace, side by side. One re-runs indexing over
           documents already stored; the other throws them away. Reading
@@ -1043,6 +1047,128 @@ function SchedulerPanel() {
         </p>
       </div>
     </aside>
+    </section>
+  );
+}
+
+/**
+ * What happened to each file that was attempted.
+ *
+ * The document list can only show what was stored. This shows attempts,
+ * so the ones that stored nothing appear too — a duplicate, an unreadable
+ * file, a filing with no text in it, an embedding call that failed. Those
+ * are the rows worth having: a success is already visible as a document.
+ *
+ * It is also where the S3 route will show itself. A file arriving through
+ * the bucket is recorded here exactly as an upload is, so the same table
+ * covers both without knowing which is which.
+ */
+function EventsPanel() {
+  const [events, setEvents] = useState<IngestionEvent[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+
+    try {
+      const response = await listIngestionEvents(25);
+
+      setEvents(response.events);
+    } catch (caught) {
+      setError(
+        caught instanceof AdminApiError
+          ? caught.message
+          : "Could not load the processing history.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <section className="screen__pane">
+      <div className="screen__pane-head">
+        <h2 className="screen__name">File processing</h2>
+        <button
+          type="button"
+          className="screen__btn"
+          onClick={() => void load()}
+          disabled={busy}
+        >
+          <RefreshCw size={14} />
+          {busy ? "Loading…" : "Refresh"}
+        </button>
+      </div>
+
+      <p className="screen__sublede">
+        Every file that was attempted, including the ones that stored
+        nothing — a duplicate, an unreadable file, a filing with no text.
+      </p>
+
+      {error && (
+        <p className="screen__error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {events && events.length === 0 && (
+        <p className="screen__note">
+          Nothing processed yet. Upload a filing or collect one, and it
+          appears here whether or not it worked.
+        </p>
+      )}
+
+      {events && events.length > 0 && (
+        <div className="screen__table-wrap">
+          <table className="screen__table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Route</th>
+                <th>File</th>
+                <th>Chunks</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((event) => (
+                <tr key={event.id}>
+                  <td className="screen__slug">
+                    {event.at ? event.at.replace("T", " ").slice(0, 19) : "—"}
+                  </td>
+                  <td>{event.source}</td>
+                  <td>
+                    {event.reference}
+                    {event.detail && (
+                      <span className="screen__slug">{event.detail}</span>
+                    )}
+                  </td>
+                  <td>{event.chunks ?? "—"}</td>
+                  <td>
+                    <span
+                      className={
+                        event.outcome === "indexed"
+                          ? "screen__pill screen__pill--ok"
+                          : event.outcome === "failed"
+                            ? "screen__pill screen__pill--bad"
+                            : "screen__pill screen__pill--warn"
+                      }
+                    >
+                      {event.outcome}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

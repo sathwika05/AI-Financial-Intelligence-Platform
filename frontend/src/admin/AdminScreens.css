@@ -579,3 +579,10 @@
   color: var(--text);
   border-color: var(--line-strong, var(--line));
 }
+
+/* An outcome that stored nothing and was not merely skipped. */
+.screen__pill--bad {
+  color: #b42318;
+  background: #fdeeee;
+  border-color: #e5b4b4;
+}

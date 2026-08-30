@@ -284,3 +284,28 @@ export interface KnownCompany {
 export function listCompanies(): Promise<{ companies: KnownCompany[] }> {
   return send<{ companies: KnownCompany[] }>("/api/ingestion/companies");
 }
+
+export interface IngestionEvent {
+  id: number;
+  source: string;
+  reference: string;
+  outcome: string;
+  detail: string | null;
+  document_id: number | null;
+  chunks: number | null;
+  at: string | null;
+}
+
+/**
+ * What happened to each file that was attempted.
+ *
+ * Distinct from the document list, which can only show what was stored.
+ * The interesting rows here are the ones with no document attached.
+ */
+export function listIngestionEvents(
+  limit = 25,
+): Promise<{ events: IngestionEvent[] }> {
+  return send<{ events: IngestionEvent[] }>(
+    `/api/ingestion/events?limit=${limit}`,
+  );
+}

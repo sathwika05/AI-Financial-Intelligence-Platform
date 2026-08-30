@@ -5,8 +5,10 @@ There is no registration endpoint: this deployment has a handful of users,
 and a public signup on a system that spends provider credit per query is a
 cost hole rather than a feature.
 
-    uv run python scripts/create_user.py analyst@example.com analyst
+    uv run python -m scripts.create_user analyst@example.com analyst
     uv run python scripts/create_user.py boss@example.com admin
+
+Both forms work; run either from the repository root.
 
 The password is prompted for, never passed as an argument -- an argument
 lands in shell history and in `ps` output.
@@ -17,6 +19,17 @@ import asyncio
 import getpass
 import sys
 import uuid
+from pathlib import Path
+
+# Run as a file, Python puts *this* directory on sys.path -- not the
+# working directory -- so `import backend` fails however carefully you
+# cd first. Running it as `-m scripts.create_user` works, but the form
+# people try first is the path, and it should not greet them with a
+# ModuleNotFoundError.
+_ROOT = Path(__file__).resolve().parents[1]
+
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from sqlalchemy import select
 

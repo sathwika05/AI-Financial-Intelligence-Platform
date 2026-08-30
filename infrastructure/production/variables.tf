@@ -137,3 +137,15 @@ variable "sec_user_agent" {
   type    = string
   default = ""
 }
+
+variable "langsmith_project_url" {
+  description = <<-EOT
+    Deep link to this deployment's LangSmith project, copied from the
+    LangSmith UI. There is no stable public URL that can be built from the
+    project name alone, so it is pasted rather than derived. Leave empty
+    to hide the link.
+  EOT
+
+  type    = string
+  default = ""
+}

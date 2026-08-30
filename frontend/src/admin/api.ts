@@ -183,3 +183,27 @@ export function uploadDocument(
   // body the server cannot parse.
   return send("/api/ingestion/documents", { method: "POST", body: form });
 }
+
+/* ── External observability links ───────────────────────────
+ *
+ * CloudWatch and LangSmith are external products with better interfaces
+ * than anything worth rebuilding here, so the rail links out rather than
+ * proxying them. The URLs differ per deployment, so they come from the
+ * server rather than being baked into the bundle at build time — one
+ * image, many deployments.
+ */
+
+export interface ExternalLink {
+  configured: boolean;
+  url: string | null;
+  detail: string | null;
+}
+
+export interface ExternalLinks {
+  cloudwatch: ExternalLink;
+  langsmith: ExternalLink;
+}
+
+export function fetchExternalLinks(): Promise<ExternalLinks> {
+  return send<ExternalLinks>("/api/admin/external-links");
+}

@@ -16,6 +16,7 @@ from backend.services.postgres_service import engine, Base, enable_pgvector
 from backend.services.redis_service import ping_redis
 from backend.models import db_models  
 from backend.api.sql_routes import router as sql_router
+from backend.api.admin_links_routes import router as admin_links_router
 from backend.api.ingestion_routes import router as ingestion_router
 from backend.api.vector_routes import router as vector_router
 from backend.api.financial_routes import router as financial_router
@@ -146,6 +147,7 @@ def build_app(*, deployment_mode: str | None = None) -> FastAPI:
         application.include_router(sql_router)
         application.include_router(vector_router)
         application.include_router(ingestion_router)
+        application.include_router(admin_links_router)
         application.include_router(evaluation_router)
 
     _register_health(application, mode)

@@ -211,3 +211,38 @@
     display: none;
   }
 }
+
+/* ── Links that leave the application ───────────────────────
+ *
+ * CloudWatch and LangSmith open a third-party console in a new tab. They
+ * sit in the rail because that is where you look for them, but reading
+ * them as part of the same list as Home and Evaluation would hide the
+ * difference until after the click — so they get their own group, above
+ * the footer, separated by a rule.
+ */
+.admin__nav--external {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(215, 231, 243, 0.12);
+}
+
+.admin__item--external .admin__item-out {
+  margin-left: auto;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.admin__item--external:hover .admin__item-out {
+  opacity: 0.9;
+}
+
+/* Unconfigured: present, and plainly not clickable. The title carries the
+   server's own explanation of which variable is missing. */
+.admin__item--off {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.admin__item--off:hover {
+  background: none;
+}

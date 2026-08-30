@@ -1,7 +1,16 @@
-import type { ReactNode } from "react";
-import { Database, House, Layers, LineChart } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  Database,
+  ExternalLink as ExternalLinkIcon,
+  House,
+  Layers,
+  LineChart,
+  ScrollText,
+  Waypoints,
+} from "lucide-react";
 import { Logo } from "../components/Logo";
 import { clearSession, type SessionUser } from "../auth/session";
+import { fetchExternalLinks, type ExternalLinks } from "./api";
 import "./AdminShell.css";
 
 /**
@@ -111,6 +120,8 @@ export function AdminShell({
           })}
         </ul>
 
+        <ExternalRail />
+
         <div className="admin__footer">
           <span className="admin__who">
             <span className="admin__email">{user.email}</span>
@@ -132,5 +143,87 @@ export function AdminShell({
 
       <main className="admin__content">{children}</main>
     </div>
+  );
+}
+
+/**
+ * The two tools that explain a run after it has finished.
+ *
+ * Separated from the nav above because these leave the application
+ * entirely — a rail item that opens a new tab to Amazon is not the same
+ * kind of thing as one that swaps the screen beside it, and reading them
+ * as one list makes the difference invisible until you have clicked.
+ *
+ * Rendered even when unconfigured, disabled, with the server's own
+ * explanation on hover. Hiding them would be tidier on a laptop and worse
+ * everywhere else: the person wondering why there is no CloudWatch link
+ * is exactly the person who needs to be told which variable to set.
+ */
+function ExternalRail() {
+  const [links, setLinks] = useState<ExternalLinks | null>(null);
+
+  useEffect(() => {
+    let live = true;
+
+    fetchExternalLinks()
+      .then((loaded) => {
+        if (live) setLinks(loaded);
+      })
+      // A failure here must not take the rail down with it. The links are
+      // a convenience; navigation is not.
+      .catch(() => undefined);
+
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (!links) return null;
+
+  const items = [
+    { id: "cloudwatch", label: "CloudWatch Logs", detail: "What the containers printed", icon: ScrollText, link: links.cloudwatch },
+    { id: "langsmith", label: "LangSmith", detail: "Traces for each run", icon: Waypoints, link: links.langsmith },
+  ];
+
+  return (
+    <ul className="admin__nav admin__nav--external">
+      {items.map(({ id, label, detail, icon: Icon, link }) => (
+        <li key={id}>
+          {link.configured && link.url ? (
+            <a
+              className="admin__item admin__item--external"
+              href={link.url}
+              target="_blank"
+              // noopener because the opened page gets a handle on this
+              // window otherwise, and it is a third-party console.
+              rel="noreferrer noopener"
+            >
+              <Icon size={17} className="admin__icon" aria-hidden="true" />
+              <span className="admin__item-text">
+                <span className="admin__item-label">{label}</span>
+                <span className="admin__item-detail">{detail}</span>
+              </span>
+              <ExternalLinkIcon
+                size={12}
+                className="admin__item-out"
+                aria-hidden="true"
+              />
+            </a>
+          ) : (
+            <span
+              className="admin__item admin__item--off"
+              title={link.detail ?? undefined}
+              aria-disabled="true"
+            >
+              <Icon size={17} className="admin__icon" aria-hidden="true" />
+              <span className="admin__item-text">
+                <span className="admin__item-label">{label}</span>
+                <span className="admin__item-detail">Not configured</span>
+              </span>
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

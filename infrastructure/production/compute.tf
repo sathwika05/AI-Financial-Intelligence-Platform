@@ -236,6 +236,15 @@ locals {
     // anonymous request, which SEC refuses and which gets the address
     // blocked for everyone behind it.
     { name = "SEC_USER_AGENT", value = var.sec_user_agent },
+    // Where the admin UI links out to. Console URLs, not credentials --
+    // they name a log group and a project, and both pages demand their
+    // own sign-in. Built from the resources above so they cannot name a
+    // log group this deployment does not have.
+    {
+      name  = "CLOUDWATCH_LOGS_URL"
+      value = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#logsV2:log-groups/log-group/${replace(aws_cloudwatch_log_group.api.name, "/", "$252F")}"
+    },
+    { name = "LANGSMITH_PROJECT_URL", value = var.langsmith_project_url },
   ]
 
   app_secrets = [

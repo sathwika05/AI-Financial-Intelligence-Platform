@@ -53,6 +53,15 @@ class Settings(BaseSettings):
     # DATABASE_URL when unset, which is the current behaviour.
     READONLY_DATABASE_URL: str = ""
 
+    # Where the admin UI links out to for observability, once deployed.
+    # Both are console URLs that differ per account, region and project,
+    # so they are configuration rather than constants. Empty means this
+    # deployment has nowhere to point -- the ordinary state on a laptop --
+    # and the UI says which variable to set rather than showing a dead
+    # link. Not secrets: a console URL names a log group, not a key.
+    CLOUDWATCH_LOGS_URL: str = ""
+    LANGSMITH_PROJECT_URL: str = ""
+
     LANGSMITH_API_KEY: str = ""
     LANGSMITH_TRACING: bool = False
     LANGCHAIN_PROJECT: str = "ai-financial-intelligence-platform"

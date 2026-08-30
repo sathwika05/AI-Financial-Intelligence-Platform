@@ -1048,7 +1048,7 @@ function SchedulerPanel() {
   }, [load]);
 
   return (
-    <section className="screen__pane">
+    <section className="screen__pane screen__pane--fill">
       <div className="screen__pane-head">
         <h2 className="screen__name">Scheduled indexing</h2>
         <button

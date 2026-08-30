@@ -591,3 +591,22 @@ td.screen__slug {
   background: #fdeeee;
   border-color: #e5b4b4;
 }
+
+/* In a pair, the table absorbs whatever height its column has spare, so
+   the two sides end level. With rows it simply has room; with none it is
+   an empty table of the right size rather than a shallow strip floating
+   above a gap. */
+.screen__pair .screen__table-wrap {
+  flex: 1;
+}
+
+/* The panel that takes up whatever height its column has left over.
+ *
+ * A column of a pair stretches to the taller side, but the panels inside
+ * it size to their content, so the shorter column ends early and the
+ * slack sits under it as a gap. This hands that slack to one panel — the
+ * one whose table can use it.
+ */
+.screen__pane--fill {
+  flex: 1;
+}

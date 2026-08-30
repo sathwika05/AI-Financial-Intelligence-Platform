@@ -19,14 +19,15 @@ import logging
 import signal
 from typing import Any, Awaitable, Callable
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from backend.ingestion.consumer import consume_once
 from backend.ingestion.dedupe import find_duplicate_document, hash_content
 from backend.ingestion.events import ObjectRef
+from backend.ingestion.events_log import record_attempt
 from backend.ingestion.handler import SkippedObject, handle_object
 from backend.ingestion.indexing_service import embed_document
-from backend.models.db_models import Company, Document
+from backend.models.db_models import Company, Document, DocumentChunk
 from backend.services.postgres_service import AsyncSessionLocal
 
 
@@ -187,7 +188,17 @@ async def _persist_document(
 
 
 async def _handle(ref: ObjectRef, *, store) -> None:
-    """One object, with SkippedObject swallowed so the message is deleted."""
+    """
+    One object, with SkippedObject swallowed so the message is deleted.
+
+    Every ending is recorded, including the ones that store nothing. A
+    file that arrives through the bucket and cannot be read leaves no
+    document behind, so without this the only trace is a log line on a
+    machine nobody is watching -- which is the whole reason the bucket
+    path is hard to trust.
+    """
+    reference = ref.key.rsplit("/", 1)[-1]
+
     try:
         document_id = await handle_object(
             ref,
@@ -199,11 +210,52 @@ async def _handle(ref: ObjectRef, *, store) -> None:
         # Handled: a retry would skip it again, so the message should go.
         logger.info("[INGEST] %s", skipped)
 
+        await record_attempt(
+            source="s3",
+            reference=reference,
+            outcome="duplicate" if "already in the corpus" in str(skipped) else "empty",
+            detail=str(skipped),
+        )
+
         return
+    except Exception as failure:
+        # Not swallowed -- the consumer needs it to decide whether to
+        # delete the message. Recorded on the way past.
+        await record_attempt(
+            source="s3",
+            reference=reference,
+            outcome="failed",
+            detail=str(failure),
+        )
+
+        raise
 
     # Only now, with indexing returned and nothing raised, is the document
     # actually retrievable.
     await _mark_ready(document_id)
+
+    await record_attempt(
+        source="s3",
+        reference=reference,
+        outcome="indexed",
+        document_id=document_id,
+        chunks=await _chunk_count(document_id),
+    )
+
+
+async def _chunk_count(document_id: int) -> int | None:
+    """How many chunks a document ended up with, for the processing log."""
+    try:
+        async with AsyncSessionLocal() as session:
+            return await session.scalar(
+                select(func.count())
+                .select_from(DocumentChunk)
+                .where(DocumentChunk.document_id == document_id)
+            )
+    except Exception:
+        logger.exception("[INGEST] Could not count chunks for %s", document_id)
+
+        return None
 
 
 async def run() -> None:

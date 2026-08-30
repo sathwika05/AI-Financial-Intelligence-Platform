@@ -304,8 +304,11 @@ export interface IngestionEvent {
  */
 export function listIngestionEvents(
   limit = 25,
+  source?: string,
 ): Promise<{ events: IngestionEvent[] }> {
-  return send<{ events: IngestionEvent[] }>(
-    `/api/ingestion/events?limit=${limit}`,
-  );
+  const query = new URLSearchParams({ limit: String(limit) });
+
+  if (source) query.set("source", source);
+
+  return send<{ events: IngestionEvent[] }>(`/api/ingestion/events?${query}`);
 }

@@ -961,6 +961,7 @@ async def list_companies(session: AsyncSession = Depends(get_db)):
 @router.get("/events")
 async def list_events(
     limit: int = 25,
+    source: str | None = None,
     session: AsyncSession = Depends(get_db),
 ):
     """
@@ -973,10 +974,15 @@ async def list_events(
     """
     from backend.models.db_models import IngestionEvent
 
+    query = select(IngestionEvent)
+
+    # Filterable by route, so a screen can show one path without the
+    # others crowding it out.
+    if source:
+        query = query.where(IngestionEvent.source == source.strip().lower())
+
     rows = await session.execute(
-        select(IngestionEvent)
-        .order_by(desc(IngestionEvent.id))
-        .limit(max(1, min(limit, 200)))
+        query.order_by(desc(IngestionEvent.id)).limit(max(1, min(limit, 200)))
     )
 
     events = rows.scalars().all()

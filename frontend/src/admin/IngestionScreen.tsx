@@ -1073,7 +1073,7 @@ function EventsPanel() {
     setError(null);
 
     try {
-      const response = await listIngestionEvents(25);
+      const response = await listIngestionEvents(25, "s3");
 
       setEvents(response.events);
     } catch (caught) {
@@ -1094,7 +1094,7 @@ function EventsPanel() {
   return (
     <section className="screen__pane">
       <div className="screen__pane-head">
-        <h2 className="screen__name">File processing</h2>
+        <h2 className="screen__name">S3 file processing</h2>
         <button
           type="button"
           className="screen__btn"
@@ -1107,8 +1107,11 @@ function EventsPanel() {
       </div>
 
       <p className="screen__sublede">
-        Every file that was attempted, including the ones that stored
-        nothing — a duplicate, an unreadable file, a filing with no text.
+        Each file that arrived through the raw bucket, when the worker
+        handled it, and whether it was stored. The bucket notification
+        fires as the object lands, so this is arrival give or take the
+        seconds the parse took. Uploads and EDGAR lookups are not listed
+        here — they are visible as documents.
       </p>
 
       {error && (
@@ -1119,8 +1122,9 @@ function EventsPanel() {
 
       {events && events.length === 0 && (
         <p className="screen__note">
-          Nothing processed yet. Upload a filing or collect one, and it
-          appears here whether or not it worked.
+          No files have come through the bucket. This deployment has no
+          RAW_BUCKET or INGESTION_QUEUE_URL, so nothing is listening — on
+          one that does, every object lands here whether it worked or not.
         </p>
       )}
 
@@ -1129,44 +1133,52 @@ function EventsPanel() {
           <table className="screen__table">
             <thead>
               <tr>
-                <th>When</th>
-                <th>Route</th>
                 <th>File</th>
-                <th>Chunks</th>
-                <th>Outcome</th>
+                <th>Processed</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {events.map((event) => (
-                <tr key={event.id}>
-                  <td>
-                    <span className="screen__slug">
-                      {event.at ? event.at.replace("T", " ").slice(0, 19) : "—"}
-                    </span>
-                  </td>
-                  <td>{event.source}</td>
-                  <td>
-                    {event.reference}
-                    {event.detail && (
-                      <span className="screen__slug">{event.detail}</span>
-                    )}
-                  </td>
-                  <td>{event.chunks ?? "—"}</td>
-                  <td>
-                    <span
-                      className={
-                        event.outcome === "indexed"
-                          ? "screen__pill screen__pill--ok"
-                          : event.outcome === "failed"
-                            ? "screen__pill screen__pill--bad"
-                            : "screen__pill screen__pill--warn"
-                      }
-                    >
-                      {event.outcome}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {events.map((event) => {
+                // Stored or not. The specific reason still shows under the
+                // name, but the column answers the only question the
+                // table is asked.
+                const stored = event.outcome === "indexed";
+
+                return (
+                  <tr key={event.id}>
+                    <td>
+                      {event.reference}
+                      {event.detail && (
+                        <span className="screen__slug">{event.detail}</span>
+                      )}
+                      {stored && event.chunks != null && (
+                        <span className="screen__slug">
+                          {event.chunks.toLocaleString()} chunks
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="screen__slug">
+                        {event.at
+                          ? event.at.replace("T", " ").slice(0, 19)
+                          : "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          stored
+                            ? "screen__pill screen__pill--ok"
+                            : "screen__pill screen__pill--bad"
+                        }
+                      >
+                        {stored ? "success" : "failed"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

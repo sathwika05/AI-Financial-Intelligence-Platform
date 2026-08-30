@@ -1,7 +1,10 @@
 """
 Collecting filings from SEC EDGAR.
 
-EDGAR is a public archive with rules attached. It requires a User-Agent
+EDGAR -- Electronic Data Gathering, Analysis and Retrieval -- is the
+Securities and Exchange Commission's public archive of everything US
+public companies are required to file. It is a public archive with rules
+attached. It requires a User-Agent
 naming who is calling, it rate-limits by address, and it serves a
 document from a path assembled out of three separate fields of a
 submissions index -- each of which has to be reshaped first. None of that
@@ -27,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class UnknownCompany(Exception):
-    """No CIK is published for that ticker."""
+    """No Central Index Key is published for that ticker."""
 
 
 class UntrustedSource(Exception):
@@ -39,13 +42,21 @@ class MissingUserAgent(Exception):
 
 
 # EDGAR's ticker-to-CIK map, and the per-company submissions index.
+#
+# CIK is the Central Index Key: the permanent identifier the Securities
+# and Exchange Commission assigns to every filer. Tickers change, get
+# reused after a delisting, and one company can have several; a CIK is
+# issued once and never reused, so EDGAR is addressed by it throughout
+# and has no endpoint that takes a ticker.
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{folder}/{document}"
 
-# The forms worth indexing by default: an annual report and a quarterly
-# one. An 8-K is a press release, and indexing every form indiscriminately
-# buries the filings actually worth answering from.
+# The forms worth indexing by default: the 10-K, which is a company's
+# annual report, and the 10-Q, its quarterly one. An 8-K is a disclosure
+# of a single material event -- closer to a press release -- and indexing
+# every form indiscriminately buries the filings actually worth answering
+# from.
 DEFAULT_FORMS = ("10-K", "10-Q")
 
 # SEC asks for no more than ten requests a second. One request every tenth
@@ -113,8 +124,8 @@ def filing_url(filing: Filing) -> str:
     """
     Where EDGAR serves this filing's primary document.
 
-    Two reshapings, both required: the CIK loses its zero padding in the
-    path, and the accession number loses its dashes in the folder name
+    Two reshapings, both required: the Central Index Key loses its zero
+    padding in the path, and the accession number loses its dashes in the folder name
     while keeping them everywhere else. Using either form in both places
     returns a 404.
     """
@@ -127,7 +138,7 @@ def filing_url(filing: Filing) -> str:
 
 async def cik_for_ticker(ticker: str, *, fetch: Fetch, headers=None) -> str:
     """
-    The ten-digit zero-padded CIK for a ticker.
+    The ten-digit zero-padded Central Index Key for a ticker.
 
     The padding is not cosmetic: the submissions endpoint is addressed by
     the padded form, and CIK320193.json returns nothing at all.

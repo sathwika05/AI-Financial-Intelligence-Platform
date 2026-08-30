@@ -8,8 +8,10 @@ rather than from someone's upload. That is the point of going through S3
 rather than writing to Postgres here: one ingestion path, one place where
 parsing and indexing live, however a document arrived.
 
-The duplicate check happens before the download. EDGAR gives every filing
-an accession number unique for all time, and the URL built from it is the
+The duplicate check happens before the download. EDGAR -- the Securities
+and Exchange Commission's Electronic Data Gathering, Analysis and
+Retrieval archive -- gives every filing an accession number unique for
+all time, and the URL built from it is the
 same source_url the database already enforces a unique constraint on, so
 "do we hold this already" is answerable before a byte is transferred.
 Checking afterwards would be equally correct and would still spend the
@@ -58,7 +60,8 @@ def object_key(filing: Filing) -> str:
 
     Grouped source/ticker so a prefix listing answers "what do we have for
     AAPL from EDGAR" without a scan, and deterministic on the accession
-    number so re-collecting overwrites rather than accumulating.
+    number -- the identifier EDGAR gives each filing -- so re-collecting
+    overwrites rather than accumulating.
 
     The document's own extension is kept, because it is what tells the
     worker how to parse the bytes.
@@ -157,6 +160,7 @@ async def collect_filings(
     An unknown ticker is the exception, and it propagates: returning an
     empty list for a typo reads like "this company has filed nothing".
     """
+    # Central Index Key: EDGAR is addressed by it, not by ticker.
     cik = await cik_for_ticker(ticker, fetch=fetch, headers=headers)
 
     filings = await recent_filings(

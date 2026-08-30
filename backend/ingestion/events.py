@@ -1,7 +1,8 @@
 """
 Reading S3 event notifications off the ingestion queue.
 
-Terraform wires s3:ObjectCreated:* on the raw bucket to the ingestion
+Terraform wires s3:ObjectCreated:* on the raw bucket -- S3 is the Simple
+Storage Service, where the documents themselves live -- to the ingestion
 queue, so every message here is S3's notification envelope rather than
 anything this codebase wrote. Its shape is S3's to define, which is why
 the odd cases below are handled explicitly instead of assumed away.

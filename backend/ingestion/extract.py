@@ -9,8 +9,9 @@ text -- have to be established here rather than inherited.
 Docling rather than a text-object dump, because a filing is a laid-out
 document and not a stream of strings. It runs a layout model over the
 rendered page, so a two-column page comes out in reading order and a
-table comes out as a table, and it falls back to OCR on a page with no
-text layer at all -- which is what a scanned filing is, and what a plain
+table comes out as a table, and it falls back to OCR -- optical character
+recognition, reading the words out of a picture of a page -- when a page
+has no text layer at all -- which is what a scanned filing is, and what a plain
 extractor returns nothing for.
 
 The output is Markdown. That is Docling's structural export, and it is

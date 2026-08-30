@@ -1,7 +1,8 @@
 """
 Draining the ingestion queue.
 
-The contract with SQS is the whole of this module, and it is asymmetric:
+The contract with SQS -- the Simple Queue Service -- is the whole of
+this module, and it is asymmetric:
 deleting a message whose work failed loses a document with no trace, while
 failing to delete one whose work succeeded reprocesses it on every poll
 until retention expires. So a message is deleted only when every object it

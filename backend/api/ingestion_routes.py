@@ -3,7 +3,8 @@ The endpoints behind the Ingestion screen.
 
 Two of these three need no AWS at all, which is deliberate. The S3 path
 cannot be exercised on a laptop -- there is no bucket and no queue -- but
-the two things most likely to be wrong can be: what SEC EDGAR actually
+the two things most likely to be wrong can be: what SEC EDGAR -- the
+Securities and Exchange Commission's public filing archive -- actually
 returns for a ticker, and whether Docling can read the file you have.
 Both are testable here before anything is deployed.
 
@@ -185,7 +186,8 @@ async def _prepare_upload(
             status_code=400,
             detail=(
                 f"{name} has no text to index. A scanned document is read "
-                "by OCR, but a blank one has nothing to read."
+                "by optical character recognition, but a blank one has "
+                "nothing to read."
             ),
         )
 

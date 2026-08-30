@@ -1,6 +1,10 @@
 """
 The only module that imports boto3.
 
+Two AWS services are behind it: S3, the Simple Storage Service, which
+holds the raw documents, and SQS, the Simple Queue Service, which carries
+the notification that one has arrived.
+
 boto3 is synchronous, and everything calling into it here is async, so
 each call is handed to a worker thread. That is what asyncio.to_thread is
 for and it keeps the event loop free while S3 or SQS is answering.

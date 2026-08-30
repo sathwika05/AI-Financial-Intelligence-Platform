@@ -3,8 +3,9 @@ The ingestion worker: the ECS task that drains the queue.
 
     uv run python -m backend.ingestion.queue_worker
 
-Terraform gives the task RAW_BUCKET, PROCESSED_BUCKET and
-INGESTION_QUEUE_URL, plus a role that can read the bucket and consume the
+Terraform gives the task RAW_BUCKET and PROCESSED_BUCKET, naming
+buckets in S3 (the Simple Storage Service), and INGESTION_QUEUE_URL for
+the SQS (Simple Queue Service) queue, plus a role that can read the bucket and consume the
 queue. This is the process those were provisioned for.
 
 It is a separate entrypoint rather than a thread inside the API, because

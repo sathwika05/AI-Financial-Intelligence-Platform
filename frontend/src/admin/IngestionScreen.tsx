@@ -47,8 +47,8 @@ export function IngestionScreen() {
         <h1 className="screen__title">Ingestion</h1>
         <p className="screen__lede">
           Bring filings into the corpus, and see what is in it. Uploading
-          parses and indexes a file directly; collection through S3 runs on
-          the deployment that has a bucket.
+          parses and indexes a file directly; collection through S3 (Amazon's
+          Simple Storage Service) runs on the deployment that has a bucket.
         </p>
       </header>
 
@@ -124,8 +124,8 @@ function UploadPanel() {
             }}
           />
           <span className="screen__hint">
-            PDF or HTML. A scanned PDF is read by OCR, which takes a few
-            seconds a page.
+            PDF or HTML. A scanned PDF is read by optical character
+            recognition (OCR), which takes a few seconds a page.
           </span>
         </label>
 
@@ -219,8 +219,8 @@ function EdgarPanel() {
             onChange={(event) => setForms(event.target.value)}
           />
           <span className="screen__hint">
-            Comma separated. An 8-K is a press release; a 10-K is the
-            annual report.
+            Comma separated. A 10-K is the annual report, a 10-Q the
+            quarterly one; an 8-K discloses a single material event.
           </span>
         </label>
 

@@ -268,3 +268,19 @@ export function reseedCorpus(confirm: string): Promise<JobAccepted> {
     body: JSON.stringify({ confirm }),
   });
 }
+
+export interface KnownCompany {
+  ticker: string;
+  name: string;
+}
+
+/**
+ * The companies whose filings can be fetched.
+ *
+ * Fifty, seeded from seeds/companies.csv. Anything else has no financial
+ * metrics in the corpus, so a document fetched for it answers questions
+ * the rest of the system cannot support.
+ */
+export function listCompanies(): Promise<{ companies: KnownCompany[] }> {
+  return send<{ companies: KnownCompany[] }>("/api/ingestion/companies");
+}

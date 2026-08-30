@@ -490,3 +490,11 @@
   background: #d6a2a2;
   cursor: not-allowed;
 }
+
+/* A multi-select needs its own height; the shared input height would show
+   one row of a list you are meant to pick several from. */
+.screen__input--multi {
+  height: auto;
+  padding: 6px;
+  line-height: 1.6;
+}

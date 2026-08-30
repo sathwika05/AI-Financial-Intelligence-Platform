@@ -205,9 +205,12 @@ async def preview_filings(
     ticker: str,
     forms: str = "10-K,10-Q",
     limit: int = 5,
+    session: AsyncSession = Depends(get_db),
 ):
     """List a company's recent filings. Downloads nothing."""
     from backend.ingestion.edgar import http_fetch
+
+    ticker = _require_known_ticker(ticker, await _known_tickers(session))
 
     headers = _edgar_headers(settings.SEC_USER_AGENT)
 
@@ -242,6 +245,7 @@ async def upload_document(
     background: BackgroundTasks,
     file: UploadFile = File(...),
     ticker: str | None = Form(default=None),
+    session: AsyncSession = Depends(get_db),
 ):
     """
     Parse an uploaded filing, store it, and index it.
@@ -255,6 +259,12 @@ async def upload_document(
     and the browser should not be holding a request open for them.
     """
     from backend.ingestion.queue_worker import _mark_ready, _persist_document
+
+    # Optional, but if given it has to be a company that exists -- a
+    # typo would otherwise store the document with no company at all and
+    # say nothing about it.
+    if (ticker or "").strip():
+        ticker = _require_known_ticker(ticker, await _known_tickers(session))
 
     body = await file.read()
 
@@ -437,7 +447,11 @@ async def _prepare_edgar_filing(fields: dict, *, fetch, headers: dict) -> dict:
 
 
 @router.post("/edgar/documents", status_code=202)
-async def index_filing(request: EdgarFilingRequest, background: BackgroundTasks):
+async def index_filing(
+    request: EdgarFilingRequest,
+    background: BackgroundTasks,
+    session: AsyncSession = Depends(get_db),
+):
     """
     Download one filing from EDGAR and index it. No bucket involved.
 
@@ -448,6 +462,8 @@ async def index_filing(request: EdgarFilingRequest, background: BackgroundTasks)
     """
     from backend.ingestion.edgar import http_fetch
     from backend.ingestion.queue_worker import _mark_ready, _persist_document
+
+    _require_known_ticker(request.ticker or "", await _known_tickers(session))
 
     headers = _edgar_headers(settings.SEC_USER_AGENT)
 
@@ -644,7 +660,11 @@ async def _collect_many(
 
 
 @router.post("/edgar/collect", status_code=202)
-async def collect_filings_job(request: CollectRequest, background: BackgroundTasks):
+async def collect_filings_job(
+    request: CollectRequest,
+    background: BackgroundTasks,
+    session: AsyncSession = Depends(get_db),
+):
     """
     Index recent filings for several companies at once.
 
@@ -652,9 +672,19 @@ async def collect_filings_job(request: CollectRequest, background: BackgroundTas
     round of embedding calls, and a browser should not hold a request open
     for that. Watch the document list to see them arrive.
     """
-    headers = _edgar_headers(settings.SEC_USER_AGENT)
+    # Input before configuration. A ticker that does not exist is the
+    # caller's mistake and is wrong on every deployment; a missing
+    # User-Agent is the deployment's, and reporting it first would tell
+    # someone to go and set an environment variable when the actual
+    # problem is a typo in front of them.
+    #
+    # Every ticker is checked before any is fetched, so a typo in the
+    # tenth does not leave nine already collected and no clear reason why
+    # the run stopped.
+    known = await _known_tickers(session)
+    tickers = [_require_known_ticker(t, known) for t in request.tickers]
 
-    tickers = [t.strip().upper() for t in request.tickers if t.strip()]
+    headers = _edgar_headers(settings.SEC_USER_AGENT)
     forms = tuple(f.strip().upper() for f in request.forms if f.strip())
 
     async def run() -> None:
@@ -721,4 +751,64 @@ async def reseed_job(request: ReseedRequest, background: BackgroundTasks):
             "is gone once this succeeds. Regenerate the SQL ground truth "
             "afterwards, and take a fresh snapshot before benchmarking."
         ),
+    }
+
+# ── The companies this corpus covers ────────────────────────
+#
+# Fifty, seeded from seeds/companies.csv. Fetching filings for anything
+# else produces documents that resolve to no company, cannot be filtered
+# by one, and answer questions about a company the benchmark holds no
+# metrics for.
+#
+# Read from the table rather than the file, because the table is what
+# company_id resolves against -- a ticker present in the file but missing
+# from the table would index with no company attached. A test asserts the
+# two have not drifted.
+
+
+async def _known_tickers(session: AsyncSession) -> set[str]:
+    rows = await session.execute(select(Company.ticker))
+
+    return {t.strip().upper() for (t,) in rows if t}
+
+
+def _require_known_ticker(ticker: str, known: set[str]) -> str:
+    """
+    Normalise a ticker, or refuse it.
+
+    Enforced here rather than only in the dropdown, because the dropdown
+    is a convenience and anyone can post around it.
+    """
+    cleaned = (ticker or "").strip().upper()
+
+    if not cleaned:
+        raise HTTPException(
+            status_code=400,
+            detail="Name a company. Only the companies this corpus covers can be fetched.",
+        )
+
+    if cleaned not in known:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{cleaned} is not one of the companies this corpus covers. "
+                "The list is the fifty in seeds/companies.csv; adding one "
+                "means seeding it, so that its financial metrics exist too."
+            ),
+        )
+
+    return cleaned
+
+
+@router.get("/companies")
+async def list_companies(session: AsyncSession = Depends(get_db)):
+    """The companies whose filings can be fetched."""
+    rows = await session.execute(
+        select(Company.ticker, Company.name).order_by(Company.ticker)
+    )
+
+    return {
+        "companies": [
+            {"ticker": ticker, "name": name} for ticker, name in rows
+        ]
     }

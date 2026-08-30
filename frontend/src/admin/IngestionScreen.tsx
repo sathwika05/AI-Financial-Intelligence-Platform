@@ -13,6 +13,7 @@ import {
   AdminApiError,
   collectFilings,
   indexFiling,
+  listCompanies,
   listDocuments,
   previewFilings,
   reseedCorpus,
@@ -20,6 +21,7 @@ import {
   startIndexing,
   uploadDocument,
   type EdgarFiling,
+  type KnownCompany,
   type StoredDocument,
 } from "./api";
 import "./AdminScreens.css";
@@ -119,6 +121,7 @@ export function IngestionScreen() {
 }
 
 function UploadPanel() {
+  const companies = useCompanies();
   const [file, setFile] = useState<File | null>(null);
   const [ticker, setTicker] = useState("");
   const [busy, setBusy] = useState(false);
@@ -185,14 +188,19 @@ function UploadPanel() {
         </label>
 
         <label className="screen__field">
-          <span className="screen__label">Ticker (optional)</span>
-          <input
+          <span className="screen__label">Company (optional)</span>
+          <select
             className="screen__input"
-            type="text"
-            placeholder="AAPL"
             value={ticker}
             onChange={(event) => setTicker(event.target.value)}
-          />
+          >
+            <option value="">No company</option>
+            {companies.map((company) => (
+              <option key={company.ticker} value={company.ticker}>
+                {company.ticker} — {company.name}
+              </option>
+            ))}
+          </select>
           <span className="screen__hint">
             Links the document to a company so it can be filtered by one.
             Without it the document is still indexed and still retrievable.
@@ -221,6 +229,7 @@ function UploadPanel() {
 }
 
 function EdgarPanel() {
+  const companies = useCompanies();
   const [ticker, setTicker] = useState("");
   const [forms, setForms] = useState("10-K,10-Q");
   const [busy, setBusy] = useState(false);
@@ -259,14 +268,19 @@ function EdgarPanel() {
 
       <form className="screen__card" onSubmit={submit}>
         <label className="screen__field">
-          <span className="screen__label">Ticker</span>
-          <input
+          <span className="screen__label">Company</span>
+          <select
             className="screen__input"
-            type="text"
-            placeholder="AAPL"
             value={ticker}
             onChange={(event) => setTicker(event.target.value)}
-          />
+          >
+            <option value="">Choose a company</option>
+            {companies.map((company) => (
+              <option key={company.ticker} value={company.ticker}>
+                {company.ticker} — {company.name}
+              </option>
+            ))}
+          </select>
           <span className="screen__hint">
             Resolved to the company's Central Index Key, which is what
             EDGAR is addressed by — there is no endpoint that takes a
@@ -344,6 +358,33 @@ function EdgarPanel() {
 
     </section>
   );
+}
+
+/**
+ * The companies whose filings can be fetched.
+ *
+ * Loaded once and shared by every control that takes a ticker, so none of
+ * them can offer a company the others do not. The server checks anyway —
+ * a dropdown is a convenience, not a guarantee.
+ */
+function useCompanies(): KnownCompany[] {
+  const [companies, setCompanies] = useState<KnownCompany[]>([]);
+
+  useEffect(() => {
+    let live = true;
+
+    listCompanies()
+      .then((loaded) => {
+        if (live) setCompanies(loaded.companies);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  return companies;
 }
 
 // The API will not return more than this in one request, and a table of
@@ -674,7 +715,8 @@ function IndexButton({ filing }: { filing: EdgarFiling }) {
  * it twice costs nothing but the lookups.
  */
 function CollectPanel() {
-  const [tickers, setTickers] = useState("AAPL, MSFT, NVDA");
+  const companies = useCompanies();
+  const [tickers, setTickers] = useState<string[]>([]);
   const [forms, setForms] = useState("10-K,10-Q");
   const [limit, setLimit] = useState("2");
   const [busy, setBusy] = useState(false);
@@ -684,10 +726,7 @@ function CollectPanel() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
 
-    const wanted = tickers
-      .split(/[\s,]+/)
-      .map((t) => t.trim().toUpperCase())
-      .filter(Boolean);
+    const wanted = tickers;
 
     if (wanted.length === 0) {
       setError("Name at least one company.");
@@ -728,14 +767,26 @@ function CollectPanel() {
       <form className="screen__card" onSubmit={submit}>
         <label className="screen__field">
           <span className="screen__label">Companies</span>
-          <input
-            className="screen__input"
-            type="text"
+          <select
+            className="screen__input screen__input--multi"
+            multiple
+            size={6}
             value={tickers}
-            onChange={(event) => setTickers(event.target.value)}
-          />
+            onChange={(event) =>
+              setTickers(
+                [...event.target.selectedOptions].map((option) => option.value),
+              )
+            }
+          >
+            {companies.map((company) => (
+              <option key={company.ticker} value={company.ticker}>
+                {company.ticker} — {company.name}
+              </option>
+            ))}
+          </select>
           <span className="screen__hint">
-            Tickers, separated by commas or spaces.
+            Hold Cmd or Ctrl to choose several. Only the companies this
+            corpus covers are listed.
           </span>
         </label>
 

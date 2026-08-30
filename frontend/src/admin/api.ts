@@ -164,7 +164,7 @@ export function previewFilings(
 
 export function listDocuments(
   limit = 25,
-): Promise<{ documents: StoredDocument[] }> {
+): Promise<{ total: number; documents: StoredDocument[] }> {
   return send(`/api/ingestion/documents?limit=${limit}`);
 }
 

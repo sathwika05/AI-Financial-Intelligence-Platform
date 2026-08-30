@@ -399,3 +399,30 @@
   flex: 1;
   justify-content: flex-start;
 }
+
+/* Heading, count and action on one line.
+ *
+ * The Refresh button used to sit in a full-width row between the heading
+ * and the table it refreshes, which put a button's height plus two gaps
+ * between two things that belong together.
+ */
+.screen__pane-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.screen__pane-head .screen__btn {
+  margin-left: auto;
+}
+
+.screen__count {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.screen__more {
+  display: flex;
+  justify-content: center;
+}

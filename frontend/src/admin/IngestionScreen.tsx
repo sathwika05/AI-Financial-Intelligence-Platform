@@ -308,8 +308,16 @@ function EdgarPanel() {
   );
 }
 
+// The API will not return more than this in one request, and a table of
+// two hundred rows is already past the point of being read rather than
+// searched.
+const MAX_ROWS = 200;
+const PAGE = 25;
+
 function DocumentsPanel() {
   const [documents, setDocuments] = useState<StoredDocument[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(PAGE);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -318,9 +326,10 @@ function DocumentsPanel() {
     setError(null);
 
     try {
-      const response = await listDocuments(25);
+      const response = await listDocuments(limit);
 
       setDocuments(response.documents);
+      setTotal(response.total);
     } catch (caught) {
       setError(
         caught instanceof AdminApiError
@@ -330,17 +339,29 @@ function DocumentsPanel() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [limit]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const shown = documents?.length ?? 0;
+  const more = total > shown;
+
   return (
     <section className="screen__pane">
-      <h2 className="screen__name">Recent documents</h2>
+      {/* Heading, count and Refresh on one line. The button used to sit in
+          a row of its own between the heading and the table, which pushed
+          them apart for no reason anyone could see. */}
+      <div className="screen__pane-head">
+        <h2 className="screen__name">Recent documents</h2>
 
-      <div className="screen__col-actions">
+        {documents && (
+          <span className="screen__count">
+            {shown} of {total}
+          </span>
+        )}
+
         <button
           type="button"
           className="screen__btn"
@@ -407,10 +428,26 @@ function DocumentsPanel() {
         </div>
       )}
 
+      {more && (
+        <div className="screen__more">
+          <button
+            type="button"
+            className="screen__btn"
+            onClick={() => setLimit((current) => Math.min(current + PAGE, MAX_ROWS))}
+            disabled={busy || shown >= MAX_ROWS}
+          >
+            {shown >= MAX_ROWS
+              ? `Showing the most recent ${MAX_ROWS}`
+              : `Show ${Math.min(PAGE, total - shown)} more`}
+          </button>
+        </div>
+      )}
+
       <p className="screen__footnote">
         A document is <code>processing</code> from the moment its row is
         written until indexing returns. One that stays there did not
-        finish, and its chunk count says how far it got.
+        finish, and its chunk count says how far it got. Newest first, so a
+        document you just added is at the top.
       </p>
     </section>
   );

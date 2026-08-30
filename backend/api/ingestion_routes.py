@@ -323,6 +323,10 @@ async def list_documents(
         .subquery()
     )
 
+    # The total, so the screen can say "25 of 296" rather than leaving
+    # someone to wonder whether 25 is the page size or the whole corpus.
+    total = await session.scalar(select(func.count()).select_from(Document))
+
     rows = await session.execute(
         select(Document, Company.ticker, chunk_counts.c.chunks)
         .outerjoin(Company, Document.company_id == Company.id)
@@ -332,6 +336,7 @@ async def list_documents(
     )
 
     return {
+        "total": total or 0,
         "documents": [
             {
                 "id": document.id,

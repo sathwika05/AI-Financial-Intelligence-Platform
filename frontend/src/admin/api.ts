@@ -125,6 +125,8 @@ export interface EdgarFiling {
   filing_date: string;
   document: string;
   url: string;
+  cik: string;
+  ticker: string | null;
 }
 
 export interface StoredDocument {
@@ -206,4 +208,29 @@ export interface ExternalLinks {
 
 export function fetchExternalLinks(): Promise<ExternalLinks> {
   return send<ExternalLinks>("/api/admin/external-links");
+}
+
+export interface IndexFilingRequest {
+  cik: string;
+  accession: string;
+  form: string;
+  filing_date: string;
+  primary_document: string;
+  ticker: string | null;
+}
+
+/**
+ * Download one EDGAR filing and index it, with no bucket in the path.
+ *
+ * The fields go up, never the URL: the server rebuilds it and checks the
+ * host, so this cannot be pointed somewhere else.
+ */
+export function indexFiling(
+  filing: IndexFilingRequest,
+): Promise<UploadAccepted> {
+  return send<UploadAccepted>("/api/ingestion/edgar/documents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(filing),
+  });
 }

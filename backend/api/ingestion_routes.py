@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 
+from pydantic import BaseModel, Field
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -122,6 +123,11 @@ async def _preview(
             "filing_date": filing.filing_date,
             "document": filing.primary_document,
             "url": filing_url(filing),
+            # Sent back up when one of these is indexed, so the client
+            # never has to construct a URL and the server never has to
+            # trust one.
+            "cik": filing.cik,
+            "ticker": filing.ticker,
         }
         for filing in filings
     ]
@@ -343,4 +349,141 @@ async def list_documents(
             }
             for document, ticker, chunks in rows
         ]
+    }
+
+class EdgarFilingRequest(BaseModel):
+    """
+    One filing, identified the way EDGAR identifies it.
+
+    Deliberately not a URL. The client sends the fields, and the URL is
+    rebuilt and validated here -- accepting a URL would let any caller
+    have the contents of any host downloaded and stored as an SEC filing.
+    """
+
+    cik: str = Field(min_length=1, max_length=20)
+    accession: str = Field(min_length=1, max_length=32)
+    form: str = Field(min_length=1, max_length=20)
+    filing_date: str = Field(min_length=1, max_length=20)
+    primary_document: str = Field(min_length=1, max_length=200)
+    ticker: str | None = Field(default=None, max_length=12)
+
+
+async def _prepare_edgar_filing(fields: dict, *, fetch, headers: dict) -> dict:
+    """
+    Download one filing and turn it into the row the corpus stores.
+
+    The same provenance the collector would attach on its way through S3,
+    so a filing indexed from this screen and the same filing arriving
+    through the queue become one row rather than two the duplicate check
+    cannot see are the same.
+    """
+    from backend.ingestion.edgar import Filing, download_filing, filing_url
+
+    filing = Filing(
+        cik=fields["cik"],
+        accession=fields["accession"],
+        form=fields["form"],
+        filing_date=fields["filing_date"],
+        primary_document=fields["primary_document"],
+        ticker=(fields.get("ticker") or "").strip().upper() or None,
+    )
+
+    url = filing_url(filing)
+
+    try:
+        body = await download_filing(filing, fetch=fetch, headers=headers)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("[INGEST] EDGAR download failed for %s", filing.accession)
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"EDGAR did not return {filing.primary_document}: {exc}",
+        ) from exc
+
+    label = f"{filing.ticker or filing.cik} {filing.form} {filing.filing_date}"
+
+    try:
+        document = await document_from_bytes(
+            filename=filing.primary_document,
+            body=body,
+            provenance={
+                "source": "sec_edgar",
+                "source_url": url,
+                "ticker": filing.ticker,
+                "form": filing.form,
+                "filing_date": filing.filing_date,
+                "title": label,
+            },
+        )
+    except SkippedObject as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not (document.get("content") or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{label} downloaded, but no text could be read from it."
+            ),
+        )
+
+    return document
+
+
+@router.post("/edgar/documents", status_code=202)
+async def index_filing(request: EdgarFilingRequest, background: BackgroundTasks):
+    """
+    Download one filing from EDGAR and index it. No bucket involved.
+
+    The collector's route to the same place goes through S3, so that a
+    scheduled run leaves the raw document in object storage. This one is
+    for the person looking at the list who wants that filing in the
+    corpus now, and it works on a deployment that has no bucket at all.
+    """
+    from backend.ingestion.edgar import http_fetch
+    from backend.ingestion.queue_worker import _mark_ready, _persist_document
+
+    headers = _edgar_headers(settings.SEC_USER_AGENT)
+
+    document = await _prepare_edgar_filing(
+        request.model_dump(), fetch=http_fetch, headers=headers
+    )
+
+    try:
+        document_id = await _persist_document(document)
+    except SkippedObject as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    async def index() -> None:
+        from backend.ingestion.indexing_service import embed_document
+
+        result = await embed_document(document_id)
+
+        if result.get("success"):
+            await _mark_ready(document_id)
+            logger.info(
+                "[INGEST] Indexed EDGAR filing %s as document %s (%s chunks)",
+                request.accession,
+                document_id,
+                result.get("chunks"),
+            )
+        else:
+            logger.error(
+                "[INGEST] EDGAR filing %s failed to index: %s",
+                request.accession,
+                result.get("error"),
+            )
+
+    background.add_task(index)
+
+    return {
+        "document_id": document_id,
+        "title": document.get("title"),
+        "characters": len(document["content"]),
+        "status": "processing",
+        "message": (
+            "Downloaded and stored. Indexing runs in the background; "
+            "refresh the list to see it become ready."
+        ),
     }

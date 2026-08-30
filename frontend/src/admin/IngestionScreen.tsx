@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Database,
+  Download,
   FileUp,
   Info,
   RefreshCw,
@@ -9,9 +10,10 @@ import {
 } from "lucide-react";
 import {
   AdminApiError,
+  indexFiling,
   listDocuments,
-  startIndexing,
   previewFilings,
+  startIndexing,
   uploadDocument,
   type EdgarFiling,
   type StoredDocument,
@@ -65,14 +67,17 @@ export function IngestionScreen() {
         <Info size={15} className="screen__aside-icon" aria-hidden="true" />
         <div>
           <p className="screen__aside-title">
-            This reads EDGAR; it does not collect anything.
+            Index downloads the filing and indexes it here, with no bucket
+            involved.
           </p>
           <p className="screen__aside-body">
-            Collecting writes each filing to the S3 raw bucket, where the
-            bucket notification hands it to the ingestion worker. That path
-            needs RAW_BUCKET and INGESTION_QUEUE_URL, which are not set on
-            a local run — so to bring one of these documents in from here,
-            open it, save it, and upload it above.
+            The scheduled collector takes the other route: it writes each
+            filing to the S3 raw bucket, and the bucket notification hands
+            it to the ingestion worker. That path needs RAW_BUCKET and
+            INGESTION_QUEUE_URL and leaves the raw document in object
+            storage. Either way the filing becomes the same row, so
+            indexing one here does not stop the collector recognising it
+            later.
           </p>
         </div>
       </aside>
@@ -270,8 +275,8 @@ function EdgarPanel() {
               <tr>
                 <th>Form</th>
                 <th>Filed</th>
-                <th>Accession</th>
                 <th>Document</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -279,7 +284,6 @@ function EdgarPanel() {
                 <tr key={filing.accession}>
                   <td>{filing.form}</td>
                   <td>{filing.filing_date}</td>
-                  <td className="screen__slug">{filing.accession}</td>
                   <td>
                     <a
                       href={filing.url}
@@ -288,6 +292,10 @@ function EdgarPanel() {
                     >
                       {filing.document}
                     </a>
+                    <span className="screen__slug"> {filing.accession}</span>
+                  </td>
+                  <td className="screen__col-actions">
+                    <IndexButton filing={filing} />
                   </td>
                 </tr>
               ))}
@@ -500,5 +508,74 @@ function ReindexPanel() {
         </div>
       </aside>
     </section>
+  );
+}
+
+/**
+ * Download one filing and index it.
+ *
+ * The identifiers go up, never the URL — the server rebuilds it and
+ * checks the host, so this cannot be pointed anywhere else.
+ *
+ * A 409 means the corpus already holds this filing. That is the answer,
+ * not an error, so it reads as one.
+ */
+function IndexButton({ filing }: { filing: EdgarFiling }) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+
+    try {
+      const accepted = await indexFiling({
+        cik: filing.cik,
+        accession: filing.accession,
+        form: filing.form,
+        filing_date: filing.filing_date,
+        primary_document: filing.document,
+        ticker: filing.ticker,
+      });
+
+      setDone(`Document ${accepted.document_id}`);
+    } catch (caught) {
+      const message =
+        caught instanceof AdminApiError
+          ? caught.message
+          : "Could not index that filing.";
+
+      if (caught instanceof AdminApiError && caught.status === 409) {
+        setDone("Already indexed");
+      } else {
+        setError(message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done) {
+    return <span className="screen__pill screen__pill--ok">{done}</span>;
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="screen__btn"
+        onClick={() => void submit()}
+        disabled={busy}
+      >
+        <Download size={13} />
+        {busy ? "Indexing…" : "Index"}
+      </button>
+      {error && (
+        <span className="screen__error" role="alert">
+          {error}
+        </span>
+      )}
+    </>
   );
 }

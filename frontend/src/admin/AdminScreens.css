@@ -399,6 +399,10 @@ td.screen__slug {
 .screen__pair .screen__card {
   max-width: none;
   justify-content: flex-start;
+  /* Fill the row's height. Safe now that the layout is rows rather than
+     columns: whatever else sits in a row -- a table, an aside -- is in
+     its own cell rather than stealing height from this one. */
+  flex: 1;
   /* No flex-grow. The cards match because their contents match — every
      field reserves two lines for its hint — so stretching them is not
      needed, and stretching would make a card taller whenever anything
@@ -609,4 +613,22 @@ td.screen__slug {
  */
 .screen__pane--fill {
   flex: 1;
+}
+
+/* Heading rows in a pair reserve the same height whether or not they
+   carry a control.
+ *
+ * A panel with a Refresh button on its heading line was taller than the
+ * bare heading beside it by exactly the button, so everything below --
+ * the lede, the card, the table -- started a line lower on that side.
+ * The copy was identical; the button was the difference.
+ */
+.screen__pair .screen__name,
+.screen__pair .screen__pane-head {
+  display: flex;
+  align-items: center;
+  /* The height a heading row takes when it carries a .screen__btn: the
+     button's own box, which is taller than the heading text. Measured
+     rather than guessed -- 26px was a guess, and left seven pixels. */
+  min-height: 34px;
 }

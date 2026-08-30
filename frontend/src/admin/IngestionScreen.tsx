@@ -70,16 +70,19 @@ export function IngestionScreen() {
 
           What arrived goes underneath both, where a seven-column table
           has the width it needs. */}
+      {/* Two rows of two, not two columns of two. A column is its own
+          flex context, so nothing lines up a row across them — the top
+          cards ended sixteen pixels apart and the row below started at
+          two different offsets. As grid rows they share a track and match
+          by construction. */}
       <div className="screen__pair">
-        <div className="screen__stack">
-          <UploadPanel />
-          <CollectPanel />
-        </div>
+        <UploadPanel />
+        <EdgarPanel />
+      </div>
 
-        <div className="screen__stack">
-          <EdgarPanel />
-          <SchedulerPanel />
-        </div>
+      <div className="screen__pair">
+        <CollectPanel />
+        <SchedulerPanel />
       </div>
 
       <DocumentsPanel />
@@ -1062,11 +1065,9 @@ function SchedulerPanel() {
         </button>
       </div>
       <p className="screen__sublede">
-        Filings written to the raw S3 bucket, where the bucket
-        notification puts each one on an SQS queue for the ingestion
-        worker — which keeps the original file, worth having if extraction
-        ever improves. Configured with RAW_BUCKET and
-        INGESTION_QUEUE_URL.
+        Filings written to the raw S3 bucket, where the notification puts
+        each on an SQS queue for the ingestion worker — which keeps the
+        original file. Configured with RAW_BUCKET and INGESTION_QUEUE_URL.
       </p>
 
       {error && (

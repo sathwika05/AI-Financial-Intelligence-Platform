@@ -69,25 +69,6 @@ export function IngestionScreen() {
         <EdgarPanel />
       </div>
 
-      <aside className="screen__aside">
-        <Info size={15} className="screen__aside-icon" aria-hidden="true" />
-        <div>
-          <p className="screen__aside-title">
-            Index downloads the filing and indexes it here, with no bucket
-            involved.
-          </p>
-          <p className="screen__aside-body">
-            The scheduled collector takes the other route: it writes each
-            filing to the S3 raw bucket, and the bucket notification hands
-            it to the ingestion worker. That path needs RAW_BUCKET and
-            INGESTION_QUEUE_URL and leaves the raw document in object
-            storage. Either way the filing becomes the same row, so
-            indexing one here does not stop the collector recognising it
-            later.
-          </p>
-        </div>
-      </aside>
-
       <CollectPanel />
       <DocumentsPanel />
 
@@ -341,6 +322,25 @@ function EdgarPanel() {
         </div>
       )}
 
+
+      <aside className="screen__aside">
+        <Info size={15} className="screen__aside-icon" aria-hidden="true" />
+        <div>
+          <p className="screen__aside-title">
+            Index downloads the filing and indexes it here, with no bucket
+            involved.
+          </p>
+          <p className="screen__aside-body">
+            The scheduled collector takes the other route: it writes each
+            filing to the S3 raw bucket, and the bucket notification hands
+            it to the ingestion worker. That path needs RAW_BUCKET and
+            INGESTION_QUEUE_URL and leaves the raw document in object
+            storage. Either way the filing becomes the same row, so
+            indexing one here does not stop the collector recognising it
+            later.
+          </p>
+        </div>
+      </aside>
     </section>
   );
 }
@@ -525,13 +525,6 @@ function DocumentsPanel() {
           </button>
         </div>
       )}
-
-      <p className="screen__footnote">
-        A document is <code>processing</code> from the moment its row is
-        written until indexing returns. One that stays there did not
-        finish, and its chunk count says how far it got. Newest first, so a
-        document you just added is at the top.
-      </p>
     </section>
   );
 }

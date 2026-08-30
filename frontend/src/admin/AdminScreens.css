@@ -393,11 +393,12 @@
 
 .screen__pair .screen__card {
   max-width: none;
-  /* Grow into whatever height the taller card set. The controls stay at
-     the top and the slack falls below them, rather than the fields
-     spreading out to fill the box. */
-  flex: 1;
   justify-content: flex-start;
+  /* No flex-grow. The cards match because their contents match — every
+     field reserves two lines for its hint — so stretching them is not
+     needed, and stretching would make a card taller whenever anything
+     else in its column (a results table, an aside) is not mirrored on the
+     other side. */
 }
 
 /* Heading, count and action on one line.

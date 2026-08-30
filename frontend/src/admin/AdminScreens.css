@@ -504,7 +504,6 @@
 .screen__inline-note {
   display: flex;
   gap: 9px;
-  margin-top: auto;
   padding: 11px 13px;
   border-radius: var(--radius);
   background: var(--surface-sunk, #f4f6f9);

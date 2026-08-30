@@ -118,9 +118,8 @@ export function AdminShell({
               </li>
             );
           })}
+          <ExternalRail />
         </ul>
-
-        <ExternalRail />
 
         <div className="admin__footer">
           <span className="admin__who">
@@ -149,10 +148,10 @@ export function AdminShell({
 /**
  * The two tools that explain a run after it has finished.
  *
- * Separated from the nav above because these leave the application
- * entirely — a rail item that opens a new tab to Amazon is not the same
- * kind of thing as one that swaps the screen beside it, and reading them
- * as one list makes the difference invisible until you have clicked.
+ * They sit in the same list as the rest of the navigation, so the rail
+ * reads as one set of destinations. What marks them out is the arrow on
+ * the right: they open a third-party console in a new tab rather than
+ * swapping the screen beside the rail.
  *
  * Rendered even when unconfigured, disabled, with the server's own
  * explanation on hover. Hiding them would be tidier on a laptop and worse
@@ -186,7 +185,7 @@ function ExternalRail() {
   ];
 
   return (
-    <ul className="admin__nav admin__nav--external">
+    <>
       {items.map(({ id, label, detail, icon: Icon, link }) => (
         <li key={id}>
           {link.configured && link.url ? (
@@ -224,6 +223,6 @@ function ExternalRail() {
           )}
         </li>
       ))}
-    </ul>
+    </>
   );
 }

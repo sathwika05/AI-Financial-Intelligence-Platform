@@ -214,18 +214,10 @@
 
 /* ── Links that leave the application ───────────────────────
  *
- * CloudWatch and LangSmith open a third-party console in a new tab. They
- * sit in the rail because that is where you look for them, but reading
- * them as part of the same list as Home and Evaluation would hide the
- * difference until after the click — so they get their own group, above
- * the footer, separated by a rule.
+ * CloudWatch and LangSmith sit in the same list as everything else, so
+ * the rail reads as one set of destinations. The arrow on the right is
+ * what says they open a third-party console in a new tab.
  */
-.admin__nav--external {
-  margin-top: auto;
-  padding-top: 10px;
-  border-top: 1px solid rgba(215, 231, 243, 0.12);
-}
-
 .admin__item--external .admin__item-out {
   margin-left: auto;
   opacity: 0.5;

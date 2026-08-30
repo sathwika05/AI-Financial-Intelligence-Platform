@@ -61,6 +61,22 @@ export function IngestionScreen() {
         <EdgarPanel />
       </div>
 
+      <aside className="screen__aside">
+        <Info size={15} className="screen__aside-icon" aria-hidden="true" />
+        <div>
+          <p className="screen__aside-title">
+            This reads EDGAR; it does not collect anything.
+          </p>
+          <p className="screen__aside-body">
+            Collecting writes each filing to the S3 raw bucket, where the
+            bucket notification hands it to the ingestion worker. That path
+            needs RAW_BUCKET and INGESTION_QUEUE_URL, which are not set on
+            a local run — so to bring one of these documents in from here,
+            open it, save it, and upload it above.
+          </p>
+        </div>
+      </aside>
+
       <DocumentsPanel />
       <ReindexPanel />
     </div>
@@ -275,21 +291,6 @@ function EdgarPanel() {
         </div>
       )}
 
-      <aside className="screen__aside">
-        <Info size={15} className="screen__aside-icon" aria-hidden="true" />
-        <div>
-          <p className="screen__aside-title">
-            This reads EDGAR; it does not collect anything.
-          </p>
-          <p className="screen__aside-body">
-            Collecting writes each filing to the S3 raw bucket, where the
-            bucket notification hands it to the ingestion worker. That path
-            needs RAW_BUCKET and INGESTION_QUEUE_URL, which are not set on
-            a local run — so to bring one of these documents in from here,
-            open it, save it, and upload it above.
-          </p>
-        </div>
-      </aside>
     </section>
   );
 }

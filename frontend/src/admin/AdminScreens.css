@@ -359,7 +359,10 @@
      without a media query naming a specific device width. */
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 20px;
-  align-items: start;
+  /* stretch, not start: two cards side by side at different heights read
+     as one being unfinished. The row is as tall as its taller card and
+     both fill it. */
+  align-items: stretch;
 }
 
 .screen__pane {
@@ -376,4 +379,9 @@
    that job. */
 .screen__pair .screen__card {
   max-width: none;
+  /* Grow into whatever height the taller card set. The controls stay at
+     the top and the slack falls below them, rather than the fields
+     spreading out to fill the box. */
+  flex: 1;
+  justify-content: flex-start;
 }

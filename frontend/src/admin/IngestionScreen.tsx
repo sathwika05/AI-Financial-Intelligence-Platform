@@ -1065,8 +1065,8 @@ function SchedulerPanel() {
         Filings written to the raw S3 bucket, where the bucket
         notification puts each one on an SQS queue for the ingestion
         worker — which keeps the original file, worth having if extraction
-        ever improves. Needs RAW_BUCKET and INGESTION_QUEUE_URL, so it
-        does not run here.
+        ever improves. Configured with RAW_BUCKET and
+        INGESTION_QUEUE_URL.
       </p>
 
       {error && (
@@ -1077,9 +1077,8 @@ function SchedulerPanel() {
 
       {events && events.length === 0 && (
         <p className="screen__note">
-          Nothing has come through the bucket. This deployment has no
-          RAW_BUCKET or INGESTION_QUEUE_URL, so nothing is listening — on
-          one that does, every object lands here whether it worked or not.
+          Nothing has come through the bucket yet. Every object that
+          arrives lands here, whether it was stored or not.
         </p>
       )}
 

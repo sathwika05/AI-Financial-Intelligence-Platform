@@ -10,3 +10,10 @@ db_password = "change-me"
 # false keeps Fargate in public subnets behind security groups.
 # true adds a NAT Gateway at roughly $32/month, billed idle.
 use_nat_gateway = false
+
+# SEC EDGAR refuses anonymous requests. A name and a contact address, so
+# SEC can reach you if your traffic causes them a problem. Not a
+# credential: it is sent in the clear on every request and authorises
+# nothing, which is why it is plain environment on the task rather than a
+# secret. Leave empty to turn the EDGAR collector off.
+sec_user_agent = "Your Name you@example.com"

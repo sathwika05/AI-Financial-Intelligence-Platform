@@ -760,8 +760,9 @@ function CollectPanel() {
     <section className="screen__pane">
       <h2 className="screen__name">Collect filings for several companies</h2>
       <p className="screen__sublede">
-        The same thing the Index button does, for a list of companies at
-        once. A filing already held is skipped.
+        Fetches and indexes recent filings without showing them to you
+        first. Use the lookup above to choose one; use this to fill the
+        corpus. A filing already held is skipped.
       </p>
 
       <form className="screen__card" onSubmit={submit}>
@@ -785,8 +786,9 @@ function CollectPanel() {
             ))}
           </select>
           <span className="screen__hint">
-            Hold Cmd or Ctrl to choose several. Only the companies this
-            corpus covers are listed.
+            Hold Cmd or Ctrl to choose several. Only the fifty companies
+            this corpus covers are listed — anything else has no financial
+            metrics here to answer against.
           </span>
         </label>
 
@@ -801,7 +803,7 @@ function CollectPanel() {
         </label>
 
         <label className="screen__field">
-          <span className="screen__label">Most recent per company</span>
+          <span className="screen__label">Filings per company</span>
           <input
             className="screen__input"
             type="number"
@@ -811,8 +813,12 @@ function CollectPanel() {
             onChange={(event) => setLimit(event.target.value)}
           />
           <span className="screen__hint">
-            A 10-K is a large document; start small. Each one is a
-            rate-limited download and a round of embedding calls.
+            Counted across all the forms above, not per form — and a
+            company files three 10-Qs a year to one 10-K, so asking for 2
+            of both usually returns two quarterlies and no annual report.
+            For a 10-K, ask for that form alone. Each filing is a
+            rate-limited download and a round of embedding calls, so start
+            small.
           </span>
         </label>
 

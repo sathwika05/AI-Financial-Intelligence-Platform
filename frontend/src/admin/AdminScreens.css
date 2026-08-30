@@ -426,3 +426,19 @@
   display: flex;
   justify-content: center;
 }
+
+/* One line under a panel heading, saying what the panel is for.
+ *
+ * These two panels end in the same place and differ only in where the
+ * document starts out, which is invisible from their controls: both are
+ * a short form with a ticker field and a button.
+ */
+.screen__sublede {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-subtle);
+  /* Two lines reserved, so a one-line lede beside a two-line one does not
+     start its card higher and make the pair unequal again. */
+  min-height: 2.9em;
+}

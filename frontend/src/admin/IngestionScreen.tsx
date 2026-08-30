@@ -130,6 +130,10 @@ function UploadPanel() {
   return (
     <section className="screen__pane">
       <h2 className="screen__name">Upload a filing</h2>
+      <p className="screen__sublede">
+        When you already have the file. Pick it and it is parsed and
+        indexed.
+      </p>
 
       <form className="screen__card" onSubmit={submit}>
         <label className="screen__field">
@@ -218,6 +222,10 @@ function EdgarPanel() {
   return (
     <section className="screen__pane">
       <h2 className="screen__name">Look up SEC EDGAR filings</h2>
+      <p className="screen__sublede">
+        When you do not. Name a company and SEC says what it has filed;
+        Index downloads and indexes the one you choose.
+      </p>
 
       <form className="screen__card" onSubmit={submit}>
         <label className="screen__field">

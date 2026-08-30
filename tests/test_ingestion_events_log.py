@@ -53,7 +53,9 @@ class TestRecording:
             session_factory=_factory(db),
         )
 
-        row = (await db.execute(_select(IngestionEvent))).scalars().one()
+        row = (
+            await db.execute(_for_reference(IngestionEvent, "apple-10k.pdf"))
+        ).scalars().one()
 
         assert row.source == "upload"
         assert row.reference == "apple-10k.pdf"
@@ -77,7 +79,9 @@ class TestRecording:
             session_factory=_factory(db),
         )
 
-        row = (await db.execute(_select(IngestionEvent))).scalars().one()
+        row = (
+            await db.execute(_for_reference(IngestionEvent, "notes.xlsx"))
+        ).scalars().one()
 
         assert row.outcome == "unreadable"
         assert "PDF" in row.detail
@@ -103,10 +107,16 @@ class TestRecording:
         )
 
 
-def _select(model):
+def _for_reference(model, reference: str):
+    """
+    The row this test wrote, not every row in the table.
+
+    These assertions used to read the whole table, which passed only while
+    it was empty -- the log is real now and outlives the suite by design.
+    """
     from sqlalchemy import select
 
-    return select(model)
+    return select(model).where(model.reference == reference)
 
 
 def _factory(session):

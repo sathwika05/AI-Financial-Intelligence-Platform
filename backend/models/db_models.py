@@ -1074,7 +1074,14 @@ class IngestionEvent(Base):
     detail = Column(Text)
 
     # Set only when a document was actually stored.
-    document_id = Column(Integer, ForeignKey("documents.id"))
+    #
+    # No foreign key, deliberately. An event records that a file was
+    # attempted, which is a fact about the past; a document being deleted
+    # does not unmake it. The key also made the log collateral damage of
+    # snapshot restore, which truncates documents with CASCADE -- the log
+    # vanished exactly when the corpus was reset, which is when someone
+    # would want to read it.
+    document_id = Column(Integer)
     chunks = Column(Integer)
 
     created_at = Column(DateTime, server_default=func.now(), index=True)

@@ -530,14 +530,55 @@ async def index_filing(
 RESEED_CONFIRMATION = "replace the corpus"
 
 
+# How many filings one run may fetch.
+#
+# Measured on Apple's 2024 10-K: 1.5MB downloaded, 1.6s in Docling, 1,458
+# chunks, roughly 120,000 tokens to embed -- about a fifth of a cent. So
+# this is not a limit about money.
+#
+# It is about volume. The corpus is 327 chunks. Twenty-five filings adds
+# something like thirty-five thousand, which is already a different
+# corpus; the maxima this replaced allowed eight hundred filings, or
+# around 1.2 million chunks, from one press of a button. Every benchmark
+# in this repository was measured against the 327, and a change of that
+# size should be a decision rather than a side effect.
+MAX_FILINGS_PER_RUN = 25
+
+
 class CollectRequest(BaseModel):
-    tickers: list[str] = Field(min_length=1, max_length=40)
+    tickers: list[str] = Field(min_length=1, max_length=MAX_FILINGS_PER_RUN)
     forms: list[str] = Field(default=["10-K", "10-Q"], max_length=8)
-    limit: int = Field(default=3, ge=1, le=20)
+    limit: int = Field(default=2, ge=1, le=MAX_FILINGS_PER_RUN)
 
 
 class ReseedRequest(BaseModel):
     confirm: str = Field(default="", max_length=64)
+
+
+def _require_sane_run_size(tickers: list[str], *, limit: int) -> int:
+    """
+    Refuse a run that would fetch more than the corpus can absorb quietly.
+
+    Capped on the product rather than either field, because five companies
+    at five filings each is the same work as twenty-five at one, and a
+    limit that only looked at one of them would let the other carry the
+    whole run.
+    """
+    total = len(tickers) * limit
+
+    if total > MAX_FILINGS_PER_RUN:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"That run would fetch {total} filings; the most in one go "
+                f"is {MAX_FILINGS_PER_RUN}. A 10-K is around 1,500 chunks, "
+                f"so {total} of them would add roughly "
+                f"{total * 1500:,} chunks to a corpus that currently holds "
+                "a few hundred. Fewer companies, or fewer filings each."
+            ),
+        )
+
+    return total
 
 
 def _require_confirmation(confirm: str) -> None:
@@ -684,6 +725,8 @@ async def collect_filings_job(
     known = await _known_tickers(session)
     tickers = [_require_known_ticker(t, known) for t in request.tickers]
 
+    total = _require_sane_run_size(tickers, limit=request.limit)
+
     headers = _edgar_headers(settings.SEC_USER_AGENT)
     forms = tuple(f.strip().upper() for f in request.forms if f.strip())
 
@@ -708,10 +751,11 @@ async def collect_filings_job(
         "tickers": tickers,
         "forms": list(forms),
         "message": (
-            f"Collecting up to {request.limit} filing(s) for "
+            f"Collecting up to {total} filing(s) across "
             f"{len(tickers)} compan{'y' if len(tickers) == 1 else 'ies'}. "
-            "This runs in the background; refresh the document list to "
-            "watch them arrive."
+            "A 10-K is around 1,500 chunks and takes a few seconds to "
+            "parse plus an embedding round, so this runs in the "
+            "background — refresh the document list to watch them arrive."
         ),
     }
 

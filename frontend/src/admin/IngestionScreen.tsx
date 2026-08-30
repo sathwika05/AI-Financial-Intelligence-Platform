@@ -703,6 +703,10 @@ function IndexButton({ filing }: { filing: EdgarFiling }) {
  * Additive and repeatable — a filing already held is skipped, so running
  * it twice costs nothing but the lookups.
  */
+// Matches MAX_FILINGS_PER_RUN on the server. Shown here so the size of a
+// run is visible before it is started, rather than arriving as a refusal.
+const MAX_FILINGS_PER_RUN = 25;
+
 function CollectPanel() {
   const companies = useCompanies();
   const [tickers, setTickers] = useState<string[]>([]);
@@ -744,6 +748,9 @@ function CollectPanel() {
       setBusy(false);
     }
   }
+
+  const planned = tickers.length * (Number(limit) || 0);
+  const oversized = planned > MAX_FILINGS_PER_RUN;
 
   return (
     <section className="screen__pane">
@@ -797,7 +804,7 @@ function CollectPanel() {
             className="screen__input"
             type="number"
             min={1}
-            max={20}
+            max={MAX_FILINGS_PER_RUN}
             value={limit}
             onChange={(event) => setLimit(event.target.value)}
           />
@@ -811,6 +818,16 @@ function CollectPanel() {
           </span>
         </label>
 
+        {planned > 0 && (
+          <p className={oversized ? "screen__error" : "screen__hint"}>
+            {oversized
+              ? `${planned} filings — more than the ${MAX_FILINGS_PER_RUN} allowed in one run. Choose fewer.`
+              : `${planned} filing${planned === 1 ? "" : "s"}, roughly ${(
+                  planned * 1500
+                ).toLocaleString()} chunks.`}
+          </p>
+        )}
+
         {error && (
           <p className="screen__error" role="alert">
             {error}
@@ -823,7 +840,11 @@ function CollectPanel() {
           </p>
         )}
 
-        <button type="submit" className="screen__submit" disabled={busy}>
+        <button
+          type="submit"
+          className="screen__submit"
+          disabled={busy || oversized || planned === 0}
+        >
           <Download size={15} />
           {busy ? "Starting…" : "Collect and index"}
         </button>

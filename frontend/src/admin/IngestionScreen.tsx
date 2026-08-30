@@ -381,7 +381,9 @@ function DocumentsPanel() {
             <tbody>
               {documents.map((document) => (
                 <tr key={document.id}>
-                  <td className="screen__slug">{document.id}</td>
+                  <td>
+                    <span className="screen__slug">{document.id}</span>
+                  </td>
                   <td>{document.title ?? "—"}</td>
                   <td>{document.doc_type ?? "—"}</td>
                   <td>{document.source ?? "—"}</td>

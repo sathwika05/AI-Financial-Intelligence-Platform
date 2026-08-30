@@ -345,6 +345,25 @@ function DocumentsPanel() {
     void load();
   }, [load]);
 
+  /**
+   * Reload, and collapse an expanded list back to one page.
+   *
+   * Refresh is for seeing what changed, and what changed is at the top.
+   * Reloading two hundred rows to look at the first few is slower and
+   * leaves the reader where they were rather than where they are looking.
+   *
+   * Setting the limit is enough to reload when the list is expanded --
+   * load() depends on it -- but not when it is already 25, because the
+   * value has not changed. Hence the branch.
+   */
+  function refresh() {
+    if (limit !== PAGE) {
+      setLimit(PAGE);
+    } else {
+      void load();
+    }
+  }
+
   const shown = documents?.length ?? 0;
   const more = total > shown;
 
@@ -365,7 +384,7 @@ function DocumentsPanel() {
         <button
           type="button"
           className="screen__btn"
-          onClick={() => void load()}
+          onClick={() => refresh()}
           disabled={busy}
         >
           <RefreshCw size={14} />

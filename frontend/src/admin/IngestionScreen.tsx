@@ -1050,7 +1050,7 @@ function SchedulerPanel() {
   return (
     <section className="screen__pane">
       <div className="screen__pane-head">
-        <h2 className="screen__name">S3 &amp; SQS</h2>
+        <h2 className="screen__name">Scheduled indexing</h2>
         <button
           type="button"
           className="screen__btn"

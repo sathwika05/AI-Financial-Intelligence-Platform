@@ -84,8 +84,6 @@ export function IngestionScreen() {
 
       <DocumentsPanel />
 
-      <EventsPanel />
-
       {/* Repair and replace, side by side. One re-runs indexing over
           documents already stored; the other throws them away. Reading
           them together is the point — the cheap fix should be the one you
@@ -1022,48 +1020,6 @@ function ReseedPanel() {
  * configuration is missing is the useful part.
  */
 function SchedulerPanel() {
-  return (
-    <section className="screen__pane">
-      <h2 className="screen__name">Scheduled indexing</h2>
-      <p className="screen__sublede">
-        The same filings, collected on a schedule rather than by hand —
-        on a deployment that has a bucket.
-      </p>
-
-    <aside className="screen__aside">
-      <Info size={15} className="screen__aside-icon" aria-hidden="true" />
-      <div>
-        <p className="screen__aside-title">
-          The scheduled collector takes a different route.
-        </p>
-        <p className="screen__aside-body">
-          It writes each filing to the S3 raw bucket and lets the bucket
-          notification hand it to the ingestion worker, which keeps the
-          original file in object storage — worth having if extraction
-          ever improves and a document is worth re-reading. It needs
-          RAW_BUCKET and INGESTION_QUEUE_URL, so it does not run here.
-          Either route produces the same row, so indexing a filing now
-          does not stop the collector recognising it later.
-        </p>
-      </div>
-    </aside>
-    </section>
-  );
-}
-
-/**
- * What happened to each file that was attempted.
- *
- * The document list can only show what was stored. This shows attempts,
- * so the ones that stored nothing appear too — a duplicate, an unreadable
- * file, a filing with no text in it, an embedding call that failed. Those
- * are the rows worth having: a success is already visible as a document.
- *
- * It is also where the S3 route will show itself. A file arriving through
- * the bucket is recorded here exactly as an upload is, so the same table
- * covers both without knowing which is which.
- */
-function EventsPanel() {
   const [events, setEvents] = useState<IngestionEvent[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1094,7 +1050,7 @@ function EventsPanel() {
   return (
     <section className="screen__pane">
       <div className="screen__pane-head">
-        <h2 className="screen__name">S3 file processing</h2>
+        <h2 className="screen__name">Scheduled indexing</h2>
         <button
           type="button"
           className="screen__btn"
@@ -1105,14 +1061,28 @@ function EventsPanel() {
           {busy ? "Loading…" : "Refresh"}
         </button>
       </div>
-
       <p className="screen__sublede">
-        Each file that arrived through the raw bucket, when the worker
-        handled it, and whether it was stored. The bucket notification
-        fires as the object lands, so this is arrival give or take the
-        seconds the parse took. Uploads and EDGAR lookups are not listed
-        here — they are visible as documents.
+        The same filings, collected on a schedule rather than by hand —
+        on a deployment that has a bucket.
       </p>
+
+    <aside className="screen__aside">
+      <Info size={15} className="screen__aside-icon" aria-hidden="true" />
+      <div>
+        <p className="screen__aside-title">
+          The scheduled collector takes a different route.
+        </p>
+        <p className="screen__aside-body">
+          It writes each filing to the S3 raw bucket and lets the bucket
+          notification hand it to the ingestion worker, which keeps the
+          original file in object storage — worth having if extraction
+          ever improves and a document is worth re-reading. It needs
+          RAW_BUCKET and INGESTION_QUEUE_URL, so it does not run here.
+          Either route produces the same row, so indexing a filing now
+          does not stop the collector recognising it later.
+        </p>
+      </div>
+    </aside>
 
       {error && (
         <p className="screen__error" role="alert">
@@ -1122,7 +1092,7 @@ function EventsPanel() {
 
       {events && events.length === 0 && (
         <p className="screen__note">
-          No files have come through the bucket. This deployment has no
+          Nothing has come through the bucket. This deployment has no
           RAW_BUCKET or INGESTION_QUEUE_URL, so nothing is listening — on
           one that does, every object lands here whether it worked or not.
         </p>
@@ -1140,9 +1110,8 @@ function EventsPanel() {
             </thead>
             <tbody>
               {events.map((event) => {
-                // Stored or not. The specific reason still shows under the
-                // name, but the column answers the only question the
-                // table is asked.
+                // Stored or not. The specific reason still reads under the
+                // name; the column answers the only question asked of it.
                 const stored = event.outcome === "indexed";
 
                 return (
@@ -1186,3 +1155,4 @@ function EventsPanel() {
     </section>
   );
 }
+

@@ -327,17 +327,16 @@ function EdgarPanel() {
         <Info size={15} className="screen__aside-icon" aria-hidden="true" />
         <div>
           <p className="screen__aside-title">
-            Index downloads the filing and indexes it here, with no bucket
-            involved.
+            The scheduled collector takes a different route.
           </p>
           <p className="screen__aside-body">
-            The scheduled collector takes the other route: it writes each
-            filing to the S3 raw bucket, and the bucket notification hands
-            it to the ingestion worker. That path needs RAW_BUCKET and
-            INGESTION_QUEUE_URL and leaves the raw document in object
-            storage. Either way the filing becomes the same row, so
-            indexing one here does not stop the collector recognising it
-            later.
+            It writes each filing to the S3 raw bucket and lets the bucket
+            notification hand it to the ingestion worker, which keeps the
+            original file in object storage — worth having if extraction
+            ever improves and a document is worth re-reading. It needs
+            RAW_BUCKET and INGESTION_QUEUE_URL, so it does not run here.
+            Either route produces the same row, so indexing a filing now
+            does not stop the collector recognising it later.
           </p>
         </div>
       </aside>

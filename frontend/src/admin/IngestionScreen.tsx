@@ -101,21 +101,6 @@ export function IngestionScreen() {
         <ReseedPanel />
       </div>
 
-      <aside className="screen__aside">
-        <Info size={15} className="screen__aside-icon" aria-hidden="true" />
-        <div>
-          <p className="screen__aside-title">
-            This starts the work; it does not watch it.
-          </p>
-          <p className="screen__aside-body">
-            Indexing runs as a background task with no job record, so a
-            failure after this returns — a missing document, one that
-            produces no chunks, or the embedding API being down — reaches
-            the server log only. The list above is the check: refresh it
-            and see whether the chunk count moved.
-          </p>
-        </div>
-      </aside>
     </div>
   );
 }
@@ -631,6 +616,26 @@ function ReindexPanel() {
           <Database size={15} />
           {busy ? "Starting…" : "Start indexing"}
         </button>
+
+        {/* Inside the card, not under it. It is a caveat about this
+            control rather than about the screen, and the card is
+            stretched to match its neighbour anyway — the note fills space
+            that was otherwise blank. */}
+        <div className="screen__inline-note">
+          <Info size={14} aria-hidden="true" />
+          <div>
+            <p className="screen__inline-note-title">
+              This starts the work; it does not watch it.
+            </p>
+            <p className="screen__inline-note-body">
+              Indexing runs as a background task with no job record, so a
+              failure after this returns — a missing document, one that
+              produces no chunks, or the embedding API being down — reaches
+              the server log only. The document list is the check: refresh
+              it and see whether the chunk count moved.
+            </p>
+          </div>
+        </div>
       </form>
 
     </section>

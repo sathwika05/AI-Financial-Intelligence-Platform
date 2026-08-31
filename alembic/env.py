@@ -1,3 +1,5 @@
+import os
+
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -26,6 +28,24 @@ target_metadata = Base.metadata
 # ... etc.
 
 
+def _database_url() -> str:
+    """
+    Where to migrate, preferring the environment over alembic.ini.
+
+    alembic.ini carries a developer's URL -- localhost on a forwarded
+    port -- which is wrong everywhere else. The container reaches Postgres
+    by service name and ECS gets an RDS endpoint from Secrets Manager, and
+    both arrive as SYNC_DATABASE_URL, the same variable the application's
+    own synchronous engine uses.
+
+    The file stays as the fallback so `alembic` still works in a terminal
+    with nothing exported.
+    """
+    return os.getenv("SYNC_DATABASE_URL") or config.get_main_option(
+        "sqlalchemy.url"
+    )
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -38,7 +58,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = _database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -57,8 +77,11 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    settings = config.get_section(config.config_ini_section, {})
+    settings["sqlalchemy.url"] = _database_url()
+
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        settings,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

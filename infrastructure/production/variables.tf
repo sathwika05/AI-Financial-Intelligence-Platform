@@ -194,3 +194,62 @@ variable "worker_memory" {
   type    = number
   default = 4096
 }
+
+variable "openai_api_key" {
+  description = <<-EOT
+    Embeddings only. Chat models take their key from the llm_providers
+    table, encrypted, changeable from the admin screen -- but embeddings
+    cannot work that way: the client is built when the module loads,
+    before there is a database to ask.
+
+    Fixed to one provider on purpose. Vectors from different embedding
+    models are not comparable, so changing this invalidates every chunk
+    already stored. Without it nothing indexes and no question is
+    answered.
+  EOT
+
+  type      = string
+  sensitive = true
+}
+
+variable "jwt_secret" {
+  description = <<-EOT
+    Signs session tokens. Without it the API starts and every login
+    fails, which reads as a broken deployment rather than a missing
+    setting.
+
+    Any long random string: `openssl rand -hex 32`. Changing it signs out
+    everyone, which is the correct behaviour and worth knowing before you
+    rotate it.
+  EOT
+
+  type      = string
+  sensitive = true
+}
+
+variable "alpha_vantage_api_key" {
+  description = <<-EOT
+    News for the seeding script, which the Rebuild the corpus button
+    runs. Nothing else in the running application uses it.
+
+    Empty is survivable: only that button fails. It is here because that
+    button truncates four tables before it fetches, so discovering the
+    key is missing afterwards is an expensive way to find out.
+  EOT
+
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "finnhub_api_key" {
+  description = <<-EOT
+    The seeding script's second news source, read straight from the
+    environment rather than through config.py. Same reasoning as
+    alpha_vantage_api_key.
+  EOT
+
+  type      = string
+  sensitive = true
+  default   = ""
+}

@@ -17,3 +17,14 @@ use_nat_gateway = false
 # nothing, which is why it is plain environment on the task rather than a
 # secret. Leave empty to turn the EDGAR collector off.
 sec_user_agent = "Your Name you@example.com"
+
+# Embeddings. Without it nothing indexes and no question is answered.
+openai_api_key = "sk-..."
+
+# Signs session tokens. Any long random string: openssl rand -hex 32
+jwt_secret = "change-me-to-something-random"
+
+# Only the Rebuild the corpus button uses these. Leave empty to skip it.
+alpha_vantage_api_key = ""
+finnhub_api_key       = ""
+

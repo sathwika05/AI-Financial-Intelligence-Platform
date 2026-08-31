@@ -53,7 +53,7 @@ from backend.evaluation.schemas import (
     QuestionEvaluationResult,
 )
 from backend.observability.logging import log_span
-from backend.retrieval.sql_executor import SCHEMA
+from backend.retrieval.sql_executor import get_schema
 from backend.state.state_factory import (
     build_initial_financial_state,
 )
@@ -331,7 +331,7 @@ class BenchmarkRunner:
                         expected_sql=(
                             question.expected_sql
                         ),
-                        database_schema=SCHEMA,
+                        database_schema=get_schema(),
                         sql_order_requirement=(
                             question.sql_order_requirement
                         ),

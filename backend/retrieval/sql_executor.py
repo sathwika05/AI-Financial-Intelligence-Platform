@@ -38,13 +38,38 @@ ALLOWED_TABLES = ["companies", "financial_metrics", "documents"]
 
 logger = logging.getLogger(__name__)
 
-db = SQLDatabase.from_uri(
-    settings.SYNC_DATABASE_URL,
-    include_tables=ALLOWED_TABLES,
-    sample_rows_in_table_info=2,
-)
+# Built on first use, not at import.
+#
+# from_uri connects and introspects immediately, and include_tables makes
+# it assert the tables are there. At module scope that made importing this
+# file -- which main.py does by way of sql_routes -> sql_graph ->
+# sql_node -- fail against any database that did not already have them:
+#
+#     ValueError: include_tables {'financial_metrics', 'documents',
+#     'companies'} not found in database
+#
+# main.py creates those tables in the app's lifespan, long after imports
+# resolve, so a newly provisioned database could never start the API. The
+# lru_cache keeps the old property that mattered: one introspection for
+# the life of the process, not one per prompt.
+@lru_cache(maxsize=1)
+def _database() -> SQLDatabase:
+    return SQLDatabase.from_uri(
+        settings.SYNC_DATABASE_URL,
+        include_tables=ALLOWED_TABLES,
+        sample_rows_in_table_info=2,
+    )
 
-SCHEMA = db.get_table_info()
+
+@lru_cache(maxsize=1)
+def get_schema() -> str:
+    """
+    The schema text the SQL generator is prompted with.
+
+    A function rather than the constant it used to be, for the reason
+    above. Callers that held SCHEMA at import time now ask at call time.
+    """
+    return _database().get_table_info()
 
 # SQLDatabase.run() renders rows as a Python repr string, which collapses
 # a whole result set into one opaque blob. Downstream scoring needs real
@@ -206,14 +231,14 @@ def get_database_schema(table_name: str = None)-> str:
     """Get database schema information for SQL query generation."""
 
     if table_name:
-        tables = db.get_usable_table_names()
+        tables = _database().get_usable_table_names()
 
         if table_name.lower() in [t.lower() for t in tables]:
-            return db.get_table_info([table_name])
+            return _database().get_table_info([table_name])
 
         return f"Error: '{table_name}' not found. Available tables: {', '.join(tables)}"
 
-    return SCHEMA
+    return get_schema()
 
 
 def build_generation_prompt(
@@ -226,7 +251,7 @@ def build_generation_prompt(
     test. A rule that lives only inside a network call is a rule that
     gets deleted by accident.
     """
-    schema_to_use = schema_info if schema_info else SCHEMA
+    schema_to_use = schema_info if schema_info else get_schema()
 
     return f"""
 You are an expert PostgreSQL query generator.
@@ -588,7 +613,7 @@ async def fix_sql_error(original_query: str, error_message: str, question: str, 
                             {error_message}
 
                     DATABASE SCHEMA:
-                            {SCHEMA}
+                            {get_schema()}
 
                     Return only corrected SQL.
                     """.strip()

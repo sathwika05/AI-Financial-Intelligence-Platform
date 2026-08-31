@@ -47,4 +47,14 @@ RUN uv run docling-tools models download layout tableformer rapidocr
 
 COPY . .
 
-CMD ["uv", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Migrate, then serve.
+#
+# The && is deliberate: a failed migration must not be followed by a server
+# answering requests against a schema it does not match. Only the API does
+# this -- the worker runs this same image with its own command, and two
+# tasks racing on one revision is how a migration half-applies.
+#
+# Not `alembic upgrade head` directly: this schema has two writers, and the
+# right move depends on which one built the database. backend.startup_migration
+# explains it.
+CMD ["sh", "-c", "uv run python -m backend.startup_migration && uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000"]

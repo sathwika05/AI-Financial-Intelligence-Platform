@@ -10,7 +10,7 @@ from langgraph.graph import END, add_messages
 
 from backend.llm.llm_context import get_llm_client
 from backend.llm.llm_tiers import LLMTier
-from backend.retrieval.sql_executor import SCHEMA, sql_tools
+from backend.retrieval.sql_executor import sql_tools
 
 
 logger = logging.getLogger(__name__)

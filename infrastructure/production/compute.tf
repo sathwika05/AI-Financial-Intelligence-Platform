@@ -25,9 +25,20 @@ resource "aws_secretsmanager_secret" "app" {
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
 
+  // One secret holding everything the tasks need to be told privately.
+  // jsonencode rather than a hand-written string, so a value containing a
+  // quote or a backslash -- which API keys do -- cannot break the JSON.
   secret_string = jsonencode({
     DATABASE_URL      = local.database_url
     SYNC_DATABASE_URL = local.sync_database_url
+
+    OPENAI_API_KEY = var.openai_api_key
+    JWT_SECRET     = var.jwt_secret
+
+    // Empty is allowed: these are only read by the seeding script, and a
+    // deployment that never presses Rebuild does not need them.
+    ALPHA_VANTAGE_API_KEY = var.alpha_vantage_api_key
+    FINNHUB_API_KEY       = var.finnhub_api_key
   })
 }
 
@@ -257,6 +268,26 @@ locals {
     {
       name      = "SYNC_DATABASE_URL"
       valueFrom = "${aws_secretsmanager_secret.app.arn}:SYNC_DATABASE_URL::"
+    },
+    // Credentials, so they arrive the same way the database URLs do --
+    // pulled from Secrets Manager at task start rather than sitting in
+    // the task definition, where anyone who can describe the task can
+    // read them.
+    {
+      name      = "OPENAI_API_KEY"
+      valueFrom = "${aws_secretsmanager_secret.app.arn}:OPENAI_API_KEY::"
+    },
+    {
+      name      = "JWT_SECRET"
+      valueFrom = "${aws_secretsmanager_secret.app.arn}:JWT_SECRET::"
+    },
+    {
+      name      = "ALPHA_VANTAGE_API_KEY"
+      valueFrom = "${aws_secretsmanager_secret.app.arn}:ALPHA_VANTAGE_API_KEY::"
+    },
+    {
+      name      = "FINNHUB_API_KEY"
+      valueFrom = "${aws_secretsmanager_secret.app.arn}:FINNHUB_API_KEY::"
     },
   ]
 }

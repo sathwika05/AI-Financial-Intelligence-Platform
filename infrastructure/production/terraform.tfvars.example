@@ -28,3 +28,13 @@ jwt_secret = "change-me-to-something-random"
 alpha_vantage_api_key = ""
 finnhub_api_key       = ""
 
+# Tracing. Without the key the deployment runs blind — the admin panel
+# still links to LangSmith, but nothing reports to it.
+langsmith_api_key = "lsv2_pt_..."
+
+# On by default. Set false to stop sending traces (LangSmith bills per
+# run); if you do, langsmith_api_key may be left empty.
+langsmith_tracing = true
+
+# Must name the same project as langsmith_project_url above.
+langchain_project = "ai-financial-intelligence-platform"

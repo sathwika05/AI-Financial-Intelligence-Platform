@@ -253,3 +253,45 @@ variable "finnhub_api_key" {
   sensitive = true
   default   = ""
 }
+
+variable "langsmith_api_key" {
+  description = <<-EOT
+    Traces every graph run to LangSmith. Without it the deployment runs
+    blind: LANGSMITH_PROJECT_URL still puts a link in the admin panel,
+    but it opens a project nothing reports to.
+
+    Required whenever langsmith_tracing is true, and checked at plan
+    time rather than left to the task. setup_langsmith() runs at import
+    in main.py and raises when tracing is on with no key, so the wrong
+    combination does not degrade tracing -- it crash-loops the service.
+  EOT
+
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "langsmith_tracing" {
+  description = <<-EOT
+    Whether to send traces at all. On by default: an unobservable
+    production deployment is the thing this project is least able to
+    afford, and turning it off is the decision that should be typed out.
+
+    Traces are billed per run by LangSmith, so this is the lever to pull
+    if that matters more than the visibility.
+  EOT
+
+  type    = bool
+  default = true
+}
+
+variable "langchain_project" {
+  description = <<-EOT
+    Which LangSmith project the traces land in. Must name the same
+    project as langsmith_project_url, or the admin panel links to one
+    place while the runs arrive in another.
+  EOT
+
+  type    = string
+  default = "ai-financial-intelligence-platform"
+}

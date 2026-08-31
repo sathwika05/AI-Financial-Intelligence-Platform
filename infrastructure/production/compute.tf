@@ -39,7 +39,20 @@ resource "aws_secretsmanager_secret_version" "app" {
     // deployment that never presses Rebuild does not need them.
     ALPHA_VANTAGE_API_KEY = var.alpha_vantage_api_key
     FINNHUB_API_KEY       = var.finnhub_api_key
+
+    LANGSMITH_API_KEY = var.langsmith_api_key
   })
+
+  // Tracing on with no key is not a degraded deployment, it is a dead
+  // one: setup_langsmith() runs at import in main.py and raises, so ECS
+  // gets a task that cannot start and retries forever. Caught here, at
+  // plan time, where it costs nothing.
+  lifecycle {
+    precondition {
+      condition     = !var.langsmith_tracing || var.langsmith_api_key != ""
+      error_message = "langsmith_tracing is true, so langsmith_api_key must be set. Set the key, or set langsmith_tracing = false."
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +269,11 @@ locals {
       value = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#logsV2:log-groups/log-group/${replace(aws_cloudwatch_log_group.api.name, "/", "$252F")}"
     },
     { name = "LANGSMITH_PROJECT_URL", value = var.langsmith_project_url },
+    // Tracing itself. The URL above only says where a person should look;
+    // these two decide whether anything is there to look at, and which
+    // project it lands in.
+    { name = "LANGSMITH_TRACING", value = tostring(var.langsmith_tracing) },
+    { name = "LANGCHAIN_PROJECT", value = var.langchain_project },
   ]
 
   app_secrets = [
@@ -288,6 +306,10 @@ locals {
     {
       name      = "FINNHUB_API_KEY"
       valueFrom = "${aws_secretsmanager_secret.app.arn}:FINNHUB_API_KEY::"
+    },
+    {
+      name      = "LANGSMITH_API_KEY"
+      valueFrom = "${aws_secretsmanager_secret.app.arn}:LANGSMITH_API_KEY::"
     },
   ]
 }

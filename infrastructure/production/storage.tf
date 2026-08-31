@@ -90,9 +90,18 @@ resource "aws_sqs_queue" "ingestion" {
 
   // How long a message stays invisible after a worker picks it up. Must
   // exceed the worst-case processing time, or a slow document becomes
-  // visible again and a second worker starts embedding it in parallel.
-  // Chunking plus embedding a large document is the thing to size against.
-  visibility_timeout_seconds = 300
+  // visible again and a second worker starts on it in parallel.
+  //
+  // 300 was sized against chunking and embedding, before Docling and OCR
+  // were in the path. A scanned page measures about 7.4s, so 300 covered
+  // roughly forty pages -- and a scanned 10-K is far more than forty.
+  // 1800 covers around 240.
+  //
+  // The cost of raising it is that a message whose worker genuinely died
+  // waits half an hour before anyone retries it. That is the better
+  // trade: a document processed twice at once is worse than one
+  // processed late.
+  visibility_timeout_seconds = 1800
 
   // Long polling: wait for a message rather than returning empty
   // immediately. Fewer empty receives, and cheaper.

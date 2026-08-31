@@ -109,15 +109,31 @@ variable "container_image" {
 }
 
 variable "api_cpu" {
-  description = "Fargate CPU units for the API task. 256 = 0.25 vCPU."
-  type        = number
-  default     = 512
+  description = <<-EOT
+    Fargate CPU units for the API task. 256 = 0.25 vCPU.
+
+    2048 because parsing a document is the heaviest thing this task does
+    and it is entirely CPU-bound: Docling runs a layout model over every
+    rendered page. Measured locally, one 10-K used 6.6 cores. Half a vCPU
+    would not be slow, it would be unusable.
+  EOT
+
+  type    = number
+  default = 2048
 }
 
 variable "api_memory" {
-  description = "Fargate memory (MiB). Must be a valid pairing with cpu."
-  type        = number
-  default     = 1024
+  description = <<-EOT
+    Fargate memory (MiB). Must be a valid pairing with cpu; 2048 CPU
+    permits 4096 to 16384.
+
+    The same parse held 2.4GiB resident. At 1024 the task would be killed
+    rather than merely slowed, and an OOM kill looks like a crash rather
+    than a resource limit.
+  EOT
+
+  type    = number
+  default = 4096
 }
 
 variable "log_retention_days" {

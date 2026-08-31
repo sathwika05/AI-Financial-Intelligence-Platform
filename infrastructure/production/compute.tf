@@ -302,8 +302,12 @@ resource "aws_ecs_task_definition" "worker" {
   family                   = "${local.name_prefix}-worker"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 512
-  memory                   = 1024
+  // The worker parses whatever lands in the bucket, so it needs what the
+  // API needs. Sized to the same numbers rather than left at the default:
+  // one 10-K used 6.6 cores and 2.4GiB, and this is the task that will
+  // meet a scanned filing.
+  cpu    = var.api_cpu
+  memory = var.api_memory
 
   execution_role_arn = aws_iam_role.execution.arn
   task_role_arn      = aws_iam_role.task.arn

@@ -112,14 +112,14 @@ variable "api_cpu" {
   description = <<-EOT
     Fargate CPU units for the API task. 256 = 0.25 vCPU.
 
-    2048 because parsing a document is the heaviest thing this task does
-    and it is entirely CPU-bound: Docling runs a layout model over every
-    rendered page. Measured locally, one 10-K used 6.6 cores. Half a vCPU
-    would not be slow, it would be unusable.
+    The API accepts uploads and queues work; it does not hold a parse
+    open. Parsing still happens on this task, in a background task, so
+    this is not the 512 it was before Docling -- but it is not the 2048
+    the worker needs either, because nothing here is waiting on it.
   EOT
 
   type    = number
-  default = 2048
+  default = 1024
 }
 
 variable "api_memory" {
@@ -127,13 +127,13 @@ variable "api_memory" {
     Fargate memory (MiB). Must be a valid pairing with cpu; 2048 CPU
     permits 4096 to 16384.
 
-    The same parse held 2.4GiB resident. At 1024 the task would be killed
-    rather than merely slowed, and an OOM kill looks like a crash rather
-    than a resource limit.
+    A parse held 2.4GiB resident, and background work on this task can
+    still hit that. 2048 would be killed; 3072 leaves room without paying
+    for the worker's headroom twice.
   EOT
 
   type    = number
-  default = 4096
+  default = 3072
 }
 
 variable "log_retention_days" {
@@ -164,4 +164,33 @@ variable "langsmith_project_url" {
 
   type    = string
   default = ""
+}
+
+variable "worker_cpu" {
+  description = <<-EOT
+    Fargate CPU units for the ingestion worker.
+
+    This is the task that meets a scanned filing: it parses whatever
+    lands in the bucket, and parsing is entirely CPU-bound because
+    Docling runs a layout model over every rendered page. One 10-K
+    measured 6.6 cores locally. Nothing is waiting on a connection here,
+    so slow is survivable -- but too small is not, and an OOM kill reads
+    as a crash rather than a limit.
+  EOT
+
+  type    = number
+  default = 2048
+}
+
+variable "worker_memory" {
+  description = <<-EOT
+    Fargate memory (MiB) for the worker. 2048 CPU permits 4096 to 16384.
+
+    A parse held 2.4GiB resident, and the worker has no other work to
+    interleave, so this is sized to that with room rather than to an
+    average.
+  EOT
+
+  type    = number
+  default = 4096
 }

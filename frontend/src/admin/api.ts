@@ -140,11 +140,15 @@ export interface StoredDocument {
   created_at: string | null;
 }
 
-/** What the EDGAR index route returns: the document exists by then. */
-export interface UploadAccepted {
-  document_id: number;
-  title: string | null;
-  characters: number;
+/**
+ * What the EDGAR index route returns.
+ *
+ * No document id: the download and parse happen after the response, so
+ * nothing exists yet. The processing list carries the outcome.
+ */
+export interface FilingQueued {
+  accession: string;
+  form: string;
   status: string;
   message: string;
 }
@@ -245,8 +249,8 @@ export interface IndexFilingRequest {
  */
 export function indexFiling(
   filing: IndexFilingRequest,
-): Promise<UploadAccepted> {
-  return send<UploadAccepted>("/api/ingestion/edgar/documents", {
+): Promise<FilingQueued> {
+  return send<FilingQueued>("/api/ingestion/edgar/documents", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(filing),

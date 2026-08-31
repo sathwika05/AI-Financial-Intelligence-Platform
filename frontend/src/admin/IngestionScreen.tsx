@@ -662,8 +662,9 @@ function ReindexPanel() {
  * The identifiers go up, never the URL — the server rebuilds it and
  * checks the host, so this cannot be pointed anywhere else.
  *
- * A 409 means the corpus already holds this filing. That is the answer,
- * not an error, so it reads as one.
+ * Says "Queued" rather than reporting an outcome, because the download
+ * and parse happen after the response. What became of it is in the
+ * processing list.
  */
 function IndexButton({ filing }: { filing: EdgarFiling }) {
   const [busy, setBusy] = useState(false);
@@ -675,7 +676,7 @@ function IndexButton({ filing }: { filing: EdgarFiling }) {
     setError(null);
 
     try {
-      const accepted = await indexFiling({
+      await indexFiling({
         cik: filing.cik,
         accession: filing.accession,
         form: filing.form,
@@ -684,18 +685,17 @@ function IndexButton({ filing }: { filing: EdgarFiling }) {
         ticker: filing.ticker,
       });
 
-      setDone(`Document ${accepted.document_id}`);
+      setDone("Queued");
     } catch (caught) {
-      const message =
+      // A 409 for a filing already held used to land here. It cannot any
+      // more: the duplicate is discovered after the response and recorded
+      // as one, so the only errors left are refusals the request itself
+      // makes — an unknown company, a missing User-Agent.
+      setError(
         caught instanceof AdminApiError
           ? caught.message
-          : "Could not index that filing.";
-
-      if (caught instanceof AdminApiError && caught.status === 409) {
-        setDone("Already indexed");
-      } else {
-        setError(message);
-      }
+          : "Could not queue that filing.",
+      );
     } finally {
       setBusy(false);
     }

@@ -140,10 +140,25 @@ export interface StoredDocument {
   created_at: string | null;
 }
 
+/** What the EDGAR index route returns: the document exists by then. */
 export interface UploadAccepted {
   document_id: number;
   title: string | null;
   characters: number;
+  status: string;
+  message: string;
+}
+
+/**
+ * What the upload route returns.
+ *
+ * No document id and no character count: parsing happens after the
+ * response, so nothing has been stored yet. How it went is in the
+ * processing list.
+ */
+export interface UploadQueued {
+  filename: string;
+  bytes: number;
   status: string;
   message: string;
 }
@@ -171,7 +186,7 @@ export function listDocuments(
 export function uploadDocument(
   file: File,
   ticker: string,
-): Promise<UploadAccepted> {
+): Promise<UploadQueued> {
   const form = new FormData();
 
   form.append("file", file);
@@ -183,7 +198,10 @@ export function uploadDocument(
   // No Content-Type header: the browser sets it, and it has to include
   // the multipart boundary it generated. Setting it by hand produces a
   // body the server cannot parse.
-  return send("/api/ingestion/documents", { method: "POST", body: form });
+  return send<UploadQueued>("/api/ingestion/documents", {
+    method: "POST",
+    body: form,
+  });
 }
 
 /* ── External observability links ───────────────────────────

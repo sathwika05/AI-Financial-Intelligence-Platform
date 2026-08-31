@@ -124,11 +124,7 @@ function UploadPanel() {
     try {
       const accepted = await uploadDocument(file, ticker);
 
-      setResult(
-        `Stored as document ${accepted.document_id} — ` +
-          `${accepted.characters.toLocaleString()} characters extracted. ` +
-          `${accepted.message}`,
-      );
+      setResult(`${accepted.filename} accepted. ${accepted.message}`);
       setFile(null);
     } catch (caught) {
       setError(
@@ -163,8 +159,9 @@ function UploadPanel() {
             }}
           />
           <span className="screen__hint">
-            PDF or HTML. A scanned PDF is read by optical character
-            recognition (OCR), which takes a few seconds a page.
+            PDF or HTML. Parsing happens after the upload is accepted,
+            so a large PDF takes minutes — the processing list below says
+            how it went.
           </span>
         </label>
 

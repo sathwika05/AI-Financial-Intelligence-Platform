@@ -134,20 +134,14 @@ async def _preview(
     ]
 
 
-async def _prepare_upload(
-    *,
-    filename: str,
-    body: bytes,
-    ticker: str | None,
-) -> dict:
+def _reject_unusable_upload(*, filename: str, body: bytes) -> str:
     """
-    Turn an uploaded file into the document row the corpus stores.
+    Refuse what can be refused without opening the file.
 
-    Parsed through the same function the queue worker uses, so a file
-    uploaded in the browser becomes exactly the document it would have
-    become arriving through S3. A second implementation would drift, and
-    the drift would show as a document that answers differently depending
-    on how it was loaded.
+    Everything here is a filename or a byte count, so it costs nothing and
+    stays inside the request: making someone wait for a refusal that is
+    already certain is the worst of both designs. Anything that needs the
+    file read happens after the response.
     """
     name = (filename or "").strip()
 
@@ -172,71 +166,121 @@ async def _prepare_upload(
             ),
         )
 
+    return name
+
+
+async def _ingest_uploaded_file(
+    *,
+    filename: str,
+    body: bytes,
+    ticker: str | None,
+    record=None,
+    persist=None,
+    index=None,
+    mark_ready=None,
+) -> None:
+    """
+    Parse, store and index one uploaded file. Runs after the response.
+
+    Nothing raises out of here. There is nobody left to raise to -- the
+    request answered minutes ago -- so every ending is written to the
+    processing log instead. A file that fails silently is worse than one
+    that fails loudly, and this is the only remaining way to be loud.
+
+    The collaborators are injectable so the sequence can be tested without
+    a database or an embedding call; the defaults are the real ones.
+    """
+    from backend.ingestion.events_log import record_attempt
+    from backend.ingestion.indexing_service import embed_document
+    from backend.ingestion.queue_worker import _mark_ready, _persist_document
+
+    record = record or record_attempt
+    persist = persist or _persist_document
+    index = index or embed_document
+    mark_ready = mark_ready or _mark_ready
+
     cleaned = (ticker or "").strip().upper() or None
 
     try:
         document = await document_from_bytes(
-            filename=name,
+            filename=filename,
             body=body,
             provenance={
                 "source": "upload",
                 "ticker": cleaned,
-                "title": name.rsplit("/", 1)[-1].rsplit(".", 1)[0],
+                "title": filename.rsplit("/", 1)[-1].rsplit(".", 1)[0],
             },
         )
     except SkippedObject as exc:
-        # A wrong file is a bad request with a reason, not a stack trace.
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await record(
+            source="upload",
+            reference=filename,
+            outcome="unreadable",
+            detail=str(exc),
+        )
+        return
+    except Exception as exc:
+        logger.exception("[INGEST] Parsing %s failed", filename)
+        await record(
+            source="upload",
+            reference=filename,
+            outcome="failed",
+            detail=str(exc),
+        )
+        return
 
     if not (document.get("content") or "").strip():
-        raise HTTPException(
-            status_code=400,
+        await record(
+            source="upload",
+            reference=filename,
+            outcome="empty",
             detail=(
-                f"{name} has no text to index. A scanned document is read "
-                "by optical character recognition, but a blank one has "
-                "nothing to read."
+                f"{filename} was read, but there was no text in it. A "
+                "scanned document is handled by optical character "
+                "recognition; a blank one has nothing to recognise."
             ),
         )
-
-    return document
-
-
-@router.get("/edgar/filings")
-async def preview_filings(
-    ticker: str,
-    forms: str = "10-K,10-Q",
-    limit: int = 5,
-    session: AsyncSession = Depends(get_db),
-):
-    """List a company's recent filings. Downloads nothing."""
-    from backend.ingestion.edgar import http_fetch
-
-    ticker = _require_known_ticker(ticker, await _known_tickers(session))
-
-    headers = _edgar_headers(settings.SEC_USER_AGENT)
-
-    wanted = _require_known_forms(forms.split(","))
+        return
 
     try:
-        return {
-            "ticker": ticker.strip().upper(),
-            "filings": await _preview(
-                ticker,
-                forms=wanted,
-                limit=max(1, min(limit, 50)),
-                fetch=http_fetch,
-                headers=headers,
-            ),
-        }
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("[INGEST] EDGAR preview failed for %s", ticker)
+        document_id = await persist(document)
+    except SkippedObject as exc:
+        # Already held. The answer, not an error.
+        await record(
+            source="upload",
+            reference=filename,
+            outcome="duplicate",
+            detail=str(exc),
+        )
+        return
 
-        raise HTTPException(
-            status_code=502,
-            detail=f"EDGAR did not answer: {exc}",
-        ) from exc
+    result = await index(document_id)
+
+    if result.get("success"):
+        await mark_ready(document_id)
+        await record(
+            source="upload",
+            reference=filename,
+            outcome="indexed",
+            document_id=document_id,
+            chunks=result.get("chunks"),
+        )
+    else:
+        # The row stays `processing`, which is what makes it findable
+        # afterwards rather than silently absent.
+        logger.error(
+            "[INGEST] %s stored as %s but failed to index: %s",
+            filename,
+            document_id,
+            result.get("error"),
+        )
+        await record(
+            source="upload",
+            reference=filename,
+            outcome="failed",
+            detail=str(result.get("error")),
+            document_id=document_id,
+        )
 
 
 @router.post("/documents", status_code=202)
@@ -247,94 +291,39 @@ async def upload_document(
     session: AsyncSession = Depends(get_db),
 ):
     """
-    Parse an uploaded filing, store it, and index it.
+    Accept an uploaded filing. Parse and index it afterwards.
 
-    The direct path, with no S3 in it. On a deployment that has the bucket
-    this is still the honest way to check that a particular document can
-    be read at all, because it fails in the response rather than in a log
-    on another machine.
+    The request does only what is cheap and certain: read the bytes, check
+    the name and the size, check the company exists. Parsing is the slow
+    part -- a 10-K measured at nine minutes -- and it happens after the
+    response, because a load balancer closes a connection idle for sixty
+    seconds and would report a failure while the work carried on and the
+    document appeared anyway.
 
-    Indexing runs in the background: embedding a 10-K is many API calls
-    and the browser should not be holding a request open for them.
+    So this cannot tell you how it went. The processing table can: every
+    ending is written there, including the ones that store nothing.
     """
-    from backend.ingestion.queue_worker import _mark_ready, _persist_document
-
-    # Optional, but if given it has to be a company that exists -- a
-    # typo would otherwise store the document with no company at all and
-    # say nothing about it.
+    # Optional, but if given it has to be a company that exists -- a typo
+    # would otherwise store the document with no company at all and say
+    # nothing about it.
     if (ticker or "").strip():
         ticker = _require_known_ticker(ticker, await _known_tickers(session))
 
     body = await file.read()
-    name = file.filename or "(unnamed)"
+    name = _reject_unusable_upload(filename=file.filename or "", body=body)
 
-    try:
-        document = await _prepare_upload(
-            filename=file.filename or "", body=body, ticker=ticker
-        )
-    except HTTPException as exc:
-        # The file could not be read at all. Recorded, because otherwise
-        # it leaves no trace anywhere the operator can see.
-        await record_attempt(
-            source="upload",
-            reference=name,
-            outcome="empty" if "no text" in str(exc.detail) else "unreadable",
-            detail=str(exc.detail),
-        )
-        raise
-
-    try:
-        document_id = await _persist_document(document)
-    except SkippedObject as exc:
-        # Already in the corpus. Not an error -- it is the answer.
-        await record_attempt(
-            source="upload",
-            reference=name,
-            outcome="duplicate",
-            detail=str(exc),
-        )
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    async def index() -> None:
-        from backend.ingestion.indexing_service import embed_document
-
-        result = await embed_document(document_id)
-
-        if result.get("success"):
-            await _mark_ready(document_id)
-            await record_attempt(
-                source="upload",
-                reference=name,
-                outcome="indexed",
-                document_id=document_id,
-                chunks=result.get("chunks"),
-            )
-        else:
-            # The row stays `processing`, which is what makes this
-            # findable afterwards instead of silently absent.
-            logger.error(
-                "[INGEST] Uploaded document %s failed to index: %s",
-                document_id,
-                result.get("error"),
-            )
-            await record_attempt(
-                source="upload",
-                reference=name,
-                outcome="failed",
-                detail=str(result.get("error")),
-                document_id=document_id,
-            )
-
-    background.add_task(index)
+    background.add_task(
+        _ingest_uploaded_file, filename=name, body=body, ticker=ticker
+    )
 
     return {
-        "document_id": document_id,
-        "title": document.get("title"),
-        "characters": len(document["content"]),
+        "filename": name,
+        "bytes": len(body),
         "status": "processing",
         "message": (
-            "Stored. Indexing runs in the background; refresh the list to "
-            "see it become ready."
+            "Accepted. Parsing and indexing run in the background — a "
+            "large PDF takes minutes. Watch the processing list to see "
+            "how it went."
         ),
     }
 

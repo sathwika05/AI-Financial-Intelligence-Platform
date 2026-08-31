@@ -57,57 +57,16 @@ class TestTheRoutesAreGuarded:
         assert not [p for p in paths if p.startswith("/api/ingestion")]
 
 
-class TestUploadingADocument:
-    @pytest.mark.asyncio
-    async def test_a_readable_file_is_accepted(self):
-        from backend.api.ingestion_routes import _prepare_upload
+# The upload behaviour these once covered has moved.
+#
+# _prepare_upload did the parsing inside the request and raised a 400 for
+# anything it could not read. Parsing now happens after the response, so
+# there is no request left to raise into: a file that cannot be read is
+# written to the processing log instead.
+#
+# tests/test_upload_does_not_block.py covers the split -- what still
+# refuses immediately, and what is recorded rather than raised.
 
-        raw = (
-            b"<html><body><h1>Item 1. Business</h1>"
-            b"<p>Apple reported revenue above consensus.</p></body></html>"
-        )
-
-        document = await _prepare_upload(
-            filename="aapl-10k.htm", body=raw, ticker="AAPL"
-        )
-
-        assert "revenue above consensus" in document["content"]
-        assert document["ticker"] == "AAPL"
-        assert document["title"] == "aapl-10k"
-
-    @pytest.mark.asyncio
-    async def test_an_unreadable_file_is_a_bad_request_not_a_crash(self):
-        """
-        Someone will upload the wrong file. That is a 400 with a reason,
-        not a 500 and a stack trace in the log.
-        """
-        from fastapi import HTTPException
-
-        from backend.api.ingestion_routes import _prepare_upload
-
-        with pytest.raises(HTTPException) as caught:
-            await _prepare_upload(
-                filename="notes.pdf", body=b"not a pdf at all", ticker=None
-            )
-
-        assert caught.value.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_an_unsupported_extension_is_refused_before_parsing(self):
-        """
-        Cheaper to refuse by name than to load a layout model and fail.
-        """
-        from fastapi import HTTPException
-
-        from backend.api.ingestion_routes import _prepare_upload
-
-        with pytest.raises(HTTPException) as caught:
-            await _prepare_upload(
-                filename="numbers.xlsx", body=b"anything", ticker=None
-            )
-
-        assert caught.value.status_code == 400
-        assert "pdf" in caught.value.detail.lower()
 
 
 class TestPreviewingEdgar:

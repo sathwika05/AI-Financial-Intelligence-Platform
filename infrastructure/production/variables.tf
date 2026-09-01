@@ -123,6 +123,11 @@ variable "api_cpu" {
 }
 
 variable "api_memory" {
+  // 3072 was not enough. A benchmark run loads the cross-encoder into the
+  // same process that serves requests, and PyTorch's allocation for it
+  // pushed the container past the limit 29 questions into a 100-question
+  // run -- exit 137, OutOfMemoryError, and the run orphaned. The Redis
+  // sidecar shares this budget too.
   description = <<-EOT
     Fargate memory (MiB). Must be a valid pairing with cpu; 2048 CPU
     permits 4096 to 16384.
@@ -133,7 +138,7 @@ variable "api_memory" {
   EOT
 
   type    = number
-  default = 3072
+  default = 8192
 }
 
 variable "log_retention_days" {
@@ -310,4 +315,10 @@ variable "llm_key_encryption_secret" {
 
   type      = string
   sensitive = true
+}
+
+variable "domain" {
+  description = "The registered domain whose wildcard certificate the load balancer serves. The certificate itself lives in the shared stack."
+  type        = string
+  default     = "sathwikap.com"
 }

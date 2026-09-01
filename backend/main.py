@@ -1,5 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from backend.observability.langsmith_setup import setup_langsmith
@@ -152,7 +156,63 @@ def build_app(*, deployment_mode: str | None = None) -> FastAPI:
 
     _register_health(application, mode)
 
+    # Last, so every route above wins the match. The dashboard's
+    # fallback is a catch-all; registered earlier it would swallow the
+    # API and answer /health with HTML.
+    _serve_frontend(application)
+
     return application
+
+
+def _frontend_dist() -> Path:
+    """Where `npm run build` leaves the dashboard."""
+    return Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+
+def _serve_frontend(application: FastAPI) -> None:
+    """
+    Serve the built dashboard from this app.
+
+    Locally Vite serves the UI and proxies /api here, so nothing ever
+    needed to. In the container there is no Vite, and the deployed stack
+    answered 404 at its own front door while the built assets sat unused
+    inside the image.
+
+    The frontend calls the API with relative paths, so serving both from
+    one origin needs no rebuild and raises no CORS question.
+    """
+    dist = _frontend_dist()
+    index = dist / "index.html"
+
+    if not index.is_file():
+        # A checkout that has never run `npm run build`. The API is still
+        # perfectly usable; refusing to start over a missing UI is not.
+        logger.info("No frontend build at %s; serving the API only", dist)
+
+        return
+
+    assets = dist / "assets"
+
+    if assets.is_dir():
+        application.mount(
+            "/assets", StaticFiles(directory=assets), name="assets"
+        )
+
+    @application.get("/{spa_path:path}", include_in_schema=False)
+    async def dashboard(spa_path: str):
+        # React Router owns paths this server has never heard of, so an
+        # unknown path is a screen and gets index.html. An unknown /api
+        # path is a missing endpoint, and must still look missing --
+        # answering it with HTML turns a typo into a silent success.
+        if spa_path.startswith(("api/", "admin/")):
+            raise HTTPException(status_code=404)
+
+        asset = dist / spa_path
+
+        if spa_path and asset.is_file():
+            return FileResponse(asset)
+
+        return FileResponse(index)
 
 
 def _register_health(application: FastAPI, mode: str) -> None:

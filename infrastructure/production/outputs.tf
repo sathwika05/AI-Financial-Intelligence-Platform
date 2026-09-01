@@ -75,7 +75,5 @@ output "log_groups" {
   }
 }
 
-output "ecr_repository_url" {
-  description = "Push the image here. container_image points at a tag of this."
-  value       = aws_ecr_repository.app.repository_url
-}
+// ecr_repository_url now lives in the shared stack, which owns the
+// registry so a teardown here cannot delete the images.

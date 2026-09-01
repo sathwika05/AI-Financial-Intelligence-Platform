@@ -370,10 +370,14 @@ td.screen__slug {
      without a media query naming a specific device width. */
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 20px;
-  /* stretch, not start: two cards side by side at different heights read
-     as one being unfinished. The row is as tall as its taller card and
-     both fill it. */
-  align-items: stretch;
+  /* start, not stretch. Stretching was right when both panes held a form
+     of similar length: two cards at different heights read as one being
+     unfinished. It stops being right the moment one pane grows a results
+     list -- ten EDGAR filings made the row a thousand pixels tall, so the
+     upload card opposite filled with the same thousand pixels of nothing,
+     and the results sat far below the button that produced them.
+     Each pane is now as tall as what it contains. */
+  align-items: start;
 }
 
 .screen__pane {

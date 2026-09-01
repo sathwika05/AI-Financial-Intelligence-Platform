@@ -171,6 +171,26 @@ data "aws_iam_policy_document" "task" {
     ]
     resources = [aws_sqs_queue.ingestion.arn]
   }
+
+  statement {
+    sid = "OpenAnExecSession"
+    // ECS Exec: a shell in the running task, over an SSM channel the task
+    // opens outward. Nothing listens, no port is exposed, and the database
+    // stays unreachable from anywhere but these tasks.
+    //
+    // It is how the first account gets created and how the benchmark
+    // corpus is restored: both have to run inside the VPC, because that is
+    // the only place the database can be reached from.
+    actions = [
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel",
+    ]
+    // The channel is created by the agent for itself; there is no
+    // narrower resource to name.
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "task" {
@@ -218,10 +238,47 @@ resource "aws_lb_target_group" "api" {
   }
 }
 
+// The certificate lives in the shared stack, which survives a teardown.
+// Looked up rather than passed in, so recreating this stack needs no
+// manual wiring -- and a certificate that is not ISSUED will fail the
+// plan here rather than producing a listener that serves nothing.
+data "aws_acm_certificate" "wildcard" {
+  domain      = "*.${var.domain}"
+  statuses    = ["ISSUED"]
+  most_recent = true
+}
+
+// Port 80 no longer serves the application: it sends callers to 443.
+//
+// A redirect rather than closing the port. People type a bare hostname
+// and browsers still default to http, so refusing 80 outright reads as
+// "the site is down" -- and the login form is the one page that must
+// never be reachable unencrypted.
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 443
+  protocol          = "HTTPS"
+  certificate_arn   = data.aws_acm_certificate.wildcard.arn
+
+  // A current policy rather than the default, which still permits TLS 1.0
+  // and 1.1. Nothing this application talks to needs them.
+  ssl_policy = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
   default_action {
     type             = "forward"
@@ -503,6 +560,10 @@ resource "aws_ecs_service" "api" {
   desired_count   = 1
   launch_type     = "FARGATE"
 
+  // Required for `aws ecs execute-command`. Off by default, and it takes
+  // a new deployment to come into effect.
+  enable_execute_command = true
+
   network_configuration {
     // Public subnets when there is no NAT gateway, private when there is.
     // Either way the security group is what actually restricts access.
@@ -530,6 +591,10 @@ resource "aws_ecs_service" "worker" {
   // holds anything it cannot keep up with.
   desired_count = 1
   launch_type   = "FARGATE"
+
+  // Required for `aws ecs execute-command`. Off by default, and it takes
+  // a new deployment to come into effect.
+  enable_execute_command = true
 
   network_configuration {
     subnets          = var.use_nat_gateway ? aws_subnet.private[*].id : aws_subnet.public[*].id

@@ -14,6 +14,7 @@ import {
 } from "../format";
 import { useProviders } from "../useEvaluationData";
 import { Field, Panel, StatusPill } from "../components/primitives";
+import { navigateTo } from "../../lib/router";
 
 /**
  * Runtime configuration, read-only.
@@ -102,7 +103,7 @@ export function SettingsView({ runs }: { runs: RunMetrics[] }) {
         link={{
           label: "View Models (Providers)",
           onClick: () => {
-            window.location.hash = "#/evaluation/providers";
+            navigateTo("/evaluation/providers");
           },
         }}
       >

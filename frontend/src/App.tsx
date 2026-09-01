@@ -16,6 +16,7 @@ import {
   NoResultsState,
 } from "./components/States";
 import "./App.css";
+import { linkTo } from "./lib/router";
 
 type Status = "idle" | "running" | "error" | "done";
 
@@ -159,7 +160,7 @@ export default function App({
             </span>
 
             {!inShell && user.role === "admin" && (
-              <a className="masthead__link" href="#/evaluation">
+              <a className="masthead__link" href="/evaluation" onClick={linkTo("/evaluation")}>
                 Evaluation dashboard
               </a>
             )}

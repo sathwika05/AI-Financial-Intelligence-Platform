@@ -55,12 +55,7 @@ export function IngestionScreen() {
   return (
     <div className="screen screen--wide">
       <header className="screen__head">
-        <h1 className="screen__title">Ingestion</h1>
-        <p className="screen__lede">
-          Bring filings into the corpus, and see what is in it. Uploading
-          parses and indexes a file directly; collection through S3 (Amazon's
-          Simple Storage Service) runs on the deployment that has a bucket.
-        </p>
+        <h1 className="screen__title">Ingestion &amp; Indexing</h1>
       </header>
 
       {/* Left column: the two ways you bring documents in yourself.

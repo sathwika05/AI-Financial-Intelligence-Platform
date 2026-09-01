@@ -19,6 +19,7 @@ import {
   TrendingUp,
   TriangleAlert,
 } from "lucide-react";
+import { linkTo } from "../../lib/router";
 
 /**
  * Dashboard navigation.
@@ -214,7 +215,7 @@ export function Sidebar({
 
   return (
     <nav className="ev-sidebar" aria-label="Evaluation sections">
-      <a className="ev-brand" href="#/">
+      <a className="ev-brand" href="/" onClick={linkTo("/")}>
         <span className="ev-brand__mark" aria-hidden="true">
           <Sparkles size={19} />
         </span>
@@ -228,7 +229,7 @@ export function Sidebar({
       {/* The dashboard replaces the admin rail rather than nesting inside
           it, so this is the only way back. It used to be the brand mark
           alone, which is a logo before it is a control. */}
-      <a className="ev-back" href="#/">
+      <a className="ev-back" href="/" onClick={linkTo("/")}>
         <ArrowLeft size={15} className="ev-back__icon" aria-hidden="true" />
         Back to admin
       </a>

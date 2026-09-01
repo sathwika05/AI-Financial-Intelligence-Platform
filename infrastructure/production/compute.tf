@@ -204,6 +204,16 @@ resource "aws_iam_role_policy" "task" {
 // ---------------------------------------------------------------------------
 
 resource "aws_lb" "main" {
+  // 60 seconds, the default, is shorter than this application's slowest
+  // honest answer. A ranking question runs intent, planning, SQL, vector
+  // retrieval, live market data, reranking, scoring, analysis and review --
+  // the analysis node alone measured 28 seconds on a four-company ranking.
+  //
+  // The load balancer gave up first and returned a 5xx while the task
+  // carried on and logged 200, so the failure looked like a broken
+  // application from the browser and like success from the logs.
+  idle_timeout = 300
+
   name               = "${local.name_prefix}-alb"
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]

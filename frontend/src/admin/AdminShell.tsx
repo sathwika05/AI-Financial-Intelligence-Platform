@@ -102,7 +102,7 @@ export function AdminShell({
               <li key={item.id}>
                 <a
                   className={`admin__item${active ? " admin__item--on" : ""}`}
-                  href={`#${item.path}`}
+                  href={item.path}
                   aria-current={active ? "page" : undefined}
                   onClick={(event) => {
                     event.preventDefault();

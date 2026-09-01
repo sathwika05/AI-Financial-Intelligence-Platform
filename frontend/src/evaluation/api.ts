@@ -202,6 +202,14 @@ export const INDEX_TYPES = ["Flat", "IVFFlat", "HNSW"] as const;
  * flags whose interaction you have to reason about. `toFlags` is the only
  * place the mapping lives.
  */
+/**
+ * Retrieval depth a run uses unless told otherwise.
+ *
+ * Mirrors `top_k` in backend/evaluation/schemas.py. Declared once so the
+ * launcher's initial value and the summary's fallback cannot drift apart.
+ */
+export const DEFAULT_TOP_K = 5;
+
 export const RETRIEVAL_PIPELINES = [
   {
     value: "baseline",

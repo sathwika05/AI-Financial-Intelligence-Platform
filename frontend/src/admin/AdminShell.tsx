@@ -50,7 +50,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   },
   {
     id: "ingestion",
-    label: "Ingestion",
+    label: "Ingestion & Indexing",
     detail: "Upload, EDGAR, corpus",
     icon: Database,
     path: "/ingestion",
@@ -80,7 +80,7 @@ export function AdminShell({
       <nav className="admin__rail" aria-label="Sections">
         <a
           className="admin__brand"
-          href="#/"
+          href="/"
           onClick={(event) => {
             event.preventDefault();
             onNavigate("/");

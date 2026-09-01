@@ -16,7 +16,7 @@
 
 locals {
   buckets = {
-    raw       = "Uploaded documents, before processing"
+    raw       = "Uploaded documents before processing"
     processed = "Parsed output and backups"
   }
 }

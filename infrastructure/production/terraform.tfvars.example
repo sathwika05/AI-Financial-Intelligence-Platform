@@ -38,3 +38,8 @@ langsmith_tracing = true
 
 # Must name the same project as langsmith_project_url above.
 langchain_project = "ai-financial-intelligence-platform"
+
+# Encrypts provider API keys in the database. Generate with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Changing it makes existing stored keys unreadable.
+llm_key_encryption_secret = "generate-your-own"

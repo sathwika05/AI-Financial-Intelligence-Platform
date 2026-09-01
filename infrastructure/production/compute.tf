@@ -41,6 +41,12 @@ resource "aws_secretsmanager_secret_version" "app" {
     FINNHUB_API_KEY       = var.finnhub_api_key
 
     LANGSMITH_API_KEY = var.langsmith_api_key
+
+    // Encrypts provider API keys in the llm_providers table. Until now it
+    // was not passed at all, so production silently used the development
+    // key baked into the image -- meaning anything encrypted in
+    // production was readable by anyone holding that image.
+    LLM_KEY_ENCRYPTION_SECRET = var.llm_key_encryption_secret
   })
 
   // Tracing on with no key is not a degraded deployment, it is a dead
@@ -274,6 +280,10 @@ locals {
     // project it lands in.
     { name = "LANGSMITH_TRACING", value = tostring(var.langsmith_tracing) },
     { name = "LANGCHAIN_PROJECT", value = var.langchain_project },
+    // The sidecar, over the task's shared loopback. Set here rather than
+    // left to the image: the .env baked into it names a Docker Compose
+    // host that does not exist in AWS, and environment beats dotenv.
+    { name = "REDIS_URL", value = "redis://localhost:6379/0" },
   ]
 
   app_secrets = [
@@ -311,6 +321,10 @@ locals {
       name      = "LANGSMITH_API_KEY"
       valueFrom = "${aws_secretsmanager_secret.app.arn}:LANGSMITH_API_KEY::"
     },
+    {
+      name      = "LLM_KEY_ENCRYPTION_SECRET"
+      valueFrom = "${aws_secretsmanager_secret.app.arn}:LLM_KEY_ENCRYPTION_SECRET::"
+    },
   ]
 }
 
@@ -320,6 +334,15 @@ resource "aws_ecs_task_definition" "api" {
   network_mode             = "awsvpc"
   cpu                      = var.api_cpu
   memory                   = var.api_memory
+
+  // The image is built on an Apple Silicon machine, so it is arm64.
+  // Fargate defaults to X86_64 and an unpinned task dies with
+  // "exec format error" - which reads as a broken image, not a wrong
+  // architecture. Graviton is also about 20% cheaper.
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
 
   execution_role_arn = aws_iam_role.execution.arn
   task_role_arn      = aws_iam_role.task.arn
@@ -345,6 +368,42 @@ resource "aws_ecs_task_definition" "api" {
           "awslogs-stream-prefix" = "api"
         }
       }
+    },
+    // Redis, alongside the app rather than as its own service.
+    //
+    // Containers in one task share a network namespace, so the app reaches
+    // this on localhost and nothing else can: no subnet, no security
+    // group, no ElastiCache bill. The cache dies with the task, which is
+    // what a cache is for.
+    //
+    // Not essential: Redis failing must not kill the API. Every call is
+    // already wrapped -- caching degrades to recomputing. The exception is
+    // the rate limiter, which fails open, so without this the public API
+    // has no throttle at all.
+    {
+      name      = "redis"
+      image     = "public.ecr.aws/docker/library/redis:7-alpine"
+      essential = false
+
+      // A cache with a bound. Without maxmemory it grows until the task
+      // hits its memory limit and ECS kills everything in it.
+      command = [
+        "redis-server",
+        "--maxmemory", "256mb",
+        "--maxmemory-policy", "allkeys-lru",
+        "--save", ""
+      ]
+
+      memoryReservation = 256
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.api.name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "redis"
+        }
+      }
     }
   ])
 }
@@ -362,6 +421,12 @@ resource "aws_ecs_task_definition" "worker" {
   cpu    = var.worker_cpu
   memory = var.worker_memory
 
+  // Same image as the API, so the same architecture.
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
+
   execution_role_arn = aws_iam_role.execution.arn
   task_role_arn      = aws_iam_role.task.arn
 
@@ -371,8 +436,13 @@ resource "aws_ecs_task_definition" "worker" {
       image     = var.container_image
       essential = true
 
+      // The venv's interpreter directly, not `uv run`. uv re-syncs the
+      // project on every invocation, and .python-version pins a release
+      // the base image does not ship -- so `uv run` judged the venv wrong,
+      // deleted it, and reinstalled 212 packages before the worker could
+      // poll anything. Two and a half minutes, on every task start.
       command = [
-        "uv", "run", "python", "-m", "backend.ingestion.queue_worker"
+        "/code/.venv/bin/python", "-m", "backend.ingestion.queue_worker"
       ]
 
       environment = local.app_environment
@@ -384,6 +454,42 @@ resource "aws_ecs_task_definition" "worker" {
           "awslogs-group"         = aws_cloudwatch_log_group.worker.name
           "awslogs-region"        = var.region
           "awslogs-stream-prefix" = "worker"
+        }
+      }
+    },
+    // Redis, alongside the app rather than as its own service.
+    //
+    // Containers in one task share a network namespace, so the app reaches
+    // this on localhost and nothing else can: no subnet, no security
+    // group, no ElastiCache bill. The cache dies with the task, which is
+    // what a cache is for.
+    //
+    // Not essential: Redis failing must not kill the API. Every call is
+    // already wrapped -- caching degrades to recomputing. The exception is
+    // the rate limiter, which fails open, so without this the public API
+    // has no throttle at all.
+    {
+      name      = "redis"
+      image     = "public.ecr.aws/docker/library/redis:7-alpine"
+      essential = false
+
+      // A cache with a bound. Without maxmemory it grows until the task
+      // hits its memory limit and ECS kills everything in it.
+      command = [
+        "redis-server",
+        "--maxmemory", "256mb",
+        "--maxmemory-policy", "allkeys-lru",
+        "--save", ""
+      ]
+
+      memoryReservation = 256
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.worker.name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "redis"
         }
       }
     }

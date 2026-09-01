@@ -74,3 +74,8 @@ output "log_groups" {
     worker = aws_cloudwatch_log_group.worker.name
   }
 }
+
+output "ecr_repository_url" {
+  description = "Push the image here. container_image points at a tag of this."
+  value       = aws_ecr_repository.app.repository_url
+}

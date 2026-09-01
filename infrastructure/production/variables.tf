@@ -295,3 +295,19 @@ variable "langchain_project" {
   type    = string
   default = "ai-financial-intelligence-platform"
 }
+
+variable "llm_key_encryption_secret" {
+  description = <<-EOT
+    Encrypts provider API keys stored in the llm_providers table.
+
+    Must be a urlsafe base64 32-byte Fernet key:
+    `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+
+    Changing it makes every key already stored unreadable -- the rows
+    survive, the values cannot be decrypted, and each provider has to be
+    re-entered. Worth knowing before rotating it.
+  EOT
+
+  type      = string
+  sensitive = true
+}

@@ -18,3 +18,12 @@ __pycache__/
 # platform-specific for the same reason .venv is.
 frontend/node_modules/
 .git/
+
+# Secrets. COPY . . put this inside the image, where it reached ECR
+# carrying real development keys -- and, for anything Terraform does not
+# pass explicitly, it silently became production's configuration.
+# Environment beats dotenv in pydantic, so the container gets what the
+# task definition sets and nothing else.
+.env
+.env.*
+!.env.example

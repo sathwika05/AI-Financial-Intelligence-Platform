@@ -23,7 +23,11 @@ RUN apt-get update \
 
 RUN pip install uv
 
-COPY pyproject.toml uv.lock ./
+# .python-version alongside them on purpose. It pins 3.13.5 while the base
+# image ships 3.13.15, and copying it later -- with the rest of the source,
+# after the venv exists -- meant `uv run` found a mismatch at startup,
+# deleted the venv and reinstalled 212 packages on every container start.
+COPY pyproject.toml uv.lock .python-version ./
 
 RUN uv sync --frozen
 
@@ -57,4 +61,4 @@ COPY . .
 # Not `alembic upgrade head` directly: this schema has two writers, and the
 # right move depends on which one built the database. backend.startup_migration
 # explains it.
-CMD ["sh", "-c", "uv run python -m backend.startup_migration && uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "/code/.venv/bin/python -m backend.startup_migration && /code/.venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000"]

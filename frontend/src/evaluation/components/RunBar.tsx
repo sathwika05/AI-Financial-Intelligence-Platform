@@ -9,6 +9,7 @@ import {
   RETRIEVAL_PIPELINES,
   cancelRun,
   pipelineToFlags,
+  DEFAULT_TOP_K,
   triggerRun,
   type IndexType,
   type QuestionSet,
@@ -75,7 +76,7 @@ export function RunBar({
   const [questionSet, setQuestionSet] = useState<QuestionSet>(
     QUESTION_SETS[0],
   );
-  const [topK, setTopK] = useState(5);
+  const [topK, setTopK] = useState(DEFAULT_TOP_K);
 
   // Retrieval pipeline switches. Both off is the baseline, so the default
   // launch is the pipeline as it has always run.

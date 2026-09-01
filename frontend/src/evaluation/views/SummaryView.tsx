@@ -207,6 +207,11 @@ export function SummaryView({
     );
   }
 
+  // Four panels share one row of the twelve-column grid, and one of them
+  // only exists when the run recorded tool calls. Three at four columns, or
+  // four at three, either way filling the row exactly.
+  const panelSpan = run.tool_summary ? 3 : 4;
+
   // The list arrives newest-first; charts read left-to-right in time order.
   const history = runs
     .filter((entry) => entry.status === "completed")
@@ -397,8 +402,14 @@ export function SummaryView({
           )}
         </Panel>
 
+        {/* These four share a row of the twelve-column grid, but the tool
+            panel only appears when the run recorded tool calls. A fixed span
+            can therefore only fill the row in one of the two cases: at three
+            each the row came up short whenever tools were absent, and at four
+            each it overflowed whenever they were present, pushing the last
+            card onto a row of its own. */}
         <Panel
-          span={3}
+          span={panelSpan}
           icon={Filter}
           title="RAG Reranking"
           note="(stages this run used)"
@@ -418,7 +429,7 @@ export function SummaryView({
           note="Grounding"
           icon={TriangleAlert}
           tone="amber"
-          span={3}
+          span={panelSpan}
           link={{
             label: "View Error Analysis",
             onClick: () => onNavigate("errors"),
@@ -453,10 +464,14 @@ export function SummaryView({
 
         <Panel
           title="Ranking Performance"
+          // The depth this run actually measured at, not the default it would
+          // have used. A run with no k produced no metrics -- it died before
+          // it got that far -- and printing 5 there would claim a result it
+          // never reached.
           note={`(Top K = ${run.k ?? "—"})`}
           icon={BarChart3}
           tone="blue"
-          span={3}
+          span={panelSpan}
           link={{
             label: "View Ranking Analysis",
             onClick: () => onNavigate("metrics"),

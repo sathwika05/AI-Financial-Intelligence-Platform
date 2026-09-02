@@ -13,6 +13,7 @@ from langchain_core.load import dumps
 
 from backend.config import settings
 from backend.graph.financial_graph import financial_graph
+from backend.graph.run import run_graph
 from backend.security import events
 from backend.security.input_guard import InputGuard
 from backend.security.output_validator import OutputValidator
@@ -60,10 +61,7 @@ async def _run_financial_query(query: str, llm_runtime):
     # without any node having to know about it.
     config, usage = build_usage_config(llm_runtime)
 
-    final_state = await financial_graph.ainvoke(
-        initial_state,
-        config=config,
-    )
+    final_state = await run_graph(financial_graph, initial_state, config)
 
     # Merged in rather than mutated into state: the graph has already
     # finished, and these are facts about the run, not part of it.

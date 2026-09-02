@@ -57,6 +57,8 @@ from backend.retrieval.sql_executor import get_schema
 from backend.state.state_factory import (
     build_initial_financial_state,
 )
+from backend.graph.run import run_graph
+from uuid import uuid4
 
 
 logger = logging.getLogger(__name__)
@@ -494,6 +496,12 @@ class BenchmarkRunner:
             **runnable_config,
             "configurable": {
                 **(runnable_config.get("configurable") or {}),
+                # Its own thread. The run's config is built once and spread
+                # into every question, so inheriting its thread_id would put
+                # a hundred questions on one thread -- and a checkpointed
+                # graph resumes a thread rather than starting it, so each
+                # question would begin from the last one's state.
+                "thread_id": str(uuid4()),
             },
             "callbacks": [
                 *(runnable_config.get("callbacks") or []),
@@ -501,9 +509,12 @@ class BenchmarkRunner:
             ],
         }
 
-        final_state = await self.graph.ainvoke(
-            initial_state,
-            config=question_config,
+        # Through run_graph, so the checkpoint is released when the
+        # question ends. A hundred retained states, each holding the
+        # retrieved and reranked contexts, is how this task ran out of
+        # memory at question 29 of a run that never finished.
+        final_state = await run_graph(
+            self.graph, initial_state, question_config
         )
 
         latency_ms = (

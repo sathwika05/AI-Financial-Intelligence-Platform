@@ -116,7 +116,12 @@
   color: var(--text);
 }
 
-.state--error {
+/* Two classes, for the same reason .state--withheld needs them: the
+   element carries .panel too, and .panel's `border` shorthand is the
+   later rule at equal specificity. This has been losing since the error
+   state was written, so a failed analysis wore the same grey border as
+   an ordinary panel. */
+.state.state--error {
   border-color: rgba(201, 48, 74, 0.28);
 }
 
@@ -128,4 +133,29 @@
   font-size: var(--fs-body);
   font-weight: 500;
   color: var(--text);
+}
+
+/* ── Withheld ─────────────────────────────────────────────────
+   Caution, not failure. A withheld answer means the pipeline worked and
+   declined its own output, so it wears the warning hue rather than the
+   red the error state uses -- nothing broke, and reading it as breakage
+   sends people to the logs instead of to the question. */
+
+/* Two classes, because .panel sets its own background and border and is
+   the later rule -- a single .state--withheld lost both and the card
+   rendered as an ordinary white panel. */
+.state.state--withheld {
+  border-color: var(--caution);
+  background: var(--caution-soft);
+}
+
+.state__icon-withheld {
+  color: var(--caution);
+}
+
+.state__title--withheld {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--text-strong);
+  max-width: 62ch;
 }

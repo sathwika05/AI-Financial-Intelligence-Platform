@@ -1,0 +1,15 @@
+# Terraform's working directory: downloaded providers, hundreds of MB.
+.terraform/
+.terraform.lock.hcl
+
+# State. Contains every value the stack knows, including db_password in
+# plain text despite it being marked sensitive. Never commit it.
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Real variable values, including the database password.
+*.tfvars
+!*.tfvars.example
+
+crash.log

@@ -1,0 +1,30 @@
+# A code-only rebuild on top of the last published image.
+#
+# The full build is 4.36 GB, almost all of it the Python venv and the
+# baked cross-encoder weights, and pushing it needs a chunked uploader to
+# get through this network at all. Nothing in an ordinary change touches
+# those layers -- uv.lock is untouched, so the venv in the base is still
+# correct -- so this rebuilds the application layer alone and the push
+# sends only that.
+#
+# Bump BASE to the tag currently in production before building.
+#
+#     docker build --platform linux/arm64 \
+#         -f Dockerfile.derived --build-arg BASE=v8 -t fip-app:v9 .
+#
+# The frontend is NOT built here: `frontend/dist` is gitignored and comes
+# from the host, so run `npm run build` in frontend/ first or the image
+# ships whatever dist was last built locally.
+ARG BASE=v8
+FROM fip-app:${BASE}
+
+WORKDIR /code
+
+# .dockerignore keeps the host venv, caches and node_modules out. Without
+# it this would copy a macOS virtualenv straight over the Linux one and
+# every console script in the image would point at a path that does not
+# exist.
+COPY . .
+
+# ENTRYPOINT and CMD are inherited: the base already runs the startup
+# migration and then uvicorn.

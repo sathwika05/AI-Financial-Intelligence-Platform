@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from langchain_core.load import dumps
 
 from backend.config import settings
+from backend.escalation.service import record_escalation
 from backend.graph.financial_graph import financial_graph
 from backend.graph.run import run_graph
 from backend.security import events
@@ -229,6 +230,29 @@ async def financial_retrieval(
 
             if validation.findings:
                 final_report = json.loads(validation.output)
+
+            # A report the reviewer withheld goes to the admin queue with
+            # the draft attached, because the response no longer carries
+            # it -- top_companies is empty by the time it gets here.
+            #
+            # Wrapped, because filing is a side effect of answering rather
+            # than part of it: a queue that will not take the row must not
+            # turn a completed pipeline run into a 500 for the analyst.
+            try:
+                filed = await record_escalation(
+                    session,
+                    query=safe_query,
+                    final_report=final_report,
+                    draft_report=result.get("draft_report"),
+                )
+
+                if filed is not None:
+                    await session.commit()
+            except Exception:
+                logger.exception(
+                    "[FINANCIAL_ROUTES] Could not file the escalation"
+                )
+                await session.rollback()
 
             return {
                 "query":  safe_query,

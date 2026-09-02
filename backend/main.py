@@ -28,6 +28,7 @@ from backend.api.evaluation_routes import (
     fail_orphaned_runs,
     router as evaluation_router,
 )
+from backend.api.escalation_routes import router as escalation_router
 from backend.api.admin_llm_routes import router as admin_llm_router
 from backend.api.auth_routes import router as auth_router
 
@@ -153,6 +154,7 @@ def build_app(*, deployment_mode: str | None = None) -> FastAPI:
         application.include_router(ingestion_router)
         application.include_router(admin_links_router)
         application.include_router(evaluation_router)
+        application.include_router(escalation_router)
 
     _register_health(application, mode)
 

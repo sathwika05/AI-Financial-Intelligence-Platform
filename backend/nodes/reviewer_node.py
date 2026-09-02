@@ -41,6 +41,52 @@ CONFIDENCE_THRESHOLD = 0.70 # below → flag as low confidence
 HALLUCINATION_THRESHOLD = 0.30 # above → trigger retry
 MAX_RETRIES = 3    # max retries before forced pass
 TOP_N_FINAL = 5  # companies in final output
+ESCALATION_THRESHOLD = 0.30 # below → withhold the ranking, escalate to admin
+
+
+def decide_escalation(
+    overall_confidence: Any,
+    should_retry: bool,
+) -> bool:
+    """
+    Whether this report is too weak to show and should go to a human.
+
+    Deliberately not "retry limit reached". Retries only happen on a
+    quality failure — hallucinations, missing evidence, bad citations — so
+    a draft with none of those and 0.2 confidence never retries at all,
+    and a condition keyed on an exhausted retry limit would approve it
+    silently. The question that matters is whether the reviewer has
+    stopped, which covers the forced pass and the quiet approval alike.
+    """
+    if should_retry:
+        # Mid-loop the number is not final. Escalating here would file one
+        # row per attempt for a run that goes on to fix itself.
+        return False
+
+    try:
+        confidence = float(overall_confidence)
+    except (TypeError, ValueError):
+        # A draft that never set the field is the worst case, not an
+        # exempt one — and `None < 0.30` raises rather than escalating.
+        confidence = 0.0
+
+    return confidence < ESCALATION_THRESHOLD
+
+
+def build_escalation_notice(overall_confidence: float) -> str:
+    """
+    What the reader is shown in place of the ranking.
+
+    A bare number in a corner is not a warning: 0.17 and 0.91 render
+    identically to someone who is reading the answer rather than auditing
+    it. This says what happened, why, and what comes next.
+    """
+    return (
+        f"Confidence in this answer is {overall_confidence:.2f}, below the "
+        f"{ESCALATION_THRESHOLD:.2f} floor this system will stand behind. "
+        "The ranking has been withheld and sent to an administrator for "
+        "review rather than shown to you as though it were reliable."
+    )
 
 
 def _check_confidence(
@@ -555,6 +601,22 @@ def build_final_output(
         ),
     ]
 
+    overall_confidence = draft_report.get(
+        "overall_confidence"
+    )
+
+    # Only ever called once the reviewer has stopped retrying, so the
+    # number here is final by construction.
+    escalated = decide_escalation(
+        overall_confidence=overall_confidence,
+        should_retry=False,
+    )
+
+    try:
+        confidence_value = float(overall_confidence)
+    except (TypeError, ValueError):
+        confidence_value = 0.0
+
     return {
         "query_summary": draft_report.get(
             "query_summary"
@@ -562,16 +624,28 @@ def build_final_output(
         "intent": draft_report.get(
             "intent"
         ),
-        "top_companies": companies[
-            :TOP_N_FINAL
-        ],
-        "overall_confidence": draft_report.get(
-            "overall_confidence"
+        # Withheld here rather than hidden by the console. A report the
+        # client declines to draw is still a report — it is in the JSON,
+        # in the network tab, and in anything else that calls this
+        # endpoint. Dropping it means there is one answer to "what did the
+        # system say about this query" rather than one per caller.
+        "top_companies": (
+            [] if escalated else companies[:TOP_N_FINAL]
         ),
+        # An empty list on its own is ambiguous: it also means "nothing
+        # matched". This is what lets the two be told apart.
+        "withheld": escalated,
+        "overall_confidence": overall_confidence,
         "evidence_quality": draft_report.get(
             "evidence_quality"
         ),
         "review": {
+            "escalated": escalated,
+            "notice": (
+                build_escalation_notice(confidence_value)
+                if escalated
+                else None
+            ),
             "decision": review_result.get(
                 "decision"
             ),

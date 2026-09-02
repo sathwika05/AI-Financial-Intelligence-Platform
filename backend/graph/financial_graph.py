@@ -22,6 +22,7 @@ from backend.nodes.scoring_node import scoring_node
 from backend.observability.tracing import timed_node
 from backend.retrieval.hybrid_retrieval import hybrid_retrieve_async
 from backend.state.financial_state import FinancialState
+from backend.checkpointing.saver import build_checkpointer
 
 
 logger = logging.getLogger(__name__)
@@ -162,7 +163,11 @@ def build_financial_graph():
     )
     
     logger.info("[FINANCIAL_GRAPH] Graph compiled")
-    return graph.compile()
+
+    # Compiled with a checkpointer, so a run's state is addressable by
+    # thread_id after it finishes rather than discarded with the invocation.
+    # Every caller must now pass one; build_usage_config does it centrally.
+    return graph.compile(checkpointer=build_checkpointer())
 
 
 financial_graph = build_financial_graph()

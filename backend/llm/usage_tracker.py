@@ -9,6 +9,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
 from backend.llm.llm_runtime import LLMRuntime
+from uuid import uuid4
 
 
 logger = logging.getLogger(__name__)
@@ -169,7 +170,14 @@ def build_usage_config(
     tracker = UsageTracker(runtime)
 
     config: dict[str, Any] = {
-        "configurable": {"llm_runtime": runtime},
+        "configurable": {
+            "llm_runtime": runtime,
+            # The checkpointer addresses state by thread, and raises without
+            # one. A fresh id per call because each question is its own run:
+            # a shared id would append every caller's state to one thread and
+            # let a second question resume the first.
+            "thread_id": str(uuid4()),
+        },
         "callbacks": [tracker],
     }
 

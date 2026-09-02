@@ -67,18 +67,30 @@ export interface SourcesUsed {
   [key: string]: boolean | null | undefined;
 }
 
-/** Internal reviewer output. Deliberately not surfaced in this experience. */
+/**
+ * Internal reviewer output. Mostly not surfaced in this experience --
+ * `escalated` and `notice` are the exceptions, because a withheld answer
+ * has to explain itself to the person who asked.
+ */
 export interface ReportReview {
   decision?: string | null;
   hallucination_rate?: number | null;
   total_flags?: number | null;
   flags?: string[] | null;
+  escalated?: boolean | null;
+  notice?: string | null;
 }
 
 export interface FinalReport {
   query_summary?: string | null;
   intent?: string | null;
   top_companies?: ReportCompany[] | null;
+  /**
+   * The server withheld the ranking. Distinct from an empty
+   * `top_companies`, which also means "nothing matched" -- this says the
+   * pipeline had an answer and declined to show it.
+   */
+  withheld?: boolean | null;
   overall_confidence?: number | null;
   evidence_quality?: string | null;
   review?: ReportReview | null;

@@ -6,6 +6,7 @@ import {
   Layers,
   LineChart,
   ScrollText,
+  ShieldAlert,
   Waypoints,
 } from "lucide-react";
 import { Logo } from "../components/Logo";
@@ -54,6 +55,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     detail: "Upload, EDGAR, corpus",
     icon: Database,
     path: "/ingestion",
+  },
+  {
+    id: "review",
+    label: "Human-in-the-Loop",
+    detail: "Escalated answers",
+    icon: ShieldAlert,
+    path: "/review",
   },
   {
     id: "evaluation",

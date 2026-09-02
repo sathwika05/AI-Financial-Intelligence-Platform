@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Loader2, SearchX } from "lucide-react";
+import { AlertCircle, Loader2, SearchX, ShieldAlert } from "lucide-react";
 import "./States.css";
 
 /**
@@ -105,6 +105,52 @@ export function NoResultsState() {
         Try naming a sector, a metric, or a comparison — for example
         &ldquo;technology companies with low P/E and strong revenue
         growth&rdquo;.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Shown in place of a ranking the system declined to stand behind.
+ *
+ * Not an error and not an empty result, and it must not read as either.
+ * The pipeline ran, found companies, and ranked them — then scored its own
+ * confidence below the floor, so the ranking was withheld on the server
+ * and an administrator was sent the draft.
+ *
+ * The alternative was showing the ranking with a warning above it, which
+ * assumes the warning is read. It is not: a table of tickers and scores
+ * looks equally authoritative at 0.17 as at 0.91.
+ */
+export function WithheldState({
+  notice,
+  confidence,
+}: {
+  notice?: string | null;
+  confidence?: number | null;
+}) {
+  return (
+    <section className="state state--withheld panel" role="status">
+      <div className="state__head">
+        <ShieldAlert size={15} className="state__icon-withheld" aria-hidden="true" />
+        <span className="eyebrow state__eyebrow">Answer withheld</span>
+        {typeof confidence === "number" && (
+          <span className="state__elapsed num">
+            confidence {confidence.toFixed(2)}
+          </span>
+        )}
+      </div>
+
+      <h2 className="state__title state__title--withheld">
+        {notice ??
+          "This answer did not meet the confidence threshold, so it was " +
+            "withheld and sent to an administrator for review."}
+      </h2>
+
+      <p className="state__caption">
+        Nothing is wrong with your question. The evidence behind this one was
+        too thin for the system to rank companies honestly — narrowing it to
+        named companies, or to a sector the corpus covers, usually helps.
       </p>
     </section>
   );

@@ -42,6 +42,21 @@ class TestServingTheDashboard:
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
 
+    @pytest.mark.parametrize(
+        "screen", ["/providers", "/ingestion", "/review", "/evaluation"]
+    )
+    def test_every_admin_screen_survives_a_refresh(self, screen):
+        """
+        Each of these is a real URL the rail links to, so each has to
+        answer on a cold request rather than only after client-side
+        navigation. /review was added last and is the one a new catch-all
+        ordering would most plausibly miss.
+        """
+        response = _client().get(screen)
+
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
 
 class TestTheApiIsNotShadowed:
     def test_health_is_matched_before_the_catch_all(self):

@@ -334,3 +334,63 @@ export function listIngestionEvents(
 
   return send<{ events: IngestionEvent[] }>(`/api/ingestion/events?${query}`);
 }
+
+/* ── Human review ─────────────────────────────────────────────────────
+   The queue of answers the reviewer withheld. Each row carries the draft
+   the analyst never saw, which is the only thing that makes the row
+   actionable rather than a notification. */
+
+export interface EscalationCompany {
+  ticker?: string | null;
+  confidence?: number | null;
+  rationale?: string | null;
+  [key: string]: unknown;
+}
+
+export interface WithheldReport {
+  query_summary?: string | null;
+  intent?: string | null;
+  overall_confidence?: number | null;
+  companies?: EscalationCompany[] | null;
+}
+
+export interface Escalation {
+  id: number;
+  query: string;
+  intent: string | null;
+  confidence: number;
+  notice: string | null;
+  withheld_report: WithheldReport | null;
+  review_flags: string[];
+  status: "pending" | "resolved" | "dismissed";
+  reviewed_by: string | null;
+  resolution_note: string | null;
+  reviewed_at: string | null;
+  created_at: string | null;
+}
+
+interface EscalationPage {
+  status: string;
+  count: number;
+  escalations: Escalation[];
+}
+
+export function listEscalations(
+  status: "pending" | "resolved" | "dismissed" | "all" = "pending",
+): Promise<EscalationPage> {
+  return send<EscalationPage>(
+    `/admin/escalations?status=${encodeURIComponent(status)}`,
+  );
+}
+
+export function resolveEscalation(
+  id: number,
+  status: "resolved" | "dismissed",
+  note: string,
+): Promise<Escalation> {
+  return send<Escalation>(`/admin/escalations/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, note }),
+  });
+}

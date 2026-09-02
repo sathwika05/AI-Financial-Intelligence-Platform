@@ -1085,3 +1085,62 @@ class IngestionEvent(Base):
     chunks = Column(Integer)
 
     created_at = Column(DateTime, server_default=func.now(), index=True)
+
+
+class Escalation(Base):
+    """
+    A query whose answer the system refused to show, waiting on a human.
+
+    The reviewer withholds a ranking below ESCALATION_THRESHOLD, so the
+    analyst gets a sentence instead of a table. This is where the ranking
+    goes: without it an administrator can see that something was withheld
+    but never what, which makes every row an investigation from scratch.
+
+    Distinct from `human_reviews`, which hangs off benchmark_runs and
+    rates a benchmark answer one to five. This is about a live analyst
+    query, which has no run_id, and about a decision rather than a score.
+
+    No foreign key to anything. An escalation records what the system did
+    at a moment in time; a later reseed of the corpus does not unmake it.
+    """
+
+    __tablename__ = "escalations"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # The analyst's question, as asked.
+    query = Column(Text, nullable=False)
+
+    # VALUATION / GROWTH / SENTIMENT / MIXED, for triage.
+    intent = Column(String(20))
+
+    # What tripped the threshold. Kept as a number so the queue can be
+    # read worst-first.
+    confidence = Column(Float, nullable=False)
+
+    # The sentence the analyst saw in place of the ranking.
+    notice = Column(Text)
+
+    # The draft the analyst did not see. The reason this table exists.
+    withheld_report = Column(JSON)
+
+    # The reviewer's own account of what was wrong with it.
+    review_flags = Column(JSON)
+
+    # pending | resolved | dismissed. See service.RESOLUTIONS.
+    status = Column(
+        String(16),
+        nullable=False,
+        server_default="pending",
+        index=True,
+    )
+
+    reviewed_by = Column(String)
+    resolution_note = Column(Text)
+    reviewed_at = Column(DateTime)
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now(),
+        index=True,
+    )

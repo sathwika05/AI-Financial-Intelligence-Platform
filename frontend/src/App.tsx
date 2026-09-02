@@ -14,6 +14,7 @@ import {
   ErrorState,
   LoadingState,
   NoResultsState,
+  WithheldState,
 } from "./components/States";
 import "./App.css";
 import { linkTo } from "./lib/router";
@@ -38,6 +39,12 @@ export default function App({
   const lastQueryRef = useRef("");
 
   const report = result?.final_report ?? null;
+
+  // Server-side decision, not a client one: the ranking is already absent
+  // from the response by the time it gets here. Either flag alone is
+  // enough — `withheld` is the explicit signal, `review.escalated` is what
+  // an older response carries.
+  const withheld = Boolean(report?.withheld || report?.review?.escalated);
   const rankedCompanies = useMemo(
     () => result?.ranked_companies ?? [],
     [result],
@@ -227,7 +234,20 @@ export default function App({
           </div>
         )}
 
-        {status === "done" && (
+        {/* A withheld answer replaces the analysis rather than annotating
+            it. The summary, the ranking and the methodology all describe a
+            result the server declined to send, and rendering their empty
+            shells around a warning reads as a broken screen. */}
+        {status === "done" && withheld && (
+          <div className="app__block">
+            <WithheldState
+              notice={report?.review?.notice}
+              confidence={report?.overall_confidence}
+            />
+          </div>
+        )}
+
+        {status === "done" && !withheld && (
           <>
             {report && (
               <div className="app__block">

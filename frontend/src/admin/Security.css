@@ -190,3 +190,13 @@
   line-height: 1.35;
   color: var(--text-dim);
 }
+
+/* The empty table's one row. Centred and roomy, so the table reads as
+   waiting for something rather than as a table that failed to load. */
+.sec__waiting {
+  padding: 34px 24px;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}

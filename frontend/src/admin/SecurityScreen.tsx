@@ -88,7 +88,7 @@ export function SecurityScreen() {
         <h1 className="screen__title">Security</h1>
       </header>
 
-      {events.length > 0 && (
+      {status !== "loading" && (
         <div className="sec__tally">
           <span className="sec__tally-item">
             <ShieldX size={14} className="sec__icon-blocked" aria-hidden="true" />
@@ -106,15 +106,7 @@ export function SecurityScreen() {
 
       {status === "loading" && <p className="screen__note">Loading…</p>}
 
-      {status === "ready" && events.length === 0 && (
-        <p className="screen__note">
-          Nothing caught yet. Ask a question that aims an instruction at the
-          model, or one containing an email address, and it appears here
-          within a few seconds.
-        </p>
-      )}
-
-      {events.length > 0 && (
+      {status !== "loading" && (
         <div className="screen__table-wrap">
           <table className="screen__table sec__table">
             <thead>
@@ -126,6 +118,19 @@ export function SecurityScreen() {
               </tr>
             </thead>
             <tbody>
+              {/* The columns show before anything has been caught, so the
+                  screen reads as waiting rather than unfinished — and the
+                  first row lands in a shape the reader already knows. */}
+              {events.length === 0 && (
+                <tr>
+                  <td className="sec__waiting" colSpan={4}>
+                    Nothing caught yet. Prompt injections, personal data
+                    of any kind, and rate limits appear here within a few
+                    seconds of being caught.
+                  </td>
+                </tr>
+              )}
+
               {events.map((event) => (
                 <tr
                   key={event.id}

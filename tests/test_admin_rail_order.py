@@ -52,7 +52,27 @@ class TestTheRailOrder:
             "ingestion",
             "review",
             "evaluation",
+            "security",
         ]
+
+    def test_security_is_last(self):
+        """
+        After evaluation, deliberately. It is a log of what the guards
+        caught rather than a place work gets done, so it reads as the
+        footnote to the rail rather than a step in the sequence.
+        """
+        assert _nav_ids()[-1] == "security"
+
+
+class TestTheSecurityDestinationExists:
+    def test_the_rail_points_at_a_real_path(self):
+        assert '"/security"' in SHELL.read_text()
+
+    def test_the_router_answers_that_path(self):
+        root = (ROOT / "frontend/src/Root.tsx").read_text()
+
+        assert 'path === "/security"' in root
+        assert "SecurityScreen" in root
 
 
 class TestTheDestinationExists:

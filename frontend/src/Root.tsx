@@ -8,6 +8,7 @@ import { AdminShell } from "./admin/AdminShell";
 import { ProvidersScreen } from "./admin/ProvidersScreen";
 import { IngestionScreen } from "./admin/IngestionScreen";
 import { HumanReviewScreen } from "./admin/HumanReviewScreen";
+import { SecurityScreen } from "./admin/SecurityScreen";
 import { useHashRoute } from "./lib/router";
 
 /**
@@ -124,6 +125,14 @@ export default function Root() {
     return (
       <AdminShell activeId="ingestion" user={user} onNavigate={navigate}>
         <IngestionScreen />
+      </AdminShell>
+    );
+  }
+
+  if (path === "/security") {
+    return (
+      <AdminShell activeId="security" user={user} onNavigate={navigate}>
+        <SecurityScreen />
       </AdminShell>
     );
   }

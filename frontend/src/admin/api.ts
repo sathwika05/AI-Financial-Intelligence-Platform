@@ -394,3 +394,31 @@ export function resolveEscalation(
     body: JSON.stringify({ status, note }),
   });
 }
+
+/* ── Security ─────────────────────────────────────────────────────────
+   What the guards caught. Read-only: these rows are written as a side
+   effect of the guards doing their job. */
+
+export interface SecurityEvent {
+  id: number;
+  kind: string;
+  label: string;
+  action: "blocked" | "masked";
+  explains: string;
+  detail: string;
+  /** Field names the guard stripped — never their values. */
+  removed: string[];
+  /** Already masked when it was stored — see backend/security/events.py. */
+  query: string;
+  created_at: string | null;
+}
+
+interface SecurityFeed {
+  count: number;
+  events: SecurityEvent[];
+  guardrails: Record<string, { label: string; action: string; explains: string }>;
+}
+
+export function listSecurityEvents(): Promise<SecurityFeed> {
+  return send<SecurityFeed>("/admin/security/events");
+}

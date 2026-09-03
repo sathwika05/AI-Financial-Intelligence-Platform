@@ -7,6 +7,7 @@ import {
   LineChart,
   ScrollText,
   ShieldAlert,
+  ShieldCheck,
   Waypoints,
 } from "lucide-react";
 import { Logo } from "../components/Logo";
@@ -69,6 +70,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     detail: "Benchmarks and runs",
     icon: LineChart,
     path: "/evaluation",
+  },
+  {
+    id: "security",
+    label: "Security",
+    detail: "What the guards caught",
+    icon: ShieldCheck,
+    path: "/security",
   },
 ];
 

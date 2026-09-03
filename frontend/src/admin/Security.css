@@ -1,0 +1,192 @@
+/* The guard log.
+
+   A table rather than cards: every row is the same four facts, and the
+   question being asked of the screen is "what has fired, and how often" —
+   which a table answers by scanning and cards do not. */
+
+.sec__tally {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.sec__tally-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sec__tally-item b {
+  font-weight: 650;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.sec__icon-blocked {
+  color: var(--negative);
+}
+
+.sec__icon-masked {
+  color: var(--caution);
+}
+
+/* Says the table is watching rather than stale. The dot pulses; the words
+   do not move, because text that animates is hard to read. */
+.sec__tally-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.sec__tally-live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--positive);
+  animation: sec-pulse 2s ease-in-out infinite;
+}
+
+@keyframes sec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* ── Table ─────────────────────────────────────────────────── */
+
+.sec__table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.sec__table th:nth-child(1) { width: 86px; }
+.sec__table th:nth-child(2) { width: 150px; }
+.sec__table th:nth-child(4) { width: 30%; }
+
+.sec__when {
+  color: var(--text-subtle);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The query is the point of the row, so it gets the weight and the space.
+   Wrapped rather than truncated: a blocked injection is often long, and
+   the interesting part is rarely at the front. */
+.sec__query {
+  color: var(--text-strong);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* The pattern that fired. Monospace because it is usually a regex, and
+   smaller because it is evidence rather than content.
+
+   Clamped to two lines: an injection pattern is 90 characters of regex
+   and set the height of the whole row, so the query — the thing the row
+   is actually about — was pushed into a narrow column beside it. The
+   full pattern is on hover, and in the API response. */
+.sec__detail {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  vertical-align: top;
+}
+
+/* The clamp goes on the span rather than the cell: `display: -webkit-box`
+   on a <td> overrides `display: table-cell`, and the row's borders then
+   stop being drawn across that column. */
+.sec__detail-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* ── Pills ─────────────────────────────────────────────────── */
+
+/* Two classes: .screen__pill is also on the element and sets its own
+   background at equal specificity. */
+.sec__pill.sec__pill--blocked {
+  color: var(--negative);
+  background: var(--color-danger-soft, rgba(201, 48, 74, 0.1));
+  border-color: var(--negative);
+  white-space: nowrap;
+}
+
+.sec__pill.sec__pill--masked {
+  color: var(--caution);
+  background: var(--caution-soft);
+  border-color: var(--caution);
+  white-space: nowrap;
+}
+
+/* ── A row that just arrived ───────────────────────────────── */
+
+/* The screen is watched while someone runs queries elsewhere, so a new
+   row has to announce itself. Fades out rather than staying marked: after
+   a few seconds it is just another row. */
+.sec__row--new td {
+  animation: sec-arrive 2.4s ease-out;
+}
+
+@keyframes sec-arrive {
+  0% { background: var(--accent-soft); }
+  100% { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sec__tally-live::before,
+  .sec__row--new td {
+    animation: none;
+  }
+}
+
+/* ── What was removed ──────────────────────────────────────── */
+
+/* Under the query rather than in a column of its own: it is a fact about
+   this query, and at 940px a fifth column would squeeze the query itself
+   into something unreadable.
+
+   Field names only. The value is what the guard took out; printing it
+   here would put it straight back. */
+.sec__removed {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.sec__removed-field {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 1px 7px;
+  color: var(--caution);
+  background: var(--caution-soft);
+  border: 1px solid var(--caution);
+  border-radius: 3px;
+}
+
+/* The rule that produced the outcome, under the pill. Secondary type:
+   the outcome is what the row is read for, the rule is why. */
+.sec__rule {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}

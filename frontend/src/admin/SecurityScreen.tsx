@@ -122,7 +122,7 @@ export function SecurityScreen() {
                 <th>When</th>
                 <th>Outcome</th>
                 <th>Query</th>
-                <th>How it was detected</th>
+                <th>Detected by</th>
               </tr>
             </thead>
             <tbody>

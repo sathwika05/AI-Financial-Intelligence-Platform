@@ -56,6 +56,14 @@ class BenchmarkJudges:
     ragas_embeddings: Any
     sql_llm: Any
 
+    # Plain chat model for the claim splitter and the claim judge.
+    #
+    # Neither goes through ragas, so neither wants a wrapper: they send a
+    # prompt and read the text back. Same JUDGE_MODEL as the others, so a
+    # run against OpenAI and one against Anthropic are audited by the same
+    # judge and their claim rates stay comparable.
+    claim_llm: Any
+
 
 @lru_cache(maxsize=1)
 @log_span()
@@ -93,4 +101,5 @@ def get_default_judges() -> BenchmarkJudges:
             provider="openai",
             client=AsyncOpenAI(),
         ),
+        claim_llm=judge_chat_model,
     )

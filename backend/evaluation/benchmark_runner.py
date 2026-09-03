@@ -39,9 +39,12 @@ from backend.evaluation.evaluators.sql_evaluator import (
 from backend.evaluation.evaluators.tool_evaluator import (
     ToolEvaluator,
 )
+from backend.evaluation.claims.audit import ClaimAudit
+from backend.evaluation.claims.runner import audit_answer
 from backend.evaluation.judges import (
     BenchmarkJudges,
     get_default_judges,
+    JUDGE_MODEL,
 )
 from backend.evaluation.schemas import (
     BenchmarkConfig,
@@ -409,6 +412,13 @@ class BenchmarkRunner:
                     )
                 )
 
+            # After scoring, and outside evaluator_results: the audit is
+            # an additional measurement, not a seventh evaluator.
+            claim_audit = await self._audit_claims(
+                answer=execution.final_answer,
+                execution=execution,
+            )
+
             question_result = QuestionEvaluationResult(
                 question_id=question.question_id,
                 question=question.question,
@@ -416,6 +426,7 @@ class BenchmarkRunner:
                 actual_intent=execution.actual_intent,
                 execution=execution,
                 evaluator_results=evaluator_results,
+                claim_audit=claim_audit,
             )
 
             question_result = finalize_question_result(
@@ -723,6 +734,48 @@ class BenchmarkRunner:
                 )
 
         return output
+
+    async def _audit_claims(
+        self,
+        *,
+        answer: Any,
+        execution: Any,
+        splitter=None,
+        judge=None,
+    ) -> ClaimAudit:
+        """
+        Extract this answer's factual claims and check them against the
+        evidence the question actually retrieved.
+
+        Deliberately not an evaluator. finalize_question_result averages
+        every applicable evaluator into overall_score and fails the
+        question if one reports passed=False, so an audit placed there
+        would re-score questions already benchmarked. This returns a
+        record that rides alongside and votes on nothing.
+
+        Never raises. The question has been scored by the time this runs,
+        and a judge outage must cost the run its claim rows and nothing
+        else.
+        """
+        call = splitter or self._claim_caller()
+
+        return await audit_answer(
+            answer=self._answer_to_text(answer),
+            execution=execution,
+            splitter=call,
+            judge=judge or call,
+            evaluator_model=JUDGE_MODEL,
+        )
+
+    def _claim_caller(self):
+        """A plain async prompt-in, text-out call on the fixed judge."""
+
+        async def call(prompt: str) -> str:
+            response = await self.judges.claim_llm.ainvoke(prompt)
+
+            return getattr(response, "content", str(response))
+
+        return call
 
     @staticmethod
     def _answer_to_text(

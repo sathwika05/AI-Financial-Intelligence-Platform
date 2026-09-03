@@ -7,6 +7,10 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
+# Safe to import: claims.audit depends on pydantic only, so there is no
+# cycle back into this module.
+from backend.evaluation.claims.audit import ClaimAudit
+
 
 class IntentType(str, Enum):
     """Supported financial query routes."""
@@ -253,6 +257,15 @@ class QuestionEvaluationResult(BaseModel):
         str,
         EvaluatorResult,
     ] = Field(default_factory=dict)
+
+    # Claim-level grounding, deliberately outside evaluator_results.
+    #
+    # finalize_question_result averages every applicable evaluator into
+    # overall_score and fails the question if any reports passed=False, so
+    # an audit placed in that dict would re-score every question already
+    # benchmarked. Here it is carried alongside, scores nothing, and votes
+    # on nothing — see tests/test_claim_audit_does_not_gate.py.
+    claim_audit: ClaimAudit | None = None
 
     # Flattened evaluator metrics for future detailed persistence.
     aggregate_metrics: dict[str, Any] = Field(

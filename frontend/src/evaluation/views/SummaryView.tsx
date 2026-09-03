@@ -28,6 +28,7 @@ import {
   titleCase,
 } from "../format";
 import { readMetric } from "../metrics";
+import { ClaimTiles } from "../components/ClaimTiles";
 import { RetrievalPipelineDiagram } from "../components/RetrievalPipelineDiagram";
 import { DonutChart, GroupedBarChart, LineChart } from "../components/charts";
 import {
@@ -285,6 +286,12 @@ export function SummaryView({
           tone="cyan"
           label="Context Recall (Avg)"
         />
+
+        {/* Claim-level grounding. Its own component rather than four more
+            KpiTiles: these come from the claims endpoint, not from
+            RunMetrics, and folding them into the metric catalogue would
+            mean widening a type the rest of the dashboard reads. */}
+        <ClaimTiles runId={run.run_id} />
       </div>
 
       {/* The panel order below follows the design reference exactly:

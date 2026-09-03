@@ -57,6 +57,7 @@ from backend.observability.logging import (
     benchmark_run as benchmark_run_tag,
     log_span,
 )
+from backend.evaluation.claims.store import upsert_claims
 from backend.services.postgres_service import (
     AsyncSessionLocal,
     get_db,

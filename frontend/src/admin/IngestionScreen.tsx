@@ -141,9 +141,20 @@ function UploadPanel() {
       </p>
 
       <form className="screen__card" onSubmit={submit}>
-        <label className="screen__field">
-          <span className="screen__label">File</span>
+        {/* htmlFor rather than wrapping, unlike the select below.
+            Clicking a file input opens the picker and then bubbles to its
+            label, whose activation behaviour clicks the input again and
+            asks for a second picker. Each request cancels the one before
+            it, so the dialog flickers or never opens and Choose File
+            looks dead -- one interaction produced 22 chooser events.
+            An id association gives the same clickable caption and the
+            same accessible name with no second activation. */}
+        <div className="screen__field">
+          <label className="screen__label" htmlFor="upload-file">
+            File
+          </label>
           <input
+            id="upload-file"
             className="screen__input"
             type="file"
             accept=".pdf,.htm,.html"
@@ -158,7 +169,7 @@ function UploadPanel() {
             so a large PDF takes minutes — the processing list below says
             how it went.
           </span>
-        </label>
+        </div>
 
         <label className="screen__field">
           <span className="screen__label">Company (optional)</span>

@@ -670,6 +670,84 @@ class QuestionResult(Base):
     )
 
 
+class ClaimEvaluation(Base):
+    """
+    One factual claim from one benchmark answer, and how it was judged.
+
+    Separate from question_results, and deliberately not part of the
+    benchmark's pass/fail. A question can pass every evaluator while
+    asserting a figure no retrieved document carries; that is the failure
+    this table exists to count.
+
+    The evidence is stored per row rather than referenced. PipelineExecution
+    is not persisted anywhere -- question_results keeps scores and evaluator
+    details only -- so without a copy here the validation page could show a
+    claim but never what it was judged against, and a label given without
+    the evidence beside it is not worth recording.
+
+    human_label is written only by a person, through the validation page.
+    Re-running the evaluator overwrites evaluator_label and leaves the human
+    column alone: the whole point is to compare the two, which is impossible
+    if one can silently overwrite the other.
+    """
+
+    __tablename__ = "claim_evaluations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("benchmark_runs.run_id"),
+        index=True,
+    )
+
+    question_id = Column(String, nullable=False, index=True)
+
+    # The expected intent, copied so the validation page can group by route
+    # without joining back to question_results.
+    route = Column(String)
+
+    claim_index = Column(Integer, nullable=False)
+
+    # What was judged: intensifiers stripped.
+    claim = Column(Text, nullable=False)
+
+    # What the answer actually said, so a human reads the sentence rather
+    # than the reduction of it.
+    original = Column(Text)
+
+    # Numeric claims are held to the strict arithmetic rule, so which ones
+    # they were has to survive into the row.
+    is_numeric = Column(Boolean, default=False, index=True)
+    numeric_values = Column(JSON, default=list)
+
+    evidence = Column(JSON, default=list)
+
+    evaluator_label = Column(String(24), nullable=False, index=True)
+    evaluator_reasoning = Column(Text)
+    evaluator_model = Column(String)
+
+    # Never written by the evaluator.
+    human_label = Column(String(24), nullable=True, index=True)
+    human_labeled_by = Column(String, nullable=True)
+    human_labeled_at = Column(DateTime, nullable=True)
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        # A claim appears once per run, so re-persisting a run updates its
+        # rows rather than accumulating duplicates.
+        UniqueConstraint(
+            "run_id",
+            "question_id",
+            "claim_index",
+            name="uq_claim_evaluations_run_question_index",
+        ),
+    )
+
+
 class PipelineTrace(Base):
     """One row per graph node per run."""
 

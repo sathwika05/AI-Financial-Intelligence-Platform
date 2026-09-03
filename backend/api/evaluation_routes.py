@@ -907,6 +907,18 @@ async def _upsert_question_results(
     }
 
     for result in question_results:
+        # Claim rows live in their own table and are written beside the
+        # question rather than inside it: evaluator_results is the
+        # benchmark's record, and the audit is deliberately not part of it.
+        if result.claim_audit is not None:
+            await upsert_claims(
+                session,
+                run_id=run_id,
+                question_id=result.question_id,
+                route=str(result.expected_intent),
+                audit=result.claim_audit,
+            )
+
         values = {
             "question": result.question,
             "expected_intent": str(

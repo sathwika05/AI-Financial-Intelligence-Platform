@@ -14,6 +14,7 @@ import {
   Layers3,
   Search,
   Settings,
+  ShieldCheck,
   Sparkles,
   Target,
   TrendingUp,
@@ -103,6 +104,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Analytics",
     items: [
       { id: "per-question", label: "Per-Question Results", icon: Target },
+      { id: "validation", label: "Evaluator Validation", icon: ShieldCheck },
       { id: "models", label: "Model Comparison", icon: BarChart3 },
       { id: "retrieval", label: "Retrieval Comparison", icon: Activity },
     ],

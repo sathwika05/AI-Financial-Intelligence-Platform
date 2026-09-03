@@ -1448,3 +1448,180 @@
   flex: none;
   opacity: 0.85;
 }
+
+/* ── Evaluator validation ───────────────────────────────────────────────
+   The labelling table and the agreement strip above it. Scoped to cl-* so
+   nothing here reaches the run tables that share .ev-table. Colours come
+   from the dashboard's own tokens rather than new literals. */
+
+.cl-agree {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  border: 1px solid var(--ev-line);
+  border-radius: 10px;
+  background: var(--ev-surface-2);
+}
+
+.cl-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cl-figure__label {
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ev-text-dim);
+}
+
+.cl-figure__value {
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ev-text);
+}
+
+/* False negatives: fabrications the evaluator waved through. The one
+   figure on the strip that should catch the eye. */
+.cl-figure__value--bad {
+  color: var(--ev-down);
+}
+
+.cl-table td {
+  vertical-align: top;
+}
+
+.cl-claim {
+  display: block;
+  line-height: 1.45;
+  max-width: 40ch;
+}
+
+.cl-numeric {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ev-warn);
+  background: rgba(243, 163, 26, 0.13);
+}
+
+.cl-meta {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--ev-text-dim);
+}
+
+.cl-reason {
+  display: block;
+  margin-top: 6px;
+  max-width: 34ch;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ev-text-muted);
+}
+
+.cl-ev summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ev-text-dim);
+}
+
+.cl-ev ul {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  max-width: 46ch;
+}
+
+.cl-ev li {
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ev-text-muted);
+  word-break: break-word;
+}
+
+.cl-pill {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cl-pill--supported {
+  color: var(--ev-up);
+  background: rgba(32, 212, 108, 0.13);
+}
+
+.cl-pill--unsupported {
+  color: var(--ev-down);
+  background: rgba(255, 86, 94, 0.13);
+}
+
+.cl-pill--insufficient_evidence {
+  color: var(--ev-warn);
+  background: rgba(243, 163, 26, 0.13);
+}
+
+.cl-pill--none {
+  color: var(--ev-text-dim);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cl-choose {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cl-btn {
+  padding: 4px 9px;
+  border: 1px solid var(--ev-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ev-text-muted);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cl-btn:hover:not(:disabled) {
+  color: var(--ev-text);
+  border-color: var(--ev-line-strong);
+}
+
+.cl-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cl-btn--on {
+  color: #fff;
+  border-color: transparent;
+  background: var(--ev-violet);
+}
+
+.cl-waiting {
+  padding: 30px 22px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ev-text-dim);
+}
+
+.ev-lede {
+  margin: 0 0 16px;
+  max-width: 78ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ev-text-muted);
+}

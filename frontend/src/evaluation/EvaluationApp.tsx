@@ -17,6 +17,7 @@ import { ErrorView } from "./views/ErrorView";
 import { GroupView } from "./views/GroupView";
 import { MetricsView } from "./views/MetricsView";
 import { PerQuestionView } from "./views/PerQuestionView";
+import { ValidationView } from "./views/ValidationView";
 import { ProvidersView } from "./views/ProvidersView";
 import { RetrievalModesView } from "./views/RetrievalModesView";
 import { RunsView } from "./views/RunsView";
@@ -152,6 +153,9 @@ export default function EvaluationApp({ user }: { user: SessionUser }) {
 
       case "per-question":
         return <PerQuestionView run={selectedRun} />;
+
+      case "validation":
+        return <ValidationView run={selectedRun} />;
 
       case "settings":
         return <SettingsView runs={runs} />;

@@ -418,3 +418,98 @@ export function listProviderModels(
     signal,
   );
 }
+
+/* -------------------------------------------------------------------------
+ * Claim-level grounding
+ *
+ * A separate surface from the run metrics: the rates are computed from
+ * claim rows on read rather than stored on the run, because a human
+ * relabelling a claim has to move the numbers immediately.
+ * ---------------------------------------------------------------------- */
+
+export type ClaimLabel = "SUPPORTED" | "UNSUPPORTED" | "INSUFFICIENT_EVIDENCE";
+
+export interface ClaimRow {
+  id: number;
+  run_id: string | null;
+  question_id: string;
+  route: string | null;
+  claim_index: number;
+  /** What was judged, with unquantified intensifiers removed. */
+  claim: string;
+  /** What the answer actually said. */
+  original: string | null;
+  is_numeric: boolean;
+  numeric_values: string[];
+  evidence: string[];
+  evaluator_label: ClaimLabel;
+  evaluator_reasoning: string | null;
+  evaluator_model: string | null;
+  human_label: ClaimLabel | null;
+  human_labeled_by: string | null;
+  human_labeled_at: string | null;
+}
+
+export interface ClaimSummary {
+  total_claims: number;
+  supported: number;
+  unsupported: number;
+  insufficient_evidence: number;
+  claim_support_rate: number;
+  unsupported_fact_rate: number;
+
+  validated_claims: number;
+  agreement: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  false_positives: number;
+  false_negatives: number;
+}
+
+export function getRunClaims(
+  runId: string,
+  options: { unlabeled?: boolean; label?: ClaimLabel } = {},
+  signal?: AbortSignal,
+): Promise<ClaimRow[]> {
+  const query = new URLSearchParams();
+
+  if (options.unlabeled) query.set("unlabeled", "true");
+  if (options.label) query.set("label", options.label);
+
+  const suffix = query.toString() ? `?${query}` : "";
+
+  return request<ClaimRow[]>(
+    `/api/evaluation/runs/${runId}/claims${suffix}`,
+    {},
+    signal,
+  );
+}
+
+export function getClaimSummary(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ClaimSummary> {
+  return request<ClaimSummary>(
+    `/api/evaluation/runs/${runId}/claims/summary`,
+    {},
+    signal,
+  );
+}
+
+/** Record one human verdict. Never touches the evaluator's own label. */
+export function saveClaimLabel(
+  claimId: number,
+  label: ClaimLabel,
+  signal?: AbortSignal,
+): Promise<ClaimRow> {
+  return request<ClaimRow>(
+    `/api/evaluation/claims/${claimId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ human_label: label }),
+    },
+    signal,
+  );
+}

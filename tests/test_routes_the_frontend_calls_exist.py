@@ -78,13 +78,33 @@ class TestEveryPathTheDashboardCallsExists:
 
         missing = sorted(
             path for path in _paths_the_frontend_calls()
-            if path not in served
+            if not _is_served(path, served)
         )
 
         assert not missing, (
             f"the dashboard calls these, and the app does not serve them: "
             f"{missing}"
         )
+
+
+def _is_served(path: str, served: set[str]) -> bool:
+    """
+    Whether the app serves this path, or a route continuing from it.
+
+    _paths_the_frontend_calls cuts a template at the first ${, so
+    `/api/evaluation/claims/${claimId}` arrives here as
+    `/api/evaluation/claims` -- a prefix of the real route rather than a
+    route itself. Treating that as missing reports a 404 that cannot
+    happen, so a served route continuing with a path parameter counts.
+
+    Deliberately narrow: only `<path>/{` matches, so `/api/evaluation` is
+    still not satisfied by `/api/evaluation/runs`. A truncated call has to
+    reach an actual route's parameter, not merely share a namespace.
+    """
+    if path in served:
+        return True
+
+    return any(route.startswith(f"{path}/{{") for route in served)
 
 
 def _paths_the_frontend_calls() -> set[str]:

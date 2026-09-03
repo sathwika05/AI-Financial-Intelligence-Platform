@@ -1491,9 +1491,26 @@
   color: var(--ev-down);
 }
 
-.cl-table td {
-  vertical-align: top;
+.cl-table {
+  /* Fixed layout, so a long reasoning string cannot widen its column and
+     push the controls out from under the header they belong to. Every
+     cell wraps inside the width the header declares. */
+  table-layout: fixed;
+  width: 100%;
 }
+
+.cl-table td,
+.cl-table th {
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.cl-table th:nth-child(1), .cl-table td:nth-child(1) { width: 30%; }
+.cl-table th:nth-child(2), .cl-table td:nth-child(2) { width: 10%; }
+.cl-table th:nth-child(3), .cl-table td:nth-child(3) { width: 34%; }
+.cl-table th:nth-child(4), .cl-table td:nth-child(4) { width: 18%; }
+.cl-table th:nth-child(5), .cl-table td:nth-child(5) { width: 8%; }
 
 .cl-claim {
   display: block;
@@ -1523,7 +1540,6 @@
 .cl-reason {
   display: block;
   margin-top: 6px;
-  max-width: 34ch;
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--ev-text-muted);
@@ -1578,38 +1594,18 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-.cl-choose {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.cl-btn {
-  padding: 4px 9px;
+.cl-select {
+  width: 100%;
+  padding: 6px 8px;
   border: 1px solid var(--ev-line);
   border-radius: 6px;
-  background: transparent;
-  color: var(--ev-text-muted);
-  font-size: 11.5px;
-  text-align: left;
+  background: var(--ev-control);
+  color: var(--ev-text);
+  font-size: 12px;
   cursor: pointer;
 }
 
-.cl-btn:hover:not(:disabled) {
-  color: var(--ev-text);
-  border-color: var(--ev-line-strong);
-}
-
-.cl-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.cl-btn--on {
-  color: #fff;
-  border-color: transparent;
-  background: var(--ev-violet);
-}
+.cl-select:disabled { opacity: 0.5; cursor: default; }
 
 .cl-waiting {
   padding: 30px 22px;

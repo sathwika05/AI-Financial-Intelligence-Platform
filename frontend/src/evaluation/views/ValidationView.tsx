@@ -225,21 +225,27 @@ export function ValidationView({ run }: { run: RunMetrics | null }) {
                     </td>
 
                     <td>
-                      <div className="cl-choose">
+                      {/* One select rather than three stacked buttons.
+                          The buttons were three rows tall in a table whose
+                          other cells are one, which is what let the
+                          evaluator's reasoning overlap them. */}
+                      <select
+                        className="cl-select"
+                        value={row.human_label ?? ""}
+                        disabled={saving === row.id}
+                        aria-label={`Your label for: ${row.claim}`}
+                        onChange={(event) =>
+                          event.target.value &&
+                          label(row.id, event.target.value as ClaimLabel)
+                        }
+                      >
+                        <option value="">Not labelled</option>
                         {LABELS.map((option) => (
-                          <button
-                            key={option}
-                            type="button"
-                            className={`cl-btn${
-                              row.human_label === option ? " cl-btn--on" : ""
-                            }`}
-                            disabled={saving === row.id}
-                            onClick={() => label(row.id, option)}
-                          >
+                          <option key={option} value={option}>
                             {SHORT[option]}
-                          </button>
+                          </option>
                         ))}
-                      </div>
+                      </select>
                     </td>
 
                     <td className="ev-table__num">

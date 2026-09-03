@@ -32,6 +32,7 @@ import pytest
 from backend.evaluation.claims.policy import (
     Claim,
     classify_candidates,
+    is_about_the_evidence,
     is_speculative,
     numeric_values,
     strip_intensifiers,
@@ -228,3 +229,67 @@ class TestTheClaimRecord:
 
         with pytest.raises(Exception):
             claim.text = "something else"  # type: ignore[misc]
+
+
+class TestStatementsAboutTheEvidenceAreNotClaims:
+    """
+    An answer describes its own evidence, and those sentences are not
+    facts about a company.
+
+        "The available evidence supports the size ranking of NVIDIA."
+        "The evidence does not support a stronger recommendation."
+
+    Scoring the first as SUPPORTED is a tautology -- the evidence supports
+    what the evidence supports -- and it inflates the support rate with a
+    sentence that carries no financial claim at all. Measured on run
+    22347774: 15 of 130 extracted claims, 11%, and every one of them
+    resolved to SUPPORTED or INSUFFICIENT_EVIDENCE rather than telling
+    anyone anything.
+
+    Dropped and counted, like hedges, so the discard stays visible.
+    """
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "The available evidence supports the size ranking of NVIDIA.",
+            "The evidence does not support a stronger investment recommendation.",
+            "The limited evidence warrants a neutral recommendation.",
+            "The retrieved documents do not mention margins.",
+            "No document discusses Apple's guidance.",
+            "The available evidence is insufficient for a conviction recommendation.",
+        ],
+    )
+    def test_meta_statements_are_recognised(self, text):
+        assert is_about_the_evidence(text) is True
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "NVIDIA ranks first by market capitalization.",
+            "Revenue grew 12% year over year.",
+            "Margins improved.",
+            "Apple's market capitalization is $4,543,167,856,640.",
+            "Intel supports a lower valuation multiple than NVIDIA.",
+        ],
+    )
+    def test_real_claims_are_not_swept_up(self, text):
+        """
+        "supports" and "evidence" appear in ordinary financial prose. The
+        rule has to key on the sentence being *about* the evidence, not on
+        the words appearing anywhere in it.
+        """
+        assert is_about_the_evidence(text) is False
+
+    def test_they_are_dropped_and_counted(self):
+        result = classify_candidates(
+            [
+                "NVIDIA ranks first by market capitalization.",
+                "The available evidence supports the size ranking of NVIDIA.",
+            ]
+        )
+
+        assert [claim.text for claim in result.claims] == [
+            "NVIDIA ranks first by market capitalization."
+        ]
+        assert result.dropped_count == 1

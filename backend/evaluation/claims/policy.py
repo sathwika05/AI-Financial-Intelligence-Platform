@@ -64,6 +64,34 @@ INTENSIFIERS: tuple[str, ...] = (
     "meaningfully",
 )
 
+# Sentences whose subject is the evidence rather than a company.
+#
+# "The available evidence supports the size ranking of NVIDIA" is a
+# tautology once scored -- the evidence supports what the evidence
+# supports -- and it says nothing about a company. Measured on run
+# 22347774, 15 of 130 extracted claims were this shape, 11%, and every one
+# landed on SUPPORTED or INSUFFICIENT_EVIDENCE while carrying no financial
+# assertion at all.
+#
+# Anchored at the start of the sentence, deliberately. Keying on the words
+# appearing anywhere would swallow "Intel supports a lower valuation
+# multiple than NVIDIA", which is a real comparison.
+_ABOUT_EVIDENCE = re.compile(
+    r"""
+    ^\s*
+    (?:
+        (?:the\s+)?
+        (?:available|retrieved|limited|provided|supplied)?\s*
+        (?:evidence|context|documents?|filings?|sources?)\b
+      | no\s+(?:document|documents|evidence|data|filing|filings)\b
+      | there\s+(?:is|are)\s+no\s+(?:evidence|documents?|data)\b
+      | nothing\s+(?:in\s+the\s+)?(?:retrieved|evidence|documents?)\b
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
 # A figure the claim asserts: percentage, currency amount, or bare decimal.
 #
 # Ordered longest-form-first so "$2.9" is not read as a bare "2.9", and
@@ -123,6 +151,17 @@ def is_speculative(text: str) -> bool:
     )
 
 
+def is_about_the_evidence(text: str) -> bool:
+    """
+    Whether this sentence describes the evidence rather than a company.
+
+    The answer narrates its own sourcing, and those sentences are not
+    facts anyone can check about a business. Scoring them inflates the
+    support rate with statements that are true by construction.
+    """
+    return bool(_ABOUT_EVIDENCE.match(text or ""))
+
+
 def strip_intensifiers(text: str) -> str:
     """
     Remove unquantified degree adverbs, leaving the checkable assertion.
@@ -173,7 +212,7 @@ def classify_candidates(candidates: list[str]) -> ClaimSet:
         if not text:
             continue
 
-        if is_speculative(text):
+        if is_speculative(text) or is_about_the_evidence(text):
             dropped.append(text)
             continue
 

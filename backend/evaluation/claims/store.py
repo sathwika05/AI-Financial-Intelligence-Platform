@@ -19,12 +19,12 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.evaluation.claims.audit import ClaimAudit
 from backend.evaluation.claims.checker import LABELS
-from backend.models.db_models import ClaimEvaluation
+from backend.models.db_models import ClaimEvaluation, QuestionResult
 
 
 # Columns the evaluator owns. Listed explicitly so that adding a human
@@ -42,8 +42,12 @@ _EVALUATOR_COLUMNS = (
 )
 
 
-def _as_dict(row: ClaimEvaluation) -> dict[str, Any]:
+def _as_dict(row: ClaimEvaluation, question: str | None = None) -> dict[str, Any]:
     return {
+        # The question the claim came from, joined in rather than stored
+        # per row. A claim cannot be labelled without it: "Chevron ranks
+        # second" means nothing until you know what was asked.
+        "question": question,
         "id": row.id,
         "run_id": str(row.run_id) if row.run_id else None,
         "question_id": row.question_id,
@@ -108,22 +112,27 @@ async def upsert_claims(
             setattr(record, column, values[column])
 
 
-async def claims_for_run(
-    session: AsyncSession,
+def _filtered(
+    query: Any,
     *,
     run_id: UUID,
-    label: str | None = None,
-    unlabeled: bool = False,
-    limit: int | None = None,
-) -> list[dict[str, Any]]:
+    label: str | None,
+    unlabeled: bool,
+    labeled: bool,
+) -> Any:
     """
-    One run's claims, ordered so a labelling session stays put.
+    Apply the queue's filters to a select.
 
-    Ordered by question then claim index rather than by id: a re-run
-    replaces rows in place, and ordering by id would reshuffle the page
-    under someone halfway through labelling fifty of them.
+    Shared by the page and its count. Written once because the two
+    drifting apart produces the worst version of this screen: a header
+    promising rows that the list does not contain.
     """
-    query = select(ClaimEvaluation).where(ClaimEvaluation.run_id == run_id)
+    if labeled and unlabeled:
+        raise ValueError(
+            "labeled and unlabeled are complements; pass at most one"
+        )
+
+    query = query.where(ClaimEvaluation.run_id == run_id)
 
     if label:
         query = query.where(ClaimEvaluation.evaluator_label == label)
@@ -131,17 +140,90 @@ async def claims_for_run(
     if unlabeled:
         query = query.where(ClaimEvaluation.human_label.is_(None))
 
+    if labeled:
+        query = query.where(ClaimEvaluation.human_label.is_not(None))
+
+    return query
+
+
+async def claims_for_run(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    label: str | None = None,
+    unlabeled: bool = False,
+    labeled: bool = False,
+    offset: int = 0,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """
+    One run's claims, ordered so a labelling session stays put.
+
+    `labeled` and `unlabeled` are complements and cannot both be set. A
+    caller passing both has a bug, and quietly returning nothing would
+    hide it behind an empty screen.
+
+    Ordered by question then claim index rather than by id: a re-run
+    replaces rows in place, and ordering by id would reshuffle the page
+    under someone halfway through labelling fifty of them.
+    """
+    query = _filtered(
+        select(ClaimEvaluation),
+        run_id=run_id,
+        label=label,
+        unlabeled=unlabeled,
+        labeled=labeled,
+    )
+
     query = query.order_by(
         ClaimEvaluation.question_id,
         ClaimEvaluation.claim_index,
     )
 
+    if offset:
+        query = query.offset(offset)
+
     if limit:
         query = query.limit(limit)
 
+    # Outer join: a claim whose question row is missing — an older run, or
+    # a persist that failed after the claims landed — must still load. The
+    # caption is worth less than the claim.
+    query = query.add_columns(QuestionResult.question).outerjoin(
+        QuestionResult,
+        (QuestionResult.run_id == ClaimEvaluation.run_id)
+        & (QuestionResult.question_id == ClaimEvaluation.question_id),
+    )
+
     result = await session.execute(query)
 
-    return [_as_dict(row) for row in result.scalars().all()]
+    return [_as_dict(row, question) for row, question in result.all()]
+
+
+async def count_claims_for_run(
+    session: AsyncSession,
+    *,
+    run_id: UUID,
+    label: str | None = None,
+    unlabeled: bool = False,
+    labeled: bool = False,
+) -> int:
+    """
+    How many claims match, ignoring the page.
+
+    "Showing 1-25 of 1072" needs the 1072, and a page of 25 cannot supply
+    it. Runs through the same _filtered helper as the page itself, so the
+    count and the rows can never describe different sets.
+    """
+    query = _filtered(
+        select(func.count()).select_from(ClaimEvaluation),
+        run_id=run_id,
+        label=label,
+        unlabeled=unlabeled,
+        labeled=labeled,
+    )
+
+    return int((await session.execute(query)).scalar_one())
 
 
 async def save_human_label(

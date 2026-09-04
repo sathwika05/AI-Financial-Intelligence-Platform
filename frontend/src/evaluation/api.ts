@@ -433,6 +433,8 @@ export interface ClaimRow {
   id: number;
   run_id: string | null;
   question_id: string;
+  /** The question this claim's answer was responding to. */
+  question: string | null;
   route: string | null;
   claim_index: number;
   /** What was judged, with unquantified intensifiers removed. */
@@ -467,19 +469,36 @@ export interface ClaimSummary {
   false_negatives: number;
 }
 
+/** One page of claims, and the size of the set it was cut from. */
+export interface ClaimPage {
+  items: ClaimRow[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export function getRunClaims(
   runId: string,
-  options: { unlabeled?: boolean; label?: ClaimLabel } = {},
+  options: {
+    unlabeled?: boolean;
+    labeled?: boolean;
+    label?: ClaimLabel;
+    offset?: number;
+    limit?: number;
+  } = {},
   signal?: AbortSignal,
-): Promise<ClaimRow[]> {
+): Promise<ClaimPage> {
   const query = new URLSearchParams();
 
   if (options.unlabeled) query.set("unlabeled", "true");
+  if (options.labeled) query.set("labeled", "true");
   if (options.label) query.set("label", options.label);
+  if (options.offset) query.set("offset", String(options.offset));
+  if (options.limit) query.set("limit", String(options.limit));
 
   const suffix = query.toString() ? `?${query}` : "";
 
-  return request<ClaimRow[]>(
+  return request<ClaimPage>(
     `/api/evaluation/runs/${runId}/claims${suffix}`,
     {},
     signal,

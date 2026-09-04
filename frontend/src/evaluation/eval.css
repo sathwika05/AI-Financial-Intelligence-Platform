@@ -1621,3 +1621,84 @@
   line-height: 1.55;
   color: var(--ev-text-muted);
 }
+
+/* Filter row above the claims table. Server-side filters, so the counts
+   beside them are the real totals rather than what happens to be loaded. */
+.cl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--ev-line);
+  border-radius: 8px;
+  background: var(--ev-surface-2);
+}
+
+.cl-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ev-text-dim);
+}
+
+.cl-filter select {
+  padding: 5px 8px;
+  border: 1px solid var(--ev-line);
+  border-radius: 6px;
+  background: var(--ev-control);
+  color: var(--ev-text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.cl-filters__count {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ev-text-dim);
+}
+
+/* Pager under the claims table. */
+.cl-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 14px 0 4px;
+}
+
+.cl-page {
+  padding: 6px 14px;
+  border: 1px solid var(--ev-line);
+  border-radius: 6px;
+  background: var(--ev-control);
+  color: var(--ev-text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.cl-page:hover:not(:disabled) { border-color: var(--ev-line-strong); }
+.cl-page:disabled { opacity: 0.4; cursor: default; }
+
+.cl-pager__at {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ev-text-dim);
+}
+
+/* The question a claim answers, above the claim itself. Quieter than the
+   claim — it is context for the judgement, not the thing being judged. */
+.cl-question {
+  display: block;
+  margin-bottom: 7px;
+  padding-left: 9px;
+  border-left: 2px solid var(--ev-line-strong);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ev-text-dim);
+}

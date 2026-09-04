@@ -96,7 +96,7 @@ class TestListingClaims:
         )
 
         assert response.status_code == 200
-        assert len(response.json()) == 3
+        assert len(response.json()["items"]) == 3
 
     async def test_a_claim_carries_its_evidence_and_reasoning(
         self, client, seeded
@@ -106,7 +106,7 @@ class TestListingClaims:
             await client.get(
                 f"/api/evaluation/runs/{seeded}/claims", headers=_headers()
             )
-        ).json()[0]
+        ).json()["items"][0]
 
         assert row["evidence"] == ["[document] a chunk"]
         assert row["evaluator_reasoning"] == "because"
@@ -119,7 +119,7 @@ class TestListingClaims:
             headers=_headers(),
         )
 
-        assert len(response.json()) == 3
+        assert len(response.json()["items"]) == 3
 
     async def test_a_label_filter_is_applied(self, client, seeded):
         response = await client.get(
@@ -127,7 +127,7 @@ class TestListingClaims:
             headers=_headers(),
         )
 
-        assert len(response.json()) == 1
+        assert len(response.json()["items"]) == 1
 
     async def test_an_analyst_is_refused(self, client, seeded):
         """
@@ -203,7 +203,7 @@ class TestLabelling:
             await client.get(
                 f"/api/evaluation/runs/{run_id}/claims", headers=_headers()
             )
-        ).json()
+        ).json()["items"]
 
         return rows[0]["id"]
 
@@ -302,3 +302,132 @@ class TestLabelling:
         )
 
         assert response.status_code in (401, 403)
+
+
+class TestTheLabellingFilters:
+    async def test_unlabelled_is_the_default_queue(self, client, seeded):
+        response = await client.get(
+            f"/api/evaluation/runs/{seeded}/claims?unlabeled=true",
+            headers=_headers(),
+        )
+
+        assert len(response.json()["items"]) == 3
+
+    async def test_labelled_comes_back_separately(self, client, seeded):
+        rows = (
+            await client.get(
+                f"/api/evaluation/runs/{seeded}/claims", headers=_headers()
+            )
+        ).json()["items"]
+
+        await client.patch(
+            f"/api/evaluation/claims/{rows[0]['id']}",
+            json={"human_label": "SUPPORTED"},
+            headers=_headers(),
+        )
+
+        done = (
+            await client.get(
+                f"/api/evaluation/runs/{seeded}/claims?labeled=true",
+                headers=_headers(),
+            )
+        ).json()
+        todo = (
+            await client.get(
+                f"/api/evaluation/runs/{seeded}/claims?unlabeled=true",
+                headers=_headers(),
+            )
+        ).json()
+
+        assert len(done["items"]) == 1
+        assert len(todo["items"]) == 2
+
+    async def test_the_filters_combine(self, client, seeded):
+        """"Unsupported claims I have not read yet" — the real query."""
+        response = await client.get(
+            f"/api/evaluation/runs/{seeded}/claims"
+            "?label=UNSUPPORTED&unlabeled=true",
+            headers=_headers(),
+        )
+
+        assert len(response.json()["items"]) == 1
+
+    async def test_both_halves_at_once_is_refused(self, client, seeded):
+        response = await client.get(
+            f"/api/evaluation/runs/{seeded}/claims?labeled=true&unlabeled=true",
+            headers=_headers(),
+        )
+
+        assert response.status_code == 422
+
+    async def test_the_page_is_small_by_default(self, client, seeded):
+        """
+        Paged rather than whole. The header's total comes from `total`,
+        so a small page no longer means a truncated screen.
+        """
+        import inspect
+
+        from backend.api import claim_routes
+
+        signature = inspect.signature(claim_routes.list_claims)
+
+        assert signature.parameters["limit"].default.default == 25
+
+
+class TestThePagedEnvelope:
+    async def test_the_page_reports_the_total_it_came_from(
+        self, client, seeded
+    ):
+        body = (
+            await client.get(
+                f"/api/evaluation/runs/{seeded}/claims?limit=1",
+                headers=_headers(),
+            )
+        ).json()
+
+        assert len(body["items"]) == 1
+        assert body["total"] == 3
+
+    async def test_offset_moves_the_window(self, client, seeded):
+        first = (
+            await client.get(
+                f"/api/evaluation/runs/{seeded}/claims?limit=1",
+                headers=_headers(),
+            )
+        ).json()["items"][0]
+
+        second = (
+            await client.get(
+                f"/api/evaluation/runs/{seeded}/claims?limit=1&offset=1",
+                headers=_headers(),
+            )
+        ).json()["items"][0]
+
+        assert first["id"] != second["id"]
+
+    async def test_the_total_follows_the_filter(self, client, seeded):
+        """
+        A filtered page must not advertise the unfiltered total, or Next
+        pages through rows that are not there.
+        """
+        body = (
+            await client.get(
+                f"/api/evaluation/runs/{seeded}/claims?label=UNSUPPORTED",
+                headers=_headers(),
+            )
+        ).json()
+
+        assert body["total"] == 1
+
+    async def test_paging_past_the_end_returns_an_empty_page(
+        self, client, seeded
+    ):
+        body = (
+            await client.get(
+                f"/api/evaluation/runs/{seeded}/claims?offset=99",
+                headers=_headers(),
+            )
+        ).json()
+
+        assert body["items"] == []
+        assert body["total"] == 3

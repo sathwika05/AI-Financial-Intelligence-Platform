@@ -14,6 +14,7 @@ from sqlalchemy import text
 from backend.evaluation.claims.audit import ClaimAudit, ClaimRecord
 from backend.evaluation.claims.store import (
     claims_for_run,
+    count_claims_for_run,
     save_human_label,
     upsert_claims,
 )
@@ -40,6 +41,10 @@ async def run_id():
     async with engine.begin() as conn:
         await conn.execute(
             text("DELETE FROM claim_evaluations WHERE run_id = :id"),
+            {"id": identifier},
+        )
+        await conn.execute(
+            text("DELETE FROM question_results WHERE run_id = :id"),
             {"id": identifier},
         )
         await conn.execute(
@@ -296,3 +301,223 @@ class TestReading:
         await db.commit()
 
         assert len(await claims_for_run(db, run_id=run_id, limit=1)) == 1
+
+
+class TestSeparatingLabelledFromUnlabelled:
+    """
+    The validation page needs both halves of the queue.
+
+    Labelling only the claims the judge called UNSUPPORTED measures
+    precision and nothing else: a fabrication the judge waved through as
+    SUPPORTED never appears in that filter, so recall stays unmeasurable.
+    Reading back what has already been labelled is how a session is
+    resumed without starting again.
+    """
+
+    async def _two(self, db, run_id):
+        await upsert_claims(
+            db, run_id=run_id, question_id="mixed_002",
+            route="MIXED", audit=audit(),
+        )
+        await db.commit()
+
+        rows = await claims_for_run(db, run_id=run_id)
+        await save_human_label(
+            db, claim_id=rows[0]["id"], label="SUPPORTED", labeled_by="me",
+        )
+        await db.commit()
+
+        return rows
+
+    async def test_only_the_labelled_come_back(self, db, run_id):
+        await self._two(db, run_id)
+
+        rows = await claims_for_run(db, run_id=run_id, labeled=True)
+
+        assert len(rows) == 1
+        assert rows[0]["human_label"] == "SUPPORTED"
+
+    async def test_only_the_unlabelled_come_back(self, db, run_id):
+        await self._two(db, run_id)
+
+        rows = await claims_for_run(db, run_id=run_id, unlabeled=True)
+
+        assert len(rows) == 1
+        assert rows[0]["human_label"] is None
+
+    async def test_the_two_halves_add_up_to_everything(self, db, run_id):
+        await self._two(db, run_id)
+
+        done = await claims_for_run(db, run_id=run_id, labeled=True)
+        todo = await claims_for_run(db, run_id=run_id, unlabeled=True)
+        every = await claims_for_run(db, run_id=run_id)
+
+        assert len(done) + len(todo) == len(every)
+
+    async def test_a_label_filter_combines_with_the_labelled_filter(
+        self, db, run_id
+    ):
+        """
+        "Unsupported claims I have not read yet" is the query a labelling
+        session actually runs.
+        """
+        await self._two(db, run_id)
+
+        rows = await claims_for_run(
+            db, run_id=run_id, label="SUPPORTED", unlabeled=True,
+        )
+
+        assert [r["claim_index"] for r in rows] == [1]
+
+    async def test_asking_for_both_halves_at_once_is_refused(self, db, run_id):
+        """
+        Labelled and unlabelled are complements. A caller passing both has
+        a bug, and silently returning nothing would hide it.
+        """
+        with pytest.raises(ValueError):
+            await claims_for_run(
+                db, run_id=run_id, labeled=True, unlabeled=True,
+            )
+
+
+class TestPaging:
+    """
+    A hundred-question run is over a thousand claims. Loading them all to
+    show twenty-five is wasteful, and a table that long is unusable — so
+    the queue is paged, and the page has to know the size of the set it is
+    a slice of.
+    """
+
+    async def _five(self, db, run_id):
+        await upsert_claims(
+            db, run_id=run_id, question_id="q1", route="MIXED", audit=audit(),
+        )
+        await upsert_claims(
+            db, run_id=run_id, question_id="q2", route="MIXED", audit=audit(),
+        )
+        await db.commit()
+
+    async def test_offset_skips_the_earlier_rows(self, db, run_id):
+        await self._five(db, run_id)
+
+        every = await claims_for_run(db, run_id=run_id)
+        second = await claims_for_run(db, run_id=run_id, offset=1, limit=1)
+
+        assert second[0]["id"] == every[1]["id"]
+
+    async def test_a_page_is_the_size_it_asked_for(self, db, run_id):
+        await self._five(db, run_id)
+
+        assert len(await claims_for_run(db, run_id=run_id, limit=2)) == 2
+
+    async def test_paging_past_the_end_is_empty_rather_than_an_error(
+        self, db, run_id
+    ):
+        await self._five(db, run_id)
+
+        assert await claims_for_run(db, run_id=run_id, offset=500) == []
+
+    async def test_the_pages_reconstruct_the_whole_set(self, db, run_id):
+        """Nothing lost or duplicated between page boundaries."""
+        await self._five(db, run_id)
+
+        every = [row["id"] for row in await claims_for_run(db, run_id=run_id)]
+
+        paged: list[int] = []
+        for offset in range(0, len(every), 2):
+            page = await claims_for_run(
+                db, run_id=run_id, offset=offset, limit=2
+            )
+            paged.extend(row["id"] for row in page)
+
+        assert paged == every
+
+    async def test_the_total_counts_the_set_not_the_page(self, db, run_id):
+        """
+        "1-25 of 1072" needs the 1072, and a page of 25 cannot supply it.
+        """
+        await self._five(db, run_id)
+
+        assert await count_claims_for_run(db, run_id=run_id) == 4
+
+    async def test_the_total_respects_the_filters(self, db, run_id):
+        """
+        Otherwise "showing 1-25 of 1072" appears above a filtered list of
+        three, and Next pages through nothing.
+        """
+        await self._five(db, run_id)
+
+        assert await count_claims_for_run(
+            db, run_id=run_id, label="UNSUPPORTED"
+        ) == 2
+
+
+class TestTheQuestionTravelsWithTheClaim:
+    """
+    A claim cannot be judged without the question behind it.
+
+    "Chevron ranks second, with revenue growth below EOG" is impossible to
+    label from `growth_cheap_30 · GROWTH` alone -- second among which
+    companies, and under what filter? The question text answers both.
+
+    Joined from question_results rather than copied onto every claim row:
+    one question produces around ten claims, and ten copies of the same
+    sentence is ten chances for them to disagree after a re-run.
+    """
+
+    async def _with_question(self, db, run_id):
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO question_results "
+                    "(run_id, question_id, question, expected_intent, passed) "
+                    "VALUES (:r, 'mixed_002', :q, 'MIXED', true)"
+                ),
+                {
+                    "r": run_id,
+                    "q": "Among companies trading below a P/E of 30, which "
+                         "five have the strongest revenue growth?",
+                },
+            )
+
+        await upsert_claims(
+            db, run_id=run_id, question_id="mixed_002",
+            route="MIXED", audit=audit(),
+        )
+        await db.commit()
+
+    async def test_the_question_text_comes_back_on_the_claim(
+        self, db, run_id
+    ):
+        await self._with_question(db, run_id)
+
+        rows = await claims_for_run(db, run_id=run_id)
+
+        assert rows[0]["question"].startswith("Among companies trading below")
+
+    async def test_every_claim_from_that_question_carries_it(
+        self, db, run_id
+    ):
+        await self._with_question(db, run_id)
+
+        rows = await claims_for_run(db, run_id=run_id)
+
+        assert len({row["question"] for row in rows}) == 1
+        assert len(rows) == 2
+
+    async def test_a_claim_with_no_question_row_still_loads(self, db, run_id):
+        """
+        The join must not drop claims. A question row can be missing --
+        an older run, or a persist that failed after the claims landed --
+        and losing the claim would be far worse than losing its caption.
+        """
+        await upsert_claims(
+            db, run_id=run_id, question_id="orphan_01",
+            route="MIXED", audit=audit(),
+        )
+        await db.commit()
+
+        rows = await claims_for_run(db, run_id=run_id)
+
+        assert len(rows) == 2
+        assert rows[0]["question"] is None

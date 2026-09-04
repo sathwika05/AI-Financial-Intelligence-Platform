@@ -24,7 +24,11 @@ from backend.auth.dependencies import require_role
 from backend.auth.roles import Role
 from backend.evaluation.claims.checker import LABELS
 from backend.evaluation.claims.metrics import agreement_stats, claim_rates
-from backend.evaluation.claims.store import claims_for_run, save_human_label
+from backend.evaluation.claims.store import (
+    claims_for_run,
+    count_claims_for_run,
+    save_human_label,
+)
 from backend.services.postgres_service import get_db
 
 logger = logging.getLogger(__name__)
@@ -57,23 +61,50 @@ async def list_claims(
     run_id: UUID,
     label: str | None = Query(default=None),
     unlabeled: bool = Query(default=False),
-    limit: int = Query(default=500, ge=1, le=2000),
+    labeled: bool = Query(default=False),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=25, ge=1, le=200),
     session: AsyncSession = Depends(get_db),
-) -> list[dict]:
-    """One run's claims, oldest question first, for the labelling queue."""
+) -> dict:
+    """
+    One page of a run's claims, plus the size of the set it came from.
+
+    Paged rather than returned whole: a hundred-question run is over a
+    thousand claims, and a table that long is unusable even when the
+    request succeeds. Returning `total` alongside is what lets the page
+    say "1-25 of 1072" and know when Next has run out — a bare list can
+    say neither.
+    """
     if label and label not in LABELS:
         raise HTTPException(
             status_code=422,
             detail=f"Unknown label {label!r}. Expected one of {list(LABELS)}.",
         )
 
-    return await claims_for_run(
-        session,
-        run_id=run_id,
-        label=label,
-        unlabeled=unlabeled,
-        limit=limit,
-    )
+    if labeled and unlabeled:
+        raise HTTPException(
+            status_code=422,
+            detail="labeled and unlabeled are complements; pass at most one.",
+        )
+
+    filters = {
+        "label": label,
+        "unlabeled": unlabeled,
+        "labeled": labeled,
+    }
+
+    return {
+        "items": await claims_for_run(
+            session, run_id=run_id, offset=offset, limit=limit, **filters
+        ),
+        # Counted with the same filters, so the header can never promise
+        # rows the list does not hold.
+        "total": await count_claims_for_run(
+            session, run_id=run_id, **filters
+        ),
+        "offset": offset,
+        "limit": limit,
+    }
 
 
 @router.get("/runs/{run_id}/claims/summary")

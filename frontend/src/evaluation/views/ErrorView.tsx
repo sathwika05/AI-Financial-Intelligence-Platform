@@ -22,6 +22,21 @@ export function ErrorView({ runs }: { runs: RunMetrics[] }) {
   const failed = runs.filter((run) => run.status === "failed");
   const completed = runs.filter((run) => run.status === "completed");
 
+  // Counted rather than asserted. The empty state used to claim every
+  // run "reached a completed or in-progress state", which is untrue the
+  // moment one is cancelled — and a cancelled run is the common case
+  // here, not an edge one.
+  const byStatus = runs.reduce<Record<string, number>>((tally, run) => {
+    tally[run.status] = (tally[run.status] ?? 0) + 1;
+    return tally;
+  }, {});
+
+  const otherStatuses = Object.entries(byStatus)
+    .filter(([status]) => status !== "failed")
+    .sort((a, b) => b[1] - a[1])
+    .map(([status, count]) => `${count} ${status}`)
+    .join(", ");
+
   const worstGrounding = [...completed]
     .filter((run) => run.hallucination_rate != null)
     .sort(
@@ -49,8 +64,8 @@ export function ErrorView({ runs }: { runs: RunMetrics[] }) {
       >
         {failed.length === 0 ? (
           <p className="ev-note">
-            No run has failed outright. Every recorded run reached a completed
-            or in-progress state.
+            No run failed outright.
+            {otherStatuses ? ` Of ${runs.length} recorded: ${otherStatuses}.` : ""}
           </p>
         ) : (
           <div className="ev-tablewrap">

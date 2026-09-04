@@ -31,6 +31,17 @@ PROVIDER_ALIASES: dict[str, str] = {
     "anthropic": "anthropic",
     "google": "google_genai",
     "gemini": "google_genai",
+
+    # Serves the public preprod demo. That deployment is unauthenticated,
+    # so the ceiling on an endpoint that costs money per call has to be
+    # something other than a login; Groq's free tier makes the limit
+    # requests per minute instead of dollars.
+    #
+    # The tiers map to real, different models on that tier: gpt-oss-20b
+    # for small, gpt-oss-120b for medium and large. Two tiers sharing a
+    # name is a sizing choice, so nothing may assume the three are
+    # distinct -- see tests/test_groq_provider.py.
+    "groq": "groq",
 }
 
 

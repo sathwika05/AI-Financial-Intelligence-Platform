@@ -1,5 +1,10 @@
 import { clearSession, type SessionUser } from "./auth/session";
 import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  clearConsoleSession,
+  readConsoleSession,
+  writeConsoleSession,
+} from "./lib/consoleSession";
 import { Check, Database, Scale } from "lucide-react";
 import { Logo } from "./components/Logo";
 import { FinancialApiError, runFinancialQuery } from "./api/client";
@@ -30,10 +35,18 @@ export default function App({
    *  navigation. Suppresses the masthead's own copies of both. */
   inShell?: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
+  // Seeded from the module-level store rather than from empty state. Root
+  // unmounts this component whenever the rail navigates, so without this
+  // an analyst who opened Ingestion mid-read came back to a blank console
+  // and had to pay for the query again. See lib/consoleSession.
+  const held = readConsoleSession();
+
+  const [query, setQuery] = useState(held?.query ?? "");
+  const [status, setStatus] = useState<Status>(held?.result ? "done" : "idle");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<FinancialQueryResponse | null>(null);
+  const [result, setResult] = useState<FinancialQueryResponse | null>(
+    held?.result ?? null,
+  );
 
   const requestRef = useRef<AbortController | null>(null);
   const lastQueryRef = useRef("");
@@ -75,6 +88,9 @@ export default function App({
 
       setResult(response);
       setStatus("done");
+
+      // Held outside the tree so navigating away and back does not lose it.
+      writeConsoleSession({ query: trimmed, result: response });
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") {
         return;
@@ -186,6 +202,9 @@ export default function App({
                   className="masthead__signout"
                   onClick={() => {
                     clearSession();
+            // The answer dies with the session, not
+            // just with the page.
+            clearConsoleSession();
                     window.location.reload();
                   }}
                 >
@@ -218,6 +237,27 @@ export default function App({
           isRunning={status === "running"}
           compact={status === "done"}
         />
+
+        {status === "done" && (
+          <div className="app__clearrow">
+            <span className="app__held">
+              Showing your last answer. It survives a refresh, and clears when you sign out or close the tab.
+            </span>
+            <button
+              type="button"
+              className="app__clear"
+              onClick={() => {
+                clearConsoleSession();
+                setResult(null);
+                setStatus("idle");
+                setError(null);
+                setQuery("");
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
 
         {status === "running" && (
           <div className="app__block">

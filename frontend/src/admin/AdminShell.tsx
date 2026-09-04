@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { clearSession, type SessionUser } from "../auth/session";
+import { clearConsoleSession } from "../lib/consoleSession";
 import { fetchExternalLinks, type ExternalLinks } from "./api";
 import "./AdminShell.css";
 
@@ -148,6 +149,9 @@ export function AdminShell({
             className="admin__signout"
             onClick={() => {
               clearSession();
+            // The answer dies with the session, not
+            // just with the page.
+            clearConsoleSession();
               window.location.reload();
             }}
           >

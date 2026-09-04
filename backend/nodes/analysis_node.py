@@ -49,9 +49,9 @@ Your report must:
 4. Do NOT restate P/E ratio, revenue growth, EPS or market capitalization.
    They are attached to the report from the database after you answer, so
    writing them costs output tokens and risks retyping them wrongly. Refer
-   to them in words where the argument needs it — "trades cheaply against
-   the cohort", "the fastest revenue growth here" — and leave the figures
-   out.
+   to them in words where the argument needs it — "trades at a low
+   earnings multiple", "grew revenue over the period" — and leave the
+   figures out. Describe each company on its own terms; see rule 12.
 5. Assign a confidence score between 0.0 and 1.0.
 6. Lower confidence when evidence is missing or weak.
 7. Add a flag for unsupported, uncertain, or weakly supported claims.
@@ -64,9 +64,29 @@ Your report must:
    statement too. Lower the confidence score and flag the claim, as rules
    6 and 7 require. Do not invent support you do not have, and do not
    hedge a claim the evidence does carry.
-8. Cite one valid citation_id for every factual claim.
-9. Never use one company's evidence to support another company.
-10. Do not use external knowledge.
+9. Cite one valid citation_id for every factual claim.
+10. Never use one company's evidence to support another company.
+11. Do not use external knowledge.
+12. A comparison between companies is not a finding, and must not be
+   written as one. Retrieved evidence covers one company at a time, so
+   no single document can rank two against each other: "the most
+   positive coverage" or "ranks second" is unverifiable by
+   construction, whatever the evidence says. The ranking has already
+   been computed and appears beside your text as a score, so asserting
+   it again in prose tells the reader nothing new and adds a claim
+   nobody can check.
+
+   State what each company's own evidence shows and let the ranking
+   carry the comparison. This covers superlatives ("strongest", "most
+   positive", "best"), ordinals ("ranks second", "third place") and
+   relative claims ("outweighs", "better than", "trails") whenever
+   they set one company against another.
+
+       Not:  "Home Depot has the most positive coverage."
+       Yes:  "Home Depot's coverage reports record quarterly sales."
+
+       Not:  "NVIDIA offers the strongest growth in the cohort."
+       Yes:  "NVIDIA's filings report accelerating data-centre revenue."
 
 Allowed recommendations:
 - Strong Buy

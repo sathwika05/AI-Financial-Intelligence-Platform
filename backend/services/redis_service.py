@@ -1,11 +1,20 @@
 import json
 import logging
 import redis
-from backend.config import settings
+from backend.config import DEFAULT_REDIS_URL, settings
 
 logger = logging.getLogger(__name__)
 
-redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+# The `or` is load-bearing. A default in config.py covers an unset variable,
+# but not one that is declared and left blank -- which is exactly what a
+# render.yaml `sync: false` entry produces when nobody fills it in. from_url
+# rejects "" outright ("Redis URL must specify one of the following
+# schemes"), and this line runs at import, so that took the whole API down
+# at startup rather than degrading to uncached.
+redis_client = redis.from_url(
+    settings.REDIS_URL or DEFAULT_REDIS_URL,
+    decode_responses=True,
+)
 
 def ping_redis():
     return redis_client.ping()

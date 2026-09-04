@@ -1,11 +1,23 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+# Redis is a cache and a rate-limit store, not a dependency: both callers
+# fail open, so an unreachable one degrades rather than breaks. Nothing
+# connects at import either, so this address answering nothing is fine.
+DEFAULT_REDIS_URL = "redis://localhost:6379/0"
+
+
 class Settings(BaseSettings):
     DATABASE_URL: str
     SYNC_DATABASE_URL: str 
     LLM_KEY_ENCRYPTION_SECRET: str
     
-    REDIS_URL: str
+    # Defaulted on purpose. With no default a deployment that did not set
+    # this failed pydantic validation at import and the container died
+    # before any of the fail-open handling downstream could run -- which
+    # is the opposite of how the rest of the code treats redis.
+    REDIS_URL: str = DEFAULT_REDIS_URL
+
     APP_ENV: str = "development"
 
     # Which routers get mounted. "portfolio" is the public unauthenticated

@@ -51,23 +51,43 @@ services:
       # decrypted with LLM_KEY_ENCRYPTION_SECRET.
 
       # Still needed, and only for embeddings — Groq has no embeddings API.
-      # Indexing embeddings are precomputed, so this is one embed_query per
-      # request, around $0.00000002. Set a hard spend limit on the key
-      # regardless.
+      #
+      # The snapshot carries document_chunks.embedding, so the corpus side
+      # costs nothing: indexing_service.aembed_documents never runs here.
+      # What remains is the query side, which cannot be precomputed — the
+      # visitor's question is embedded per request and compared against
+      # those stored vectors (vector_search.py, `dc.embedding <=> :query_vector`).
+      #
+      # text-embedding-3-small is $0.02/1M tokens, so a question costs
+      # about $0.0000004 — under a cent per 10,000. Set a hard spend limit
+      # on the key regardless.
       - key: OPENAI_API_KEY
         sync: false
 
       - key: LLM_KEY_ENCRYPTION_SECRET
         sync: false
 
-      # Optional. redis_service catches every failure and returns None, so
-      # market lookups degrade to uncached rather than breaking. Point at
-      # Upstash if the rate limiter needs to be shared across instances.
+      # Safe to leave unset -- but not safe to set to an empty string.
+      #
+      # redis_service catches every failure and returns None, so market
+      # lookups degrade to uncached rather than breaking, and config.py
+      # now defaults this. A blank value is different: redis.from_url
+      # rejects "" at import and the container never starts. Either give
+      # it a real URL or remove the key; do not save it empty.
+      #
+      # Point at Upstash if the rate limiter needs to actually enforce
+      # anything -- see the note under SECURITY_RATE_LIMIT below.
       - key: REDIS_URL
         sync: false
 
-      # Per-IP request cap. The free plan runs a single instance, so the
-      # in-process limiter is sufficient and needs no Redis.
+      # Per-IP request cap -- enforced ONLY when REDIS_URL points at a
+      # reachable Redis.
+      #
+      # There is no in-process limiter. backend/security/rate_limit.py is
+      # Redis-backed and fails open by design (a cache outage must not
+      # become an outage), so with no Redis these two values do nothing
+      # and the public unauthenticated endpoint is uncapped. Groq's free
+      # tier bounds the cost of that; the exposure is quota and abuse.
       #
       # These are the names backend/config.py actually reads. An earlier
       # revision set RATE_LIMIT_PER_HOUR, which no code has ever looked at
@@ -84,8 +104,19 @@ services:
 # 1. Create the Neon project, enable pgvector:
 #        CREATE EXTENSION IF NOT EXISTS vector;
 #
-# 2. Apply the schema:
-#        SYNC_DATABASE_URL=<neon> uv run alembic upgrade head
+# 2. Build the schema. NOT `alembic upgrade head` -- the base revision
+#    (d8298897af79) does `op.add_column('documents', ...)`, and on an empty
+#    database there is no documents table to alter. The chain is only valid
+#    against a schema create_all already built; backend/startup_migration
+#    explains why. On a fresh database, stamp and let the models build it:
+#
+#        export DATABASE_URL=<neon-asyncpg> SYNC_DATABASE_URL=<neon-sync>
+#        uv run python -m backend.startup_migration   # stamps head
+#        uv run uvicorn backend.main:app --port 8001  # lifespan create_all
+#
+#    Stop the server once it logs "Database tables checked/created". The
+#    container's CMD does exactly this pair on every deploy; doing it here
+#    first is what lets steps 3 and 4 load data before anything is public.
 #
 # 3. Load data from the frozen snapshot rather than reseeding — no API
 #    quota is consumed and the demo matches what has been benchmarked:

@@ -87,8 +87,9 @@ Three things, and all three are needed:
   unmounted, so admin endpoints do not exist rather than being hidden
 - Groq serves the chat models, so an unauthenticated endpoint cannot run up
   a bill
-- `RATE_LIMIT_PER_HOUR` caps requests per IP, which matters because Groq's
-  free tier limits requests per minute and a loop would exhaust it
+- `SECURITY_RATE_LIMIT` and `SECURITY_RATE_WINDOW_SECONDS` cap requests per
+  IP, which matters because Groq's free tier limits requests per minute and
+  a loop would exhaust it
 
 OpenAI is still called once per query for the search embedding — about
 $0.00000002. Put a hard spend limit on the key anyway.

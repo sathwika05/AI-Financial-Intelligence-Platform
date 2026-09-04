@@ -126,8 +126,17 @@ def build_app(*, deployment_mode: str | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Signing in, in every mode: every other router now needs a token.
-    application.include_router(auth_router)
+    # Signing in, only where there is something to sign in to. In full mode
+    # every other router needs a token. In portfolio mode the one mounted
+    # router takes none, so a login route would guard nothing while handing
+    # a public deployment a password prompt, a credential-stuffing surface,
+    # and a way to use any user row that reached that database by accident.
+    # The absence is the control here too.
+    #
+    # The console never calls it there: /health reports auth_required false
+    # and the frontend reads that, rather than probing an auth route.
+    if mode == "full":
+        application.include_router(auth_router)
 
     # The console's endpoint, in every mode -- but guarded only where there
     # is a login to guard it with.

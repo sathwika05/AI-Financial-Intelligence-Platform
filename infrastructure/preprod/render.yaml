@@ -43,11 +43,12 @@ services:
       - key: SYNC_DATABASE_URL
         sync: false
 
-      # Groq serves the chat models for the public demo. Its free tier
-      # removes the cost risk of an unauthenticated endpoint; the limit
-      # becomes requests per minute rather than money.
-      - key: GROQ_API_KEY
-        sync: false
+      # Groq serves the chat models for the public demo: its free tier
+      # removes the cost risk of an unauthenticated endpoint, making the
+      # limit requests per minute rather than money. Its API key is NOT an
+      # env var -- no code reads one. Provider keys live encrypted in the
+      # llm_providers table and arrive with the rows imported in step 4,
+      # decrypted with LLM_KEY_ENCRYPTION_SECRET.
 
       # Still needed, and only for embeddings — Groq has no embeddings API.
       # Indexing embeddings are precomputed, so this is one embed_query per
@@ -65,10 +66,18 @@ services:
       - key: REDIS_URL
         sync: false
 
-      # Per-IP request cap. The free plan runs a single instance, so an
+      # Per-IP request cap. The free plan runs a single instance, so the
       # in-process limiter is sufficient and needs no Redis.
-      - key: RATE_LIMIT_PER_HOUR
+      #
+      # These are the names backend/config.py actually reads. An earlier
+      # revision set RATE_LIMIT_PER_HOUR, which no code has ever looked at
+      # -- so the public endpoint would have run at the default of 20 per
+      # 60 seconds, or 1200 an hour, on an unauthenticated route that costs
+      # real provider spend per call.
+      - key: SECURITY_RATE_LIMIT
         value: "5"
+      - key: SECURITY_RATE_WINDOW_SECONDS
+        value: "300"
 
 # Notes for standing this up:
 #
@@ -85,6 +94,10 @@ services:
 # 4. Register Groq as the default provider through the admin API against a
 #    local run, then export and import those rows; the public deployment
 #    has no admin routes to create them with.
+#
+#    Register three models against it: small openai/gpt-oss-20b, medium
+#    and large openai/gpt-oss-120b. Nothing validates a model_name on the
+#    way in, so a typo is only found on the first question asked.
 #
 # The free plan sleeps after inactivity, so the first request after an idle
 # period pays a cold start on top of the usual query time.

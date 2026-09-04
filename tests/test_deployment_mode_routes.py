@@ -25,6 +25,10 @@ UI_ROUTES = {
 # Every route that must not exist on a public unauthenticated deployment.
 PRIVILEGED_PREFIXES = (
     "/admin/llm",
+    # Nothing in portfolio mode takes a token, so a login guards nothing
+    # there -- and any user row that reached that database by accident
+    # would be usable through it.
+    "/api/auth",
     "/api/index",
     "/api/evaluation",
     "/api/retrieve/sql",

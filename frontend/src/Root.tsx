@@ -87,7 +87,7 @@ export default function Root() {
   }
 
   if (!needsAuth) {
-    return <App user={{ email: "", role: "analyst" }} />;
+    return <App user={{ email: "", role: "analyst" }} publicDemo />;
   }
 
   if (!user) {

@@ -3,15 +3,42 @@ import { CornerDownLeft, Loader2, Sparkles } from "lucide-react";
 import { QUERY_MAX_LENGTH, QUERY_MIN_LENGTH } from "../api/client";
 import "./QueryConsole.css";
 
+/** Which path through the pipeline a question exercises. */
+type SuggestionKind = "sentiment" | "mixed" | "sql";
+
 /**
  * Starting points only. These populate the input and never carry results.
  */
-const SUGGESTIONS = [
-  "Which technology companies combine attractive valuation with strong revenue growth?",
-  "Rank companies with the strongest revenue and EPS growth",
-  "Which semiconductor companies have the most positive sentiment in recent earnings reports?",
-  "Find undervalued companies with low P/E ratios and positive earnings",
+const SUGGESTIONS: { text: string; kind: SuggestionKind }[] = [
+  {
+    text: "Which technology companies combine attractive valuation with strong revenue growth?",
+    kind: "mixed",
+  },
+  {
+    text: "Rank companies with the strongest revenue and EPS growth",
+    kind: "sql",
+  },
+  {
+    text: "Which semiconductor companies have the most positive sentiment in recent earnings reports?",
+    kind: "sentiment",
+  },
+  {
+    text: "Find undervalued companies with low P/E ratios and positive earnings",
+    kind: "sql",
+  },
 ];
+
+/**
+ * The order the public demo offers them in: sentiment, then mixed, then the
+ * metric questions.
+ *
+ * A first-time visitor clicks the first chip, so it should be the one that
+ * best shows what the system does -- reading documents and grounding a
+ * judgement in them -- rather than the one that returns quickest. Ordering
+ * here rather than reordering SUGGESTIONS keeps the signed-in console's
+ * order untouched.
+ */
+const PUBLIC_DEMO_ORDER: SuggestionKind[] = ["sentiment", "mixed", "sql"];
 
 /**
  * The research command surface.
@@ -26,6 +53,7 @@ export function QueryConsole({
   onSubmit,
   isRunning,
   compact = false,
+  publicDemo = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -34,8 +62,20 @@ export function QueryConsole({
   /** Once results exist they should own the viewport, so the console gives
    *  back the height it no longer needs. */
   compact?: boolean;
+  /** The unauthenticated preprod deployment, which offers the questions in
+   *  PUBLIC_DEMO_ORDER instead of the authoring order. */
+  publicDemo?: boolean;
 }) {
   const inputId = useId();
+
+  // Sorted by kind, stable within each kind, so the order only ever changes
+  // between the two arrangements and never shuffles under a reader.
+  const suggestions = publicDemo
+    ? PUBLIC_DEMO_ORDER.flatMap((kind) =>
+        SUGGESTIONS.filter((item) => item.kind === kind),
+      )
+    : SUGGESTIONS;
+
   const trimmed = value.trim();
   const canSubmit = trimmed.length >= QUERY_MIN_LENGTH && !isRunning;
   const nearLimit = trimmed.length > QUERY_MAX_LENGTH * 0.9;
@@ -115,16 +155,16 @@ export function QueryConsole({
       <div className="console__suggestions">
         <span className="eyebrow console__suggestions-label">Try</span>
         <ul className="console__chips">
-          {SUGGESTIONS.map((suggestion) => (
-            <li key={suggestion}>
+          {suggestions.map((suggestion) => (
+            <li key={suggestion.text}>
               <button
                 type="button"
                 className="console__chip"
-                onClick={() => onChange(suggestion)}
+                onClick={() => onChange(suggestion.text)}
                 disabled={isRunning}
-                title={suggestion}
+                title={suggestion.text}
               >
-                {suggestion}
+                {suggestion.text}
               </button>
             </li>
           ))}

@@ -165,6 +165,16 @@
   color: var(--color-text-secondary);
 }
 
+/* A caveat, not a second lede: one step down in size and colour so it
+   reads after the sentence above it rather than competing with it. */
+.hero__note {
+  margin-top: 12px;
+  max-width: 52ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
 /* ── Content rhythm ────────────────────────────────────────────── */
 
 .app__main {

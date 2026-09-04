@@ -29,11 +29,17 @@ type Status = "idle" | "running" | "error" | "done";
 export default function App({
   user,
   inShell = false,
+  publicDemo = false,
 }: {
   user: SessionUser;
   /** Rendered inside the admin rail, which already shows identity and
    *  navigation. Suppresses the masthead's own copies of both. */
   inShell?: boolean;
+  /** The unauthenticated preprod deployment. Which provider served the
+   *  answer is internal detail there: the visitor has no account, no
+   *  provider settings, and nothing to do with the name. Signed-in
+   *  analysts keep it, because for them it is provenance. */
+  publicDemo?: boolean;
 }) {
   // Seeded from the module-level store rather than from empty state. Root
   // unmounts this component whenever the rail navigates, so without this
@@ -227,6 +233,17 @@ export default function App({
               Ask a financial question and get ranked companies, key metrics,
               and evidence-backed analysis.
             </p>
+
+            {/* Sets the expectation before the first click rather than
+                after it. The loading state already shows elapsed time and
+                stages, so this only needs to explain why that number is
+                larger here than it would be in production. */}
+            {publicDemo && (
+              <p className="hero__note">
+                This public demo runs on a free-tier model, so answers take
+                noticeably longer than the production system.
+              </p>
+            )}
           </div>
         )}
 
@@ -236,6 +253,7 @@ export default function App({
           onSubmit={() => void runQuery(query)}
           isRunning={status === "running"}
           compact={status === "done"}
+          publicDemo={publicDemo}
         />
 
         {status === "done" && (
@@ -291,7 +309,10 @@ export default function App({
           <>
             {report && (
               <div className="app__block">
-                <AnalysisSummary report={report} provider={result?.provider} />
+                <AnalysisSummary
+                  report={report}
+                  provider={publicDemo ? null : result?.provider}
+                />
               </div>
             )}
 

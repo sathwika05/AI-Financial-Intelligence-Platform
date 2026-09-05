@@ -247,8 +247,16 @@ def _register_health(application: FastAPI, mode: str) -> None:
 
         try:
             ping_redis()
-        except Exception:
-            logger.exception("Health check: redis unreachable")
+        except Exception as exc:
+            # One line, not a stack. Redis is optional here -- the market
+            # cache and the rate limiter both fail open -- so on a
+            # deployment with no Redis this branch is not an incident, it
+            # is the steady state. Render health-checks every ~30s, and
+            # logger.exception made that a 40-line traceback each time:
+            # the log became unreadable, which costs you the ability to
+            # see a real failure. The db branch above keeps its stack
+            # because that one would be an incident.
+            logger.warning("Health check: redis unreachable (%s)", exc)
             redis_status = "error"
 
         return {

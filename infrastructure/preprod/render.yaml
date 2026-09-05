@@ -3,8 +3,19 @@
 # Deployed from the repo root: Render reads this file, so `rootDir` and the
 # Dockerfile path below are relative to the repository, not to this folder.
 #
-# Only the API lives here. The frontend goes to Vercel (see vercel.json),
-# and the database is Neon rather than a Render Postgres — Neon's free tier
+# Both halves live here: the API as a Docker web service, and the UI as a
+# static site. vercel.json is kept as an alternative host, not the live
+# one -- either works, and both proxy /api the same way.
+#
+# The UI is NOT served by the API container, even though main.py can do it
+# (it mounts frontend/dist when one exists). frontend/dist is gitignored,
+# so it never reaches the image -- and building it in there would be the
+# wrong trade anyway: the free API instance sleeps, so a visitor would get
+# a blank page for the whole ~50s cold start before anything painted. A
+# static site never sleeps, so the page is instant and only the query
+# waits.
+#
+# The database is Neon rather than a Render Postgres: Neon's free tier
 # supports pgvector and does not sleep the way a free Render database does.
 
 services:
@@ -98,6 +109,43 @@ services:
         value: "5"
       - key: SECURITY_RATE_WINDOW_SECONDS
         value: "300"
+
+  # The UI. Free, no cold start, and never sleeps -- unlike the API above.
+  - type: web
+    name: fip-preprod-web
+    runtime: static
+
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+
+    routes:
+      # /api is proxied, not called cross-origin: main.py mounts no CORS
+      # middleware, so a browser calling the API's hostname directly is
+      # blocked before the request leaves. Rewriting keeps the browser
+      # same-origin and the API unchanged.
+      #
+      # Must precede the SPA fallback: Render applies rules in order, so
+      # the /* rule below would otherwise answer /api/... with index.html.
+      - type: rewrite
+        source: /api/*
+        destination: https://fip-preprod-api.onrender.com/api/*
+
+      # Client-side routing: every other path is the app itself.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
 
 # Notes for standing this up:
 #

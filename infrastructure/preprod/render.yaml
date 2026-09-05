@@ -131,6 +131,16 @@ services:
         source: /api/*
         destination: https://fip-preprod-api.onrender.com/api/*
 
+      # /health is NOT under /api, and the frontend calls it by that bare
+      # path (auth/api.ts) to decide whether to show a sign-in screen. Left
+      # to the fallback below it returned index.html, response.json() threw,
+      # and the catch did what it is designed to do -- default to requiring
+      # auth. The public demo, which has no accounts, showed a login page
+      # nobody could get past, and the API looked healthy throughout.
+      - type: rewrite
+        source: /health
+        destination: https://fip-preprod-api.onrender.com/health
+
       # Client-side routing: every other path is the app itself.
       - type: rewrite
         source: /*

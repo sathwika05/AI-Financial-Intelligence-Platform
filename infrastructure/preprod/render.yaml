@@ -22,7 +22,22 @@ services:
   - type: web
     name: fip-preprod-api
     runtime: docker
-    plan: free
+
+    # Paid, at $7/month, for two reasons that compound.
+    #
+    # Spin-down: only Free web services sleep (15 minutes without inbound
+    # traffic), so a visitor to a demo nobody has touched today waited ~50s
+    # for a cold start before the ~95s query even began. A paid instance
+    # never sleeps, and needs no keep-alive cron to fake it.
+    #
+    # CPU: free is 0.1 CPU, which is why importing backend.main took about
+    # two and a half minutes on every deploy. This is 0.5 -- five times the
+    # CPU for the same 512MB of RAM.
+    #
+    # RAM is unchanged at 512MB, and backend.main imports at 379MB measured.
+    # Turning the cross-encoder on would add roughly 270MB for torch and
+    # sentence-transformers and need 1c-2g instead.
+    plan: 0.5c-512mb
     region: oregon
 
     dockerfilePath: ./Dockerfile
@@ -193,5 +208,6 @@ services:
 #    and large openai/gpt-oss-120b. Nothing validates a model_name on the
 #    way in, so a typo is only found on the first question asked.
 #
-# The free plan sleeps after inactivity, so the first request after an idle
-# period pays a cold start on top of the usual query time.
+# The API runs on a paid instance, so it does not sleep and the first
+# request of the day costs no more than any other. The UI is a static
+# site, which never slept in the first place.

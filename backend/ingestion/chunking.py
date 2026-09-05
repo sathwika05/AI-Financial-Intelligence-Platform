@@ -1,14 +1,42 @@
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 import logging
 
 
 logger = logging.getLogger(__name__)
 
 
+# Built on first use, not at import.
+#
+# `import langchain_text_splitters` runs that package's __init__, which
+# imports its sentence_transformers submodule, which imports torch: about
+# 450MB resident before this module has split a single string. main.py
+# reaches here unconditionally through vector_routes -> indexing_service,
+# so every deployment paid it -- including the portfolio one, which never
+# chunks anything, because ingestion is not mounted there. That was the
+# difference between importing the app in ~300MB and in 574MB, and a
+# 512MB instance was killed mid-import with no traceback to show for it.
+#
+# Nothing outside this module touches the splitter, so deferring it needs
+# no change anywhere else.
+_text_splitter = None
+
+
+def _splitter():
+    """The shared splitter, built once."""
+    global _text_splitter
+
+    if _text_splitter is None:
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+        _text_splitter = _build(RecursiveCharacterTextSplitter)
+
+    return _text_splitter
+
+
 # Split large text/documents into smaller overlapping chunks
 # so they can be embedded and retrieved efficiently in RAG pipelines
 
-text_splitter = RecursiveCharacterTextSplitter(
+def _build(RecursiveCharacterTextSplitter):
+    return RecursiveCharacterTextSplitter(
 
         # Maximum size of each chunk (in characters)
         chunk_size=500,
@@ -50,7 +78,7 @@ def chunk_text(content: str) -> list[str]:
     if not content or not content.strip():
         logger.warning("[CHUNKING] Empty content received")
         return []
-    chunks = text_splitter.split_text(content)
+    chunks = _splitter().split_text(content)
 
     # Whitespace only. An earlier version also stripped leading periods, to
     # tidy an artefact of the sentence separator; measured over the whole

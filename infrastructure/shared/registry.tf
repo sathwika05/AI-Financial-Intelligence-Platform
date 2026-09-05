@@ -5,9 +5,9 @@
 // Rebuilding that meant pushing 4.36 GB over a connection that needed a
 // chunked uploader and several hours to manage it once.
 //
-// Here it survives every destroy. Storage is about $0.87/month for the
-// images the lifecycle policy keeps, which is cheaper than doing that
-// upload again even once.
+// Here it survives every destroy. Storage is well under a dollar a month
+// for the images the lifecycle policy keeps, which is cheaper than doing
+// that upload again even once.
 //
 // Layers are shared, so keeping this also makes iteration cheap: a code
 // change touches only the last layer, and a push sends tens of megabytes
@@ -32,11 +32,16 @@ resource "aws_ecr_lifecycle_policy" "app" {
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Keep the 5 most recent images"
+      // Two, not five. The AWS stack it was built for is being torn down,
+      // so these are kept to avoid re-uploading 4.36 GB rather than to
+      // roll back across a range of releases: the current image and the
+      // one before it. Layers are shared, so the saving over five is
+      // small -- this is about not keeping what nothing can deploy.
+      description  = "Keep the 2 most recent images"
       selection = {
         tagStatus   = "any"
         countType   = "imageCountMoreThan"
-        countNumber = 5
+        countNumber = 2
       }
       action = { type = "expire" }
     }]

@@ -61,4 +61,14 @@ COPY . .
 # Not `alembic upgrade head` directly: this schema has two writers, and the
 # right move depends on which one built the database. backend.startup_migration
 # explains it.
-CMD ["sh", "-c", "/code/.venv/bin/python -m backend.startup_migration && /code/.venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+
+# The port comes from the environment, defaulting to 8000.
+#
+# Render injects PORT (10000 unless told otherwise) and health-checks that
+# port specifically. A hardcoded 8000 meant uvicorn bound a port nothing
+# was watching: "No open ports detected" forever, and a deploy that never
+# went live rather than one that 502'd. docker-compose sets no PORT, so
+# the default keeps the local mapping at 8000.
+#
+# Expanded by sh at runtime, which is why this stays a shell form CMD.
+CMD ["sh", "-c", "/code/.venv/bin/python -m backend.startup_migration && /code/.venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

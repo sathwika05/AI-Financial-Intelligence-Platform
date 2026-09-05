@@ -78,18 +78,23 @@ services:
       - key: LLM_KEY_ENCRYPTION_SECRET
         sync: false
 
-      # Safe to leave unset -- but not safe to set to an empty string.
+      # REDIS_URL is deliberately NOT declared here.
       #
-      # redis_service catches every failure and returns None, so market
-      # lookups degrade to uncached rather than breaking, and config.py
-      # now defaults this. A blank value is different: redis.from_url
-      # rejects "" at import and the container never starts. Either give
-      # it a real URL or remove the key; do not save it empty.
+      # It was, as `sync: false`, and the value set in the dashboard never
+      # reached the container: a restarted process with a fresh instance id
+      # still logged "connecting to localhost:6379", which in this codebase
+      # can only come from DEFAULT_REDIS_URL -- so it started with the
+      # variable empty while the dashboard showed a full rediss:// URL.
       #
-      # Point at Upstash if the rate limiter needs to actually enforce
-      # anything -- see the note under SECURITY_RATE_LIMIT below.
-      - key: REDIS_URL
-        sync: false
+      # The other sync: false entries above work, and the difference is
+      # that they were filled in at blueprint creation rather than added
+      # afterwards. Declaring a key here and populating it later is the
+      # combination that failed, so this one is dashboard-only: nothing
+      # in the file to reconcile it against.
+      #
+      # config.py defaults it, so an absent variable degrades to uncached
+      # market lookups and a rate limiter that fails open -- see the note
+      # under SECURITY_RATE_LIMIT below.
 
       # Per-IP request cap -- enforced ONLY when REDIS_URL points at a
       # reachable Redis.

@@ -1,217 +1,342 @@
 # Financial Intelligence Pipeline
 
-A FastAPI + LangGraph service that answers natural-language financial questions by routing them across **SQL** (structured company/financial data), **vector/RAG retrieval** (earnings calls, SEC filings, news), and **live market data** (yfinance), then scores, ranks, and synthesizes the results into a cited, reviewed report. Includes a RAGAS-based evaluation harness for benchmarking pipeline quality.
+A FastAPI + LangGraph service that answers natural-language financial questions by routing them across **SQL** (structured company and financial data), **vector/RAG retrieval** (news, filings, earnings coverage), and **live market data**, then scores, ranks and synthesizes the results into a cited report that a reviewer node fact-checks before it is returned.
+
+Around that pipeline sit the parts that make its quality measurable: a 100-question benchmark with versioned ground truth, RAGAS and custom evaluators, a claim-level audit, an escalation path for low-confidence answers, and a dashboard for reading the results.
 
 ## Contents
 
 - [Architecture](#architecture)
+- [Deployment modes](#deployment-modes)
 - [Request flow](#request-flow)
 - [API reference](#api-reference)
 - [Data model](#data-model)
+- [Evaluation](#evaluation)
+- [Security](#security)
 - [Setup](#setup)
 - [Configuration](#configuration)
-- [Seeding data](#seeding-data)
+- [Seeding and the frozen snapshot](#seeding-and-the-frozen-snapshot)
+- [Deployment](#deployment)
 - [Project layout](#project-layout)
+- [Testing](#testing)
 - [Known issues](#known-issues)
 
 ## Architecture
 
-The system is a set of **LangGraph state graphs** orchestrating LLM calls, tool use, and retrieval:
+The system is a set of **LangGraph state graphs** orchestrating LLM calls, tool use and retrieval:
 
 ```
-                       ┌─────────────────────────────────────────┐
-                       │           financial_graph                │
-                       │ (backend/graph/financial_graph.py)        │
-                       └─────────────────────────────────────────┘
+                   ┌──────────────────────────────────────────┐
+                   │              financial_graph             │
+                   │      (backend/graph/financial_graph.py)  │
+                   └──────────────────────────────────────────┘
+
   intent → planner → retrieval → scoring → analysis → reviewer ──┐
-                         ▲                                       │
-                         └──────── retry (should_retry) ─────────┘
-                                                                  │
-                                                                  ▼
-                                                                 END
+                        ▲                                        │
+                        └────────── retry (should_retry) ────────┘
+                                                                 │
+                                                                 ▼
+                                                                END
 ```
 
-- **intent_node** — classifies the query into `VALUATION | GROWTH | SENTIMENT | MIXED` (`gpt-5.4-nano`, structured output).
-- **planner_node** — decomposes the query into `sql_query`, `vector_query`, `market_query` (tickers) and a `strategy` (`PARALLEL` / `SQL_FIRST` / `VECTOR_FIRST`) (`gpt-5.4-mini`).
-- **retrieval** — an async node wrapping `hybrid_retrieve_async` (see below); this is where intent-based branching actually happens, not at the graph-edge level.
+- **intent_node** — classifies the query into `VALUATION | GROWTH | SENTIMENT | MIXED` (small tier, structured output).
+- **planner_node** — decomposes the query into `sql_query`, `vector_query`, `market_query` (tickers) and a `strategy` (`PARALLEL` / `SQL_FIRST` / `VECTOR_FIRST`).
+- **retrieval** — an async node wrapping `hybrid_retrieve_async`. Intent-based branching happens here, not at the graph-edge level.
 - **scoring_node** — reranks retrieved companies (`backend/scoring/ranker.py`), attaches evidence and explainability.
-- **analysis_node** — synthesizes a structured JSON report with per-company recommendations and cited evidence (`gpt-5.4`, the "strong" model).
-- **reviewer_node** — fact-checks the draft report (confidence thresholds, missing evidence, flags, LLM hallucination check, citation validation) and either approves it (`final_report`) or loops back to `retrieval` (up to 3 retries, then force-passes).
+- **analysis_node** — synthesizes a structured report with per-company recommendations and cited evidence (large tier).
+- **reviewer_node** — fact-checks the draft against its evidence (confidence thresholds, missing evidence, citation validation, hallucination check) and either approves it as `final_report` or loops back to retrieval, up to 3 retries before force-passing.
 
-Two additional sub-graphs implement single-source retrieval as **ReAct tool-calling agents**, and are also exposed directly via their own API routes:
+`market_node`, `sql_node`, `vector_node` and `reranker_node` provide the single-source work the retrieval stage composes. Two sub-graphs implement single-source retrieval as **ReAct tool-calling agents** and are exposed on their own routes in `full` mode:
 
-- **`sql_graph.py`** — `sql_agent` node (LLM bound to SQL tools: schema lookup, query generation/validation/execution, error-fix) ↔ `tools`, looping until done or 3 failed fix attempts.
-- **`vector_graph.py`** — `agent` node (LLM bound to a single `retrieve_similar` tool) ↔ `tools`.
+- **`sql_graph.py`** — an LLM bound to SQL tools (schema lookup, query generation, validation, execution, error-fix) looping against `tools` until done or 3 failed fix attempts.
+- **`vector_graph.py`** — an LLM bound to a single `retrieve_similar` tool.
 
 ### Hybrid retrieval
 
 `backend/retrieval/hybrid_retrieval.py` fans work out based on intent:
 
-| Intent | Sources used | Weights |
+| Intent | Sources | Weights |
 |---|---|---|
 | `VALUATION` / `GROWTH` | SQL only | SQL 100% |
 | `SENTIMENT` | Vector only | Vector 100% |
-| `MIXED` | SQL + Vector + Market (parallel, `asyncio.gather`) | SQL 40% / Vector 30% / Market 30% (redistributes to 60/40 if market data unavailable) |
+| `MIXED` | SQL + Vector + Market, in parallel | SQL 40 / Vector 30 / Market 30, redistributing to 60/40 when market data is unavailable |
 
-Per-source timeouts: SQL 45s, Vector 10s, Market 8s, overall `MIXED` fan-out 60s, with graceful degradation on partial failures. `combine_results()` produces an `overall_confidence` from the weighted sources.
+Per-source timeouts are SQL 45s, Vector 10s, Market 8s, with a 60s ceiling on the `MIXED` fan-out and graceful degradation on partial failure. `combine_results()` derives an `overall_confidence` from whichever sources actually returned.
 
-Vector search itself is two-stage: a raw pgvector cosine-similarity query over `document_chunks` (`backend/retrieval/vector_search.py`) pulls `top_k*4` candidates, which are then reranked with `rank_bm25.BM25Plus` against LLM-extracted financial keywords.
+### The retrieval stack
 
-### Scoring & ranking
+Vector search is two-stage by default. A raw pgvector cosine query over `document_chunks` pulls `top_k × 4` candidates, which `rank_bm25.BM25Plus` then reranks against LLM-extracted financial keywords. Two further stages exist behind per-run flags and are **off by default**:
 
-`backend/scoring/ranker.py` computes, per company, four normalized (0–1) dimension scores — **valuation** (PE + price momentum), **growth** (revenue growth + EPS sign), **relevance** (avg. chunk cosine similarity), **sentiment** (positive/negative financial-term ratio in matched chunks) — combined with dynamic weights that shift based on which sources actually returned data, optionally blended 70/30 with an LLM holistic score (`llm_rerank_companies`). `evidence_builder.py` attaches per-company citations (`"NVDA-sql-1"`, `"NVDA-vector-2"`, `"NVDA-market-1"`) and `score_normalizer.py` builds the human-readable explainability breakdown and recommendation bucket (Strong buy → Avoid).
+| Stage | Module | Default | Cost |
+|---|---|---|---|
+| pgvector ANN | `vector_search.py` | always | a query |
+| BM25 rerank | `lexical_search.py` | always | pure Python |
+| Reciprocal rank fusion | `fusion.py` | off | arithmetic — `1/(60 + rank)` |
+| Cross-encoder rerank | `cross_encoder.py` | off | loads torch, ~270 MB, plus per-query inference |
+
+Those flags are set per benchmark run, which is what they were built for: they make retrieval variants measurable against the same questions. A live query sets none of them and runs the baseline.
+
+Query embeddings are cached in Redis for 30 days, keyed on a SHA-256 of `(model, exact text)`. The key is deliberately exact rather than semantic — the benchmark contains near-identical questions like *"the 5 companies with the strongest revenue growth"* and *"the 10"*, which differ by one digit and have different correct answers.
+
+### Scoring and ranking
+
+`backend/scoring/ranker.py` computes four normalized (0–1) dimension scores per company — **valuation** (P/E and price momentum), **growth** (revenue growth and EPS sign), **relevance** (mean chunk similarity) and **sentiment** (positive/negative term ratio in matched chunks) — combined with weights that shift according to which sources actually returned data, optionally blended 70/30 with an LLM holistic score.
+
+`evidence_builder.py` attaches per-company citations (`NVDA-sql-1`, `NVDA-vector-2`, `NVDA-market-1`), and `score_normalizer.py` produces the explainability breakdown and recommendation bucket. Dimensions with no data are reported as `unmeasured` rather than scored as zero.
+
+### Model configuration
+
+Models are **not hardcoded**. Providers and their models live in the `llm_providers` and `llm_models` tables, and the pipeline asks for a tier — `small`, `medium` or `large` — rather than a model name. Provider API keys are stored Fernet-encrypted under `LLM_KEY_ENCRYPTION_SECRET`; nothing reads a provider key from the environment.
+
+This is what lets the same code run on OpenAI locally and on Groq for a public deployment, where an unauthenticated endpoint makes a free tier the difference between a rate limit and a bill. The one exception is embeddings: `text-embedding-3-small` (1536-dim) via `OPENAI_API_KEY`, because Groq has no embeddings API.
+
+## Deployment modes
+
+`DEPLOYMENT_MODE` decides which routers are mounted, and the absence is the control — unlinking a route from the UI leaves it reachable, so a public deployment must not mount it at all.
+
+| | `portfolio` | `full` |
+|---|---|---|
+| Auth | none — no login route is mounted | JWT, roles enforced per router |
+| Mounted | the financial query endpoint, `/health` | everything |
+| Absent | admin, indexing, ingestion, evaluation, claims, escalations, SQL and vector routes | — |
+| Control on cost | per-IP rate limit | login |
+
+`/health` reports `auth_required`, and the frontend reads it to decide whether to render a sign-in screen — rather than probing an auth route that may not exist.
 
 ## Request flow
 
 1. Client `POST`s a natural-language question to `/api/retrieve/financial`.
-2. `intent_node` classifies it; `planner_node` splits it into sub-queries per source.
-3. `hybrid_retrieve_async` fans out to SQL / vector / market retrieval per the intent-weight table above.
-4. `scoring_node` ranks the top 5 companies with attached evidence.
+2. `intent_node` classifies it; `planner_node` splits it into per-source sub-queries.
+3. `hybrid_retrieve_async` fans out to SQL, vector and market retrieval per the intent-weight table.
+4. `scoring_node` ranks companies and attaches evidence.
 5. `analysis_node` drafts a structured report citing that evidence.
-6. `reviewer_node` fact-checks the draft; on failure, loops back to retrieval (max 3 retries) with a refined strategy, otherwise finalizes `final_report`.
+6. `reviewer_node` fact-checks the draft; on failure it loops back to retrieval with a refined strategy, otherwise it finalizes `final_report`.
 
 ## API reference
 
-### Financial (combined pipeline)
+### Available in every mode
 
 `POST /api/retrieve/financial`
-```json
+
+```jsonc
 // request
 { "query": "Compare valuation and sentiment for NVDA and AMD" }
 // response
 { "query": "...", "final_report": { ... }, "result": { ... } }
 ```
 
-### SQL-only
+Query length is bounded to 3–500 characters. In `full` mode this route requires the analyst role; in `portfolio` mode it is public and the rate limiter is the only ceiling.
 
-`POST /api/retrieve/sql`
-```json
-{ "query": "What is the average PE ratio of software companies?" }
-// → { "answer": "..." }
-```
+`GET /health` — Postgres and Redis connectivity plus the deployment's auth posture: `{status, db, redis, auth_required}`. Redis reporting `error` is not fatal; every caller fails open.
 
-### Vector-only (RAG)
+### `full` mode only
 
-`POST /api/retrieve/vector`
-```json
-{ "query": "What did management say about AI capex?", "top_k": 5 }
-// → { "query": "...", "answer": "..." }
-```
-
-`POST /api/index/documents` — requires header `X-Admin-Key`. Body `{ "document_id": 123 }` to (re)index one document, or `{}` to index all unindexed documents. Runs as a `BackgroundTask` calling `embed_document`/`embed_all_documents`.
-
-### Evaluation (RAGAS benchmarking)
-
-Prefix `/api/evaluation`:
-
-| Endpoint | Purpose |
+| Prefix | Purpose |
 |---|---|
-| `POST /run` | Kick off a benchmark run (`question_set`, `dataset`, `model`, `retrieval_mode`, `company_filter`, `k`) against a curated question set. **Currently broken** — see [Known issues](#known-issues). |
-| `GET /runs?limit&offset` | List recent benchmark runs with their metrics. |
-| `GET /runs/{run_id}` | Fetch a single run's metrics. |
-| `GET /metrics/comparison` | Average metrics grouped by `retrieval_mode`, for charting. |
-| `GET /metrics/timeseries?minutes=30` | Metric points over a recent time window, for charting. |
-
-### Health
-
-`GET /health` — checks Postgres and Redis connectivity, returns `{status, db, redis}`.
+| `POST /api/retrieve/sql` | SQL agent alone |
+| `POST /api/retrieve/vector` | Vector/RAG agent alone |
+| `POST /api/index/documents` | (Re)index one document or all unindexed ones, as a background task |
+| `/api/ingestion` | Upload, EDGAR collection, ingestion job status and event log |
+| `/api/evaluation` | Benchmark runs, metrics, per-question results, claim audit |
+| `/api/auth` | Sign-in, token issue, current user |
+| `/admin/llm` | Provider and model configuration |
+| `/admin/escalations` | Low-confidence answers queued for human review |
+| `/admin/security` | Security event feed |
+| `/api/admin` | External console links |
 
 ## Data model
 
-Postgres (pgvector-enabled) via SQLAlchemy (`backend/models/db_models.py`):
+Postgres with pgvector, via SQLAlchemy (`backend/models/db_models.py`). 23 tables:
 
-- **`companies`** — ticker, name, sector, market_cap.
-- **`financial_metrics`** — per-company PE ratio, EPS, revenue growth.
-- **`documents`** — raw source text (earnings calls, filings, news) with `doc_type`/`source`.
-- **`document_chunks`** — chunked document text with a `Vector(1536)` embedding column (this is where embeddings actually live; document-level embeddings were migrated out).
-- **`evaluation_metrics`** / **`benchmark_runs`** — RAGAS + custom metrics per benchmark run.
-- **`retrieval_logs`**, **`pipeline_traces`**, **`retrieved_evidence`**, **`model_costs`**, **`system_logs`**, **`alerts`**, **`human_reviews`** — observability tables defined in the schema but **not yet written to** by any code path (planned dashboard support).
+**Corpus and reference**
+`companies`, `financial_metrics`, `documents`, `document_chunks` (a `Vector(1536)` column — chunk-level, after embeddings were migrated off `documents`), `themes`, `company_themes`.
 
-Migrations live in `alembic/versions/` (3 revisions: add embedding to documents → move to chunk-level `document_chunks` → add evaluation/observability tables).
+**Configuration**
+`llm_providers` (encrypted keys, a partial unique index enforcing at most one default), `llm_models` (one model per provider per tier), `users`.
+
+**Evaluation**
+`benchmark_runs`, `evaluation_metrics`, `question_results`, `claim_evaluations`, `escalations`, `human_reviews`.
+
+**Operations**
+`ingestion_events` (one row per attempt, including the attempts that produced no document — duplicates, unreadable PDFs), `system_logs`, `alerts`, `retrieval_logs`, `pipeline_traces`, `retrieved_evidence`, `model_costs`, `alembic_version`.
+
+### A note on migrations
+
+Two things write this schema: SQLAlchemy's `create_all` in the app lifespan, and Alembic's 23 revisions. The Alembic chain begins at *"add embedding column to documents"* — it **alters** base tables rather than creating them, because those tables already existed when the chain started.
+
+So `alembic upgrade head` is only correct against a database Alembic has already seen. On an empty database it fails on a table that does not exist yet. `backend/startup_migration.py` decides which case applies by looking for the version table, and stamps rather than replays when the schema came from the models. Use it instead of calling Alembic directly.
+
+## Evaluation
+
+100 golden questions, split 30 valuation / 30 growth / 25 sentiment / 15 mixed, plus a 4-question `smoke` set and an env-driven `focus` set for iterating on specific questions.
+
+Ground truth is maintained in two halves for a reason:
+
+- **Derived** — the 60 valuation and growth questions are generated from specifications in `question_bank.py` by querying the seeded database. Never hand-edited; regenerate after every reseed.
+- **Authored** — the sentiment and mixed questions carry reference answers and reference contexts written by a human. A model-written reference would only confirm the model's own output.
+
+```bash
+uv run python -m backend.evaluation.datasets.generate_ground_truth   # rebuild derived rows
+uv run python -m backend.evaluation.datasets.verify_ground_truth     # check everything, non-zero on drift
+```
+
+**Reseeding invalidates all of it.** The seed pulls live fundamentals, so market caps and P/E ratios move and the membership of a "top five" can change outright — one reseed dropped NVDA out of the five smallest technology market caps and brought CRM in. The pipeline then answers correctly and the benchmark marks it wrong, which looks exactly like a regression. This is what the [frozen snapshot](#seeding-and-the-frozen-snapshot) exists to prevent.
+
+Beyond RAGAS, a **claim audit** extracts individual factual claims from an answer and checks each against the retrieved evidence, so an answer that is right overall but unsupported in one sentence is visible as such.
+
+## Security
+
+`backend/security/` runs on the query path, measured at roughly 0.4 ms in total against a pipeline that takes 30–150 seconds:
+
+- **input_guard** — prompt-injection and abuse patterns
+- **pii** — detection over inbound text
+- **output_validator** — checks on what the pipeline is about to return
+- **rate_limit** — per-caller ceiling, Redis-backed, **fails open** by design so a cache outage does not become an outage
+- **llm_guard** — an optional LLM-based check, off by default because it costs an API round trip per query
+
+Every layer records what it did to `system_logs`, which the admin security feed reads.
 
 ## Setup
 
 Requires Python 3.13 (`.python-version`) and [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
-# Start Postgres (pgvector) + Redis
+# Postgres (pgvector) + Redis
 docker compose up -d postgres redis
 
-# Install deps
+# Dependencies
 uv sync
 
-# Run migrations
-uv run alembic upgrade head
-
-# Seed reference data (companies, financials, sample documents)
-uv run python -m seeds.seed_data
-
-# Run the API
+# Schema. NOT `alembic upgrade head` on a fresh database — see the note above.
+uv run python -m backend.startup_migration
 uv run uvicorn backend.main:app --reload --port 8000
 ```
 
-Or run the whole stack (API included) via `docker compose up --build` — see the caveat about the `/coded` volume mount below.
+The first server start creates any missing tables via `create_all`. Load data with either the [live seed or the frozen snapshot](#seeding-and-the-frozen-snapshot).
+
+The frontend is a separate Vite app:
+
+```bash
+cd frontend && npm install && npm run dev     # :5173
+```
+
+It calls the API through a Vite dev proxy rather than directly, because the backend registers no CORS middleware and the frontend uses relative `/api` paths throughout. Every deployment therefore serves both halves from one origin, or rewrites `/api` and `/health` to the API.
 
 ## Configuration
 
-Settings are loaded from `.env` via `backend/config.py` (`pydantic-settings`):
+Loaded from `.env` by `backend/config.py` (`pydantic-settings`). Environment variables take precedence over the file.
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `DATABASE_URL` | yes | — | Postgres connection string |
-| `REDIS_URL` | yes | — | Redis connection string |
+| `DATABASE_URL` | yes | — | Postgres, async driver (`postgresql+asyncpg://`) |
+| `SYNC_DATABASE_URL` | yes | — | Postgres, sync driver — Alembic and the SQL agent |
+| `LLM_KEY_ENCRYPTION_SECRET` | yes | — | Fernet key for provider API keys in `llm_providers` |
+| `REDIS_URL` | no | `redis://localhost:6379/0` | Cache and rate-limit store; unreachable is tolerated, blank is not |
+| `OPENAI_API_KEY` | for embeddings | `""` | `text-embedding-3-small` only; chat models come from the database |
+| `DEPLOYMENT_MODE` | no | `full` | `portfolio` or `full` — see [Deployment modes](#deployment-modes) |
 | `APP_ENV` | no | `development` | Environment name |
-| `APP_HOST` / `APP_PORT` | no | — | Used by local run scripts |
-| `OPENAI_API_KEY` | yes (for any LLM/embedding call) | `""` | Chat + embedding models |
-| `ADMIN_API_KEY` | no | `admin-secret-key` | Guards `POST /api/index/documents` |
-| `ALPHA_VANTAGE_API_KEY` | for seeding news sentiment | `""` | Used only by `seeds/seed_data.py` |
-| `LANGCHAIN_API_KEY` / `LANGCHAIN_TRACING_V2` / `LANGCHAIN_PROJECT` | no | — | LangSmith tracing env vars are read but no tracing is actually wired up (see Known issues) |
+| `JWT_SECRET` | for `full` | `""` | Signs access tokens; no default on purpose |
+| `JWT_EXPIRE_HOURS` | no | `12` | Token lifetime |
+| `ADMIN_API_KEY` | no | `""` | Guards the indexing route; empty means refuse |
+| `SECURITY_RATE_LIMIT` | no | `20` | Requests per window, per caller |
+| `SECURITY_RATE_WINDOW_SECONDS` | no | `60` | Window length |
+| `SECURITY_LLM_GUARD_ENABLED` | no | `false` | The optional LLM guard |
+| `READONLY_DATABASE_URL` | no | `""` | SELECT-only role for generated SQL; falls back to `DATABASE_URL` |
+| `SEC_USER_AGENT` | for EDGAR | `""` | SEC requires a caller and contact; empty disables the collector |
+| `ALPHA_VANTAGE_API_KEY` | for seeding | `""` | News sentiment during a live seed |
+| `AWS_REGION`, `RAW_BUCKET`, `PROCESSED_BUCKET`, `INGESTION_QUEUE_URL` | no | — | The S3 → SQS → worker ingestion path; empty means the fetcher writes straight to Postgres |
+| `LANGSMITH_API_KEY`, `LANGSMITH_TRACING`, `LANGCHAIN_PROJECT` | no | — | Tracing |
+| `CLOUDWATCH_LOGS_URL`, `LANGSMITH_PROJECT_URL` | no | `""` | Console links for the admin rail |
 
-**Models used**: `gpt-5.4-nano` (classification, ticker extraction), `gpt-5.4-mini` (planning, SQL/vector agents, reranking), `gpt-5.4` (final report synthesis, reviewer fact-check), `text-embedding-3-small` (document embeddings, 1536-dim).
+Two notes worth knowing before a deployment fails obscurely:
 
-**Docker Compose ports**: Postgres `5433→5432`, Redis `6379→6379`, API `8000→8000`.
+- **`backend.main` cannot be imported without `OPENAI_API_KEY`.** `OpenAIEmbeddings` is constructed at module scope and validates credentials on construction, so uvicorn exits at import from a clean shell. Export `.env` first.
+- **A blank `REDIS_URL` is worse than a missing one.** Missing falls back to the default; blank is a string `redis.from_url` rejects at import.
 
-## Seeding data
+**Docker Compose ports:** Postgres `5433→5432`, Redis `6379→6379`, API `8000→8000`.
 
-`seeds/companies.csv` lists 50 tech-heavy tickers (AAPL, MSFT, GOOGL, NVDA, …). `seeds/seed_data.py` clears and repopulates `companies`, `financial_metrics`, and `documents` by pulling live fundamentals from yfinance and up to 3 news-sentiment articles per company from Alpha Vantage. It sleeps 12s between companies to respect rate limits, so a full seed run takes roughly 10 minutes.
+## Seeding and the frozen snapshot
+
+`seeds/companies.csv` lists 50 tech-heavy tickers. `seeds/seed_data.py` repopulates `companies`, `financial_metrics` and `documents` from live fundamentals and news, sleeping 12s between companies to respect rate limits — a full run takes roughly 10 minutes and **changes the ground under the benchmark**.
+
+`seeds/snapshot.py` exists to break that dependency:
+
+```bash
+uv run python -m seeds.snapshot create    # freeze the current database
+uv run python -m seeds.snapshot restore   # load the frozen data back
+uv run python -m seeds.snapshot verify    # compare database against file
+```
+
+The snapshot captures companies, themes, metrics, documents and `document_chunks` **including each chunk's embedding**, so a restore needs no embedding API call and vector search returns the same chunks every run. Primary keys are preserved and sequences reset afterwards, so foreign keys survive the round trip.
+
+With the snapshot restored, a score change can only have come from the code. What it does not capture is live market data, which is fetched at query time — a `MIXED` question still varies by however much prices moved.
+
+## Deployment
+
+**The preprod deployment** runs on managed services, none of which need an always-on machine:
+
+| Piece | Service | Why |
+|---|---|---|
+| API | Render web service (Docker) | A query takes ~95s, which rules out any serverless host with a short timeout |
+| UI | Render static site | Never sleeps, so the page paints instantly and only the query waits |
+| Database | Neon Postgres | Free tier supports pgvector and does not sleep |
+| Cache | Upstash Redis | Makes the rate limit real and the embedding cache shared |
+
+`infrastructure/preprod/render.yaml` is the blueprint, and it carries the reasoning for each choice in comments. The static site rewrites `/api/*` and `/health` to the API, which keeps the browser same-origin — necessary because the backend mounts no CORS middleware.
+
+**The AWS topology** is defined in `infrastructure/production/`: ALB → ECS Fargate (an API task and an ingestion worker sharing one image), RDS Postgres in private subnets, S3 → SQS → worker ingestion, and Secrets Manager, all in Terraform.
+
+One gotcha it encodes: the ECS image serves the frontend from the same container, and it only has a frontend because `frontend/dist` exists in the developer's working tree at `docker build` time. `dist` is gitignored, so an image built from a clean clone is API-only and answers `/` with a 404. That is exactly why the Render deployment builds the UI as a separate static site instead.
 
 ## Project layout
 
 ```
 backend/
-  api/            FastAPI routers (financial, sql, vector, evaluation)
-  graph/          LangGraph state graphs (financial, sql, vector)
-  nodes/          Individual graph nodes (intent, planner, retrieval-adjacent, scoring, analysis, reviewer)
-  retrieval/      Hybrid retrieval, vector search, SQL execution, query filters
+  api/            FastAPI routers — financial, sql, vector, ingestion, evaluation,
+                  claims, escalation, security, auth, admin
+  graph/          LangGraph state graphs (financial, sql, vector) and the runner
+  nodes/          Graph nodes — intent, planner, sql, vector, market, scoring,
+                  reranker, analysis, reviewer
+  retrieval/      Hybrid retrieval, pgvector search, BM25, RRF fusion,
+                  cross-encoder, embedding cache, SQL execution, theme resolution
   scoring/        Ranking, evidence attachment, score normalization
-  ingestion/      Document loading, chunking, embedding/indexing
-  evaluation/     RAGAS evaluator, custom metrics, benchmark runner, question sets
-  services/       LLM client tiers, market data (yfinance), Postgres, Redis
+  ingestion/      Upload, EDGAR collection, chunking, embedding, queue worker
+  evaluation/     Question sets, ground-truth generation, RAGAS and custom
+                  evaluators, benchmark runner, claim audit
+  security/       Input guard, PII, output validation, rate limiting, event log
+  auth/           Passwords, tokens, roles, dependencies
+  escalation/     Low-confidence answers routed to human review
+  llm/            Provider registry, tiers, key encryption, usage tracking
+  observability/  Structured logging, node-boundary tracing, LangSmith setup
+  services/       Postgres, Redis, market data
   models/         SQLAlchemy models
-  observability/  Logging/metrics/tracing — currently empty stubs
-alembic/          DB migrations
-seeds/            Reference data + seeding script
-frontend/         Vite + React + TypeScript user-facing research workspace
-  src/api/        Typed client + response models for the financial endpoint
-  src/lib/        Formatting, label translation, citation parsing
+alembic/          23 migrations
+seeds/            Reference data, live seed, frozen benchmark snapshot
+tests/            101 test modules
+frontend/         Vite + React + TypeScript
   src/components/ Query console, company cards, comparison table, details drawer
+  src/evaluation/ Benchmark dashboard — runs, metrics, per-question, comparisons
+  src/admin/      Providers, indexing, ingestion, human review
+infrastructure/
+  preprod/        Render blueprint and Vercel config
+  production/     Terraform for the AWS topology
+  shared/         ECR repository and ACM certificate
 ```
 
-Run it with `npm install && npm run dev` in `frontend/` (dev server on
-`:5173`). It calls `POST /api/retrieve/financial` through a Vite proxy to
-`localhost:8000`, since the API registers no CORS middleware.
+## Testing
+
+```bash
+uv run pytest -q
+```
+
+101 test modules. They are written as statements about behaviour rather than coverage of functions — `test_events_survive_a_restore.py`, `test_run_totals_survive_a_crash.py`, `test_every_question_resolves_its_cohort.py`, `test_sql_prompt_guardrails.py`.
+
+Note that `.env` sets `DEPLOYMENT_MODE=portfolio` for local demo work, and the routers absent in that mode make their tests fail on a missing route. Run the full suite with `DEPLOYMENT_MODE=full`.
 
 ## Known issues
 
-These were found while documenting the codebase and are worth fixing before relying on the affected paths:
-
-- **`POST /api/evaluation/run` is broken** — `evaluation_routes.py` imports `from graph.financial_graph import FinancialGraph`, but the real module is `backend.graph.financial_graph` and it exports a compiled graph object (`financial_graph`), not a `FinancialGraph` class.
-- **Evaluation routes mix sync/async DB sessions** — they depend on `AsyncSession`, but `postgres_service.get_db()` yields a synchronous SQLAlchemy `Session` from a sync engine.
-- **`CustomMetrics.compute_run_metrics` will raise `AttributeError`** — an indentation bug in `backend/evaluation/custom_metrics.py` defines `recall_at_k`, `mean_average_precision`, `hallucination_rate`, and `compute_run_metrics` as module-level functions instead of `CustomMetrics` methods, but `benchmark_runner.py` calls them as `CustomMetrics.compute_run_metrics(...)`.
-- **`BenchmarkRunner` expects a pipeline shape that doesn't match `financial_graph`** — it calls `.invoke({"question":..., "run_id":..., "retrieval_mode":...})` and expects `answer`/`retrieved_tickers`/`context_chunks`/`cost_usd`, none of which match the actual `FinancialState` shape.
-- **`docker-compose.yml` volume mount path mismatch** — mounts `.:/coded` but the Dockerfile's `WORKDIR` is `/code`, so the bind mount doesn't overlay the app source as likely intended.
-- **`embedding_service.py` and all of `backend/observability/*.py` are empty stub files** — not implemented. Embedding logic currently lives inline in `ingestion/indexing_service.py` and `retrieval/vector_search.py`; logging is ad hoc via `logging.getLogger` rather than a shared observability layer.
-- **Several DB tables have no writers** — `retrieval_logs`, `pipeline_traces`, `retrieved_evidence`, `model_costs`, `system_logs`, `alerts`, `human_reviews` are defined in the schema but nothing currently inserts into them (planned dashboard support, not yet wired up).
-- **`question_sets.py` has duplicate dead redefinitions** of `GROWTH_QUESTIONS`, `SENTIMENT_QUESTIONS`, and `MIXED_QUESTIONS` (harmless — the later definition just overwrites the identical earlier one).
-- **No CORS middleware** — `backend/main.py` registers none, so a browser app on another origin cannot call the API directly. The frontend works around this with a dev-server proxy; a deployed frontend would need CORS or a shared origin.
-- **No evaluation/developer dashboard yet** — the evaluation endpoints are shaped for dashboard charts, but only the normal user-facing research experience is implemented in `frontend/`.
+- **No CORS middleware.** `backend/main.py` registers none, so a browser app on a different origin cannot call the API. Every deployment shares an origin or rewrites `/api` and `/health`; local development uses the Vite proxy. Deliberate, but it constrains how the API can be consumed.
+- **Six tables have no writers.** `retrieval_logs`, `pipeline_traces`, `retrieved_evidence`, `model_costs`, `alerts` and `human_reviews` are defined in the schema and read by parts of the dashboard, but nothing inserts into them yet. (`system_logs` *is* written, by the security event log.)
+- **`backend/observability/metrics.py` and `backend/services/embedding_service.py` are empty files.** Embedding logic lives inline in `ingestion/indexing_service.py` and `retrieval/vector_search.py`; metrics are covered by tracing and the evaluation tables instead.
+- **The Alembic chain cannot build a database from scratch.** Its first revision alters tables that `create_all` is expected to have made. `backend/startup_migration.py` handles both cases; calling Alembic directly on an empty database does not.
+- **`backend.main` imports ~379 MB.** It fits a 512 MB instance, but enabling the cross-encoder adds roughly 270 MB more and would not. The text splitter is imported lazily for this reason.

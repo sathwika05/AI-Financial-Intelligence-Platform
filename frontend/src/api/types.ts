@@ -91,6 +91,13 @@ export interface FinalReport {
    * pipeline had an answer and declined to show it.
    */
   withheld?: boolean | null;
+  /**
+   * The classifier declined the question before anything ran. Distinct
+   * from `withheld`: that one means the pipeline produced a result the
+   * server would not stand behind, this one means there was nothing to
+   * research. They need different words, so they need different flags.
+   */
+  out_of_scope?: boolean | null;
   overall_confidence?: number | null;
   evidence_quality?: string | null;
   review?: ReportReview | null;

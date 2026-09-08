@@ -122,6 +122,36 @@ export function NoResultsState() {
  * assumes the warning is read. It is not: a table of tickers and scores
  * looks equally authoritative at 0.17 as at 0.91.
  */
+/**
+ * Shown when the question was not a research question.
+ *
+ * Deliberately separate from WithheldState. That one tells the reader
+ * "nothing is wrong with your question, the evidence was too thin", which
+ * is the opposite of what happened here: nothing was retrieved, the corpus
+ * is fine, and the input named nothing to look for. Reusing it would give
+ * the reader the wrong explanation in a confident voice.
+ */
+export function OutOfScopeState({ notice }: { notice?: string | null }) {
+  return (
+    <section className="state state--empty panel" role="status">
+      <div className="state__head">
+        <SearchX size={15} className="state__icon-empty" aria-hidden="true" />
+        <span className="eyebrow state__eyebrow">Not a research question</span>
+      </div>
+
+      <h2 className="state__title state__title--empty">
+        {notice ??
+          "That does not look like a research question."}
+      </h2>
+
+      <p className="state__caption">
+        This screens companies on fundamentals, filings and market data. Name a
+        company, a sector, or a metric and it has something to work with.
+      </p>
+    </section>
+  );
+}
+
 export function WithheldState({
   notice,
   confidence,

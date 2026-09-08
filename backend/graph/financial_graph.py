@@ -15,7 +15,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph, add_messages
 
 from backend.nodes.analysis_node import analysis_node
-from backend.nodes.intent_node import intent_node
+from backend.nodes.intent_node import OUT_OF_SCOPE, intent_node
 from backend.nodes.planner_node import planner_node
 from backend.nodes.reviewer_node import reviewer_node, route_after_review
 from backend.nodes.scoring_node import scoring_node
@@ -89,6 +89,16 @@ async def retrieval_node(state: FinancialState, config: RunnableConfig) -> dict:
 # ── Routers ─────────────────────────────────────────────────
 
 def route_after_intent(state: FinancialState) -> str:
+    """
+    A question the classifier declined is finished here.
+
+    Every other intent goes to the planner exactly as before -- an
+    absent intent included, because "not classified" is not the same
+    as "refused".
+    """
+    if str(state.get("intent") or "").strip().upper() == OUT_OF_SCOPE:
+        return "output"
+
     return "planner"
 
 
@@ -130,7 +140,10 @@ def build_financial_graph():
     graph.add_conditional_edges(
         "intent",
         route_after_intent,
-        {"planner": "planner"}
+        {
+            "planner": "planner",
+            "output": END,      # not a research question -> stop
+        },
     )
     graph.add_conditional_edges(
        "planner",

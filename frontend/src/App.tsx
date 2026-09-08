@@ -19,6 +19,7 @@ import {
   ErrorState,
   LoadingState,
   NoResultsState,
+  OutOfScopeState,
   WithheldState,
 } from "./components/States";
 import "./App.css";
@@ -64,6 +65,9 @@ export default function App({
   // enough — `withheld` is the explicit signal, `review.escalated` is what
   // an older response carries.
   const withheld = Boolean(report?.withheld || report?.review?.escalated);
+  // Refused at the classifier, before anything ran. Checked first,
+  // because it must not be described as a withheld ranking.
+  const outOfScope = Boolean(report?.out_of_scope);
   const rankedCompanies = useMemo(
     () => result?.ranked_companies ?? [],
     [result],
@@ -296,7 +300,13 @@ export default function App({
             it. The summary, the ranking and the methodology all describe a
             result the server declined to send, and rendering their empty
             shells around a warning reads as a broken screen. */}
-        {status === "done" && withheld && (
+        {status === "done" && outOfScope && (
+          <div className="app__block">
+            <OutOfScopeState notice={report?.review?.notice} />
+          </div>
+        )}
+
+        {status === "done" && !outOfScope && withheld && (
           <div className="app__block">
             <WithheldState
               notice={report?.review?.notice}
@@ -305,7 +315,7 @@ export default function App({
           </div>
         )}
 
-        {status === "done" && !withheld && (
+        {status === "done" && !withheld && !outOfScope && (
           <>
             {report && (
               <div className="app__block">

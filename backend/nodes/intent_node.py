@@ -17,11 +17,64 @@ class QueryIntent(BaseModel):
     """
 
     intent: str = Field(
-        description="Query intent: VALUATION, GROWTH, SENTIMENT or MIXED"
+        description=(
+            "Query intent: VALUATION, GROWTH, SENTIMENT, MIXED "
+            "or OUT_OF_SCOPE"
+        )
     )
     reason: str = Field(
         description="Brief reason for the classification"
     )
+
+
+# The fifth classification, and the one the schema was missing.
+#
+# A live "hello" was classified SENTIMENT with the reason "User greeted; no
+# financial query provided" — the model diagnosed it correctly and had
+# nowhere to put the diagnosis, because the contract demanded one of four
+# financial intents. It then ranked the whole corpus by revenue growth.
+OUT_OF_SCOPE = "OUT_OF_SCOPE"
+
+_VALID_INTENTS = [
+    "VALUATION",
+    "GROWTH",
+    "SENTIMENT",
+    "MIXED",
+    OUT_OF_SCOPE,
+]
+
+
+def build_out_of_scope_report(reason: str) -> dict:
+    """
+    The whole answer for a question the system will not attempt.
+
+    Deliberately not the withheld shape. Withheld means the pipeline ran
+    and the result was not trusted, and it tells the reader the evidence
+    was too thin — which would be the wrong explanation here, because
+    nothing was retrieved and there is nothing wrong with the corpus.
+    """
+    return {
+        "query_summary": None,
+        "intent": OUT_OF_SCOPE,
+        "top_companies": [],
+        "out_of_scope": True,
+        "overall_confidence": None,
+        "evidence_quality": None,
+        "review": {
+            "escalated": False,
+            "decision": OUT_OF_SCOPE,
+            "reason": reason,
+            "notice": (
+                "That does not look like a research question. Try naming a "
+                "company, a sector, or a metric — for example “healthcare "
+                "companies with the strongest revenue growth”."
+            ),
+            "flags": [],
+            "total_flags": 0,
+            "hallucination_rate": 0.0,
+        },
+        "sources_used": {},
+    }
 
 # System instructions are stored as plain text.
 # A SystemMessage is created only when invoking the model.
@@ -86,8 +139,24 @@ MIXED
     - The test is what the answer needs, not how many measures the
       question names. If every clause maps to a column, it is not MIXED.
 
+OUT_OF_SCOPE
+    - Not a research question at all: a greeting, small talk, a question
+      about this tool, or anything naming no company, sector, metric or
+      financial topic.
+        "hello"                                             -> OUT_OF_SCOPE
+        "what can you do?"                                  -> OUT_OF_SCOPE
+        "thanks!"                                           -> OUT_OF_SCOPE
+    - A bare company name is IN scope, not out of it. "microsoft" is a
+      terse question about Microsoft, and answering it is correct.
+        "microsoft"                                              -> SENTIMENT
+        "AMD vs NVDA"                                                -> MIXED
+    - When unsure, choose a financial intent. Refusing a real question is
+      a worse failure than answering a vague one, so this is for input
+      with no financial content whatsoever — not for input that is merely
+      short, awkward or ambiguous.
+
 Return:
-- intent: exactly one of VALUATION, GROWTH, SENTIMENT, MIXED
+- intent: exactly one of VALUATION, GROWTH, SENTIMENT, MIXED, OUT_OF_SCOPE
 - reason: a short explanation for the classification
 """.strip()
 
@@ -116,7 +185,7 @@ async def classify_intent(query: str, config: RunnableConfig) -> QueryIntent:
     )
 
     intent = response.intent.upper().strip()
-    if intent not in ["VALUATION", "GROWTH", "SENTIMENT", "MIXED"]:
+    if intent not in _VALID_INTENTS:
         logger.warning(
             "[INTENT] Unsupported intent '%s'; "
             "falling back to MIXED",
@@ -165,8 +234,20 @@ async def intent_node(state: dict,config: RunnableConfig) -> dict:
         config=config,
     )
 
-    return {
-         "intent": classification.intent,
-         "intent_reason": classification.reason,
-         "original_query": query,
+    result = {
+        "intent": classification.intent,
+        "intent_reason": classification.reason,
+        "original_query": query,
     }
+
+    # Answer here rather than routing five more stages to discover the
+    # same thing. The reviewer would now withhold this report, which is
+    # the right terminal reached the wrong way: six LLM calls and roughly
+    # two minutes to decline a greeting, and a notice blaming thin
+    # evidence for a question that named nothing to find evidence about.
+    if classification.intent == OUT_OF_SCOPE:
+        result["final_report"] = build_out_of_scope_report(
+            classification.reason
+        )
+
+    return result

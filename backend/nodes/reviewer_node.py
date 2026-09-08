@@ -73,6 +73,50 @@ def decide_escalation(
     return confidence < ESCALATION_THRESHOLD
 
 
+# Flag kinds a rewrite can act on. confidence_flags is deliberately absent:
+# "confidence is low" restates the problem rather than naming a claim, so
+# sending it back spends an attempt and changes nothing.
+_ACTIONABLE_FLAG_KINDS = (
+    "hallucination_flags",
+    "evidence_flags",
+    "citation_flags",
+    "company_flags",
+)
+
+
+def actionable_feedback(review_result: dict[str, Any]) -> list[str]:
+    """
+    The flags carried into the next attempt.
+
+    Only hallucination flags used to be forwarded, and quality_failure is
+    set by any of three predicates -- a hallucination rate above threshold,
+    any evidence flag, any citation flag. So two of the three triggers
+    produced an empty feedback list, and analysis re-ran on a prompt
+    identical to the one that had just failed. At temperature zero that is
+    not a resample, it is a repeat: the "hello" run spent 97 of its 111
+    seconds on three attempts that could not differ.
+
+    Every predicate that can trigger a retry populates a list named here,
+    so a retry can no longer be dispatched with nothing to say.
+    """
+    feedback: list[str] = []
+
+    for kind in _ACTIONABLE_FLAG_KINDS:
+        feedback.extend(review_result.get(kind) or [])
+
+    return feedback
+
+
+def unresolved_flag_notice(total_flags: int) -> str:
+    """What the reader is shown when the reviewer ran out of attempts."""
+    return (
+        f"This ranking is being withheld. The reviewer raised {total_flags} "
+        "unresolved issue(s) with the draft and could not clear them within "
+        "its retry limit, so the result has been sent for human review "
+        "rather than shown as reviewed."
+    )
+
+
 def build_escalation_notice(overall_confidence: float) -> str:
     """
     What the reader is shown in place of the ranking.
@@ -607,10 +651,26 @@ def build_final_output(
 
     # Only ever called once the reviewer has stopped retrying, so the
     # number here is final by construction.
-    escalated = decide_escalation(
+    low_confidence = decide_escalation(
         overall_confidence=overall_confidence,
         should_retry=False,
     )
+
+    # The second reason to withhold, and the one that fires in practice.
+    #
+    # decide_escalation catches the quiet case it was written for: no
+    # flags, low confidence, no retries. It cannot catch this one, because
+    # the self-reported confidence floors around 0.49 on the weakest
+    # evidence in the corpus -- the 0.30 branch has never triggered. A
+    # live "hello" raised fourteen flags four times running, was force
+    # passed at the retry limit, and rendered with a Reviewed badge at 52%.
+    #
+    # Additive on purpose: decide_escalation keeps its exact meaning, so a
+    # draft with no flags and 0.18 confidence still withholds on confidence
+    # alone.
+    unresolved = review_result.get("decision") == "forced_pass"
+
+    escalated = low_confidence or unresolved
 
     try:
         confidence_value = float(overall_confidence)
@@ -641,9 +701,17 @@ def build_final_output(
         ),
         "review": {
             "escalated": escalated,
+            # Two reasons to withhold, two different sentences. A reader
+            # told "confidence was low" about a report that was actually
+            # withheld for fourteen unresolved flags has been given the
+            # wrong explanation, which is worse than none.
             "notice": (
                 build_escalation_notice(confidence_value)
-                if escalated
+                if low_confidence
+                else unresolved_flag_notice(
+                    review_result.get("total_flags", 0)
+                )
+                if unresolved
                 else None
             ),
             "decision": review_result.get(
@@ -706,22 +774,44 @@ async def reviewer_node(
             "returning forced pass"
         )
 
+        # Withheld, not passed. This branch returns before
+        # build_final_output, so decide_escalation never ran and an empty
+        # report could not be withheld at all -- it was returned with
+        # passed True and a forced_pass decision, which the console draws
+        # as a reviewed answer. An empty draft is the clearest possible
+        # case for declining to stand behind a result.
         review_result = {
-            "passed": True,
+            "passed": False,
             "should_retry": False,
-            "decision": "forced_pass",
+            "decision": "withheld_empty_draft",
             "confidence_flags": [],
-            "evidence_flags": [],
+            "evidence_flags": ["The analysis produced no draft report."],
             "hallucination_flags": [],
             "company_flags": [],
             "citation_flags": [],
             "hallucination_rate": 0.0,
-            "total_flags": 0,
+            "total_flags": 1,
         }
 
         return {
             "review_result": review_result,
-            "final_report": draft_report,
+            "final_report": {
+                "query_summary": (draft_report or {}).get("query_summary"),
+                "intent": (draft_report or {}).get("intent"),
+                "top_companies": [],
+                "withheld": True,
+                "overall_confidence": None,
+                "evidence_quality": None,
+                "review": {
+                    "escalated": True,
+                    "notice": unresolved_flag_notice(1),
+                    "decision": "withheld_empty_draft",
+                    "hallucination_rate": 0.0,
+                    "total_flags": 1,
+                    "flags": ["The analysis produced no draft report."],
+                },
+                "sources_used": {},
+            },
             "should_retry": False,
             "retry_count": retry_count,
         }
@@ -764,7 +854,7 @@ async def reviewer_node(
     # Only an analysis retry can act on the flags; a retrieval retry
     # rebuilds the evidence and starts from a clean draft.
     review_feedback = (
-        review_result.get("hallucination_flags", [])
+        actionable_feedback(review_result)
         if should_retry and retry_target == "analysis"
         else []
     )

@@ -117,6 +117,26 @@ def unresolved_flag_notice(total_flags: int) -> str:
     )
 
 
+def review_unavailable_notice() -> str:
+    """
+    What the reader is shown when the check itself did not run.
+
+    Deliberately not unresolved_flag_notice: that one names a count of
+    problems found in the draft, and here nothing was found because
+    nothing was looked at. Telling a reader the reviewer "raised 0
+    unresolved issues" would describe a clean report and withhold it
+    anyway.
+    """
+    return (
+        "This ranking is being withheld. The verification step could not "
+        "be completed -- the service that checks each claim against its "
+        "evidence was unreachable -- so the answer has not been reviewed. "
+        "Nothing is known to be wrong with it; it simply has not been "
+        "checked, and this system does not present unchecked answers as "
+        "reviewed. Trying again shortly will usually succeed."
+    )
+
+
 def build_escalation_notice(overall_confidence: float) -> str:
     """
     What the reader is shown in place of the ranking.
@@ -303,6 +323,33 @@ def _build_claims(
     return claims
 
 
+async def _call_hallucination_judge(
+    system_message: SystemMessage,
+    human_message: HumanMessage,
+    config: RunnableConfig,
+) -> str:
+    """
+    The provider call, on its own so a failure to reach the judge is
+    distinguishable from a judgment.
+
+    Everything above this line is a fact about the draft. Everything this
+    raises is a fact about the network.
+    """
+    llm = get_llm_client(config, LLMTier.LARGE)
+
+    response = await llm.ainvoke(
+        [system_message, human_message],
+        config=config,
+    )
+
+    content = response.content
+
+    if not isinstance(content, str):
+        raise TypeError("Reviewer LLM returned non-string content")
+
+    return content
+
+
 async def _llm_hallucination_check(
     draft_report: dict[str, Any],
     ranked_companies: list[dict[str, Any]],
@@ -322,20 +369,19 @@ async def _llm_hallucination_check(
         return {
             "hallucination_rate": 0.0,
             "flagged_claims": [],
+            "check_unavailable": False,
         }
 
     if not source_evidence:
+        # A real finding, not a failure to look: the draft makes claims
+        # and the pipeline attached nothing to support them.
         return {
             "hallucination_rate": 1.0,
             "flagged_claims": [
                 "No company-level evidence is available"
             ],
+            "check_unavailable": False,
         }
-
-    llm = get_llm_client(
-        config,
-        LLMTier.LARGE,
-    )
 
     system_message = SystemMessage(
         content="""
@@ -390,20 +436,11 @@ Return only JSON.
     )
 
     try:
-        response = await llm.ainvoke(
-            [
-                system_message,
-                human_message,
-            ],
-            config=config,
+        content = await _call_hallucination_judge(
+            system_message,
+            human_message,
+            config,
         )
-
-        content = response.content
-
-        if not isinstance(content, str):
-            raise TypeError(
-                "Reviewer LLM returned non-string content"
-            )
 
         cleaned_content = (
             content
@@ -441,19 +478,29 @@ Return only JSON.
                 str(claim)
                 for claim in flagged_claims
             ],
+            "check_unavailable": False,
         }
 
     except Exception:
         logger.exception(
-            "[REVIEWER] LLM hallucination check failed"
+            "[REVIEWER] Hallucination judge unreachable; "
+            "the draft has not been checked"
         )
 
-        # Fail safely instead of silently approving.
+        # Report that no verdict exists, rather than inventing the worst
+        # one. 1.0 here was above HALLUCINATION_THRESHOLD, so a 429 set
+        # quality_failure and the graph retried -- regenerating the draft
+        # on the LARGE tier and asking the judge again, against the token
+        # limit that had just rejected it. The failure fed itself.
+        #
+        # Not approving either: run_reviewer withholds on this flag. An
+        # unreviewed draft must never be presented as reviewed, and the
+        # reader is owed the real reason rather than a flag count the
+        # reviewer never produced.
         return {
-            "hallucination_rate": 1.0,
-            "flagged_claims": [
-                "Hallucination review could not be completed"
-            ],
+            "hallucination_rate": 0.0,
+            "flagged_claims": [],
+            "check_unavailable": True,
         }
 
 
@@ -555,6 +602,11 @@ async def run_reviewer(
     hallucination_flags = hallucination_result[
         "flagged_claims"
     ]
+    # No verdict exists, as distinct from a bad one. Kept separate from
+    # every quality signal below, because it says nothing about the draft.
+    review_unavailable = bool(
+        hallucination_result.get("check_unavailable")
+    )
 
     all_flags = [
         *confidence_flags,
@@ -605,7 +657,22 @@ async def run_reviewer(
     # not have instead of asserting it.
     retry_target = "analysis"
 
-    if retry_count >= MAX_RETRIES and quality_failure:
+    if review_unavailable:
+        # First, because it is the one terminal that must not retry.
+        # Retrying is what turns a rate limit into a storm: each attempt
+        # regenerates the draft on the LARGE tier and asks the judge
+        # again, against the budget that just refused it.
+        decision = "withheld_review_unavailable"
+        passed = False
+        should_retry = False
+
+        logger.warning(
+            "[REVIEWER] Withholding: the draft could not be checked. "
+            "flags=%s (none of them from the judge)",
+            len(all_flags),
+        )
+
+    elif retry_count >= MAX_RETRIES and quality_failure:
         decision = "forced_pass"
         passed = True
         should_retry = False
@@ -723,7 +790,16 @@ def build_final_output(
     # alone.
     unresolved = review_result.get("decision") == "forced_pass"
 
-    escalated = low_confidence or unresolved
+    # The third reason, and the one that is not about the draft at all:
+    # the judge was unreachable, so no verdict exists. Withheld for the
+    # same reason as the other two -- an unchecked answer must not carry a
+    # Reviewed badge -- but it needs its own sentence, because the honest
+    # explanation is "we could not check this", not "we found problems".
+    unchecked = (
+        review_result.get("decision") == "withheld_review_unavailable"
+    )
+
+    escalated = low_confidence or unresolved or unchecked
 
     try:
         confidence_value = float(overall_confidence)
@@ -759,7 +835,9 @@ def build_final_output(
             # withheld for fourteen unresolved flags has been given the
             # wrong explanation, which is worse than none.
             "notice": (
-                build_escalation_notice(confidence_value)
+                review_unavailable_notice()
+                if unchecked
+                else build_escalation_notice(confidence_value)
                 if low_confidence
                 else unresolved_flag_notice(
                     review_result.get(

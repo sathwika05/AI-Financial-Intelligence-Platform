@@ -73,3 +73,13 @@
   color: var(--color-text-secondary);
   max-width: 52ch;
 }
+
+/* The order-basis note. Separated from the caption above it because it
+   explains an apparent contradiction rather than continuing a
+   description -- a reader who has just noticed a lower score ranked
+   higher needs to find this without hunting for it. */
+.methodology__caption--order {
+  margin-top: 0.5rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--accent);
+}

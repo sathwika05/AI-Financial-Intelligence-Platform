@@ -136,6 +136,16 @@ export interface ScoringResult {
   total_ranked?: number | null;
   /** Internal retrieval detail; not displayed. */
   reranked_context_count?: number | null;
+  /**
+   * Which rule decided the rank order: "sql_order" or "composite".
+   *
+   * Needed because the two can disagree visibly. A live query for
+   * "undervalued companies with low P/E" returned rank 1 at 0.697 and
+   * rank 3 at 0.780 -- correct, because SQL's own ORDER BY answered the
+   * question and the composite score stayed on only to explain itself.
+   * Without this field that is indistinguishable from a broken sort.
+   */
+  ordering?: string | null;
 }
 
 export interface FinancialQueryResponse {

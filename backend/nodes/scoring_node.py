@@ -6,6 +6,9 @@ from langchain_core.runnables import RunnableConfig
 from backend.scoring.evidence_builder import (
     attach_company_evidence,
 )
+from backend.scoring.ranker import (
+    ORDERED_BY_COMPOSITE,
+)
 from backend.scoring.ranker import rerank
 from backend.scoring.score_normalizer import (
     build_score_breakdown,
@@ -16,6 +19,25 @@ from backend.scoring.score_normalizer import (
 logger = logging.getLogger(__name__)
 
 TOP_COMPANIES_LIMIT = 5
+
+
+def ordering_basis(ranked_companies: list[dict]) -> str:
+    """
+    Which rule decided the rank order.
+
+    Read off the ranking rather than recomputed, so the console can never
+    disagree with the ranker about what the ranker did. Absent means the
+    composite: it is the default on every other path, and claiming SQL
+    chose an order it did not choose is the failure worth avoiding.
+    """
+    if not ranked_companies:
+        return ORDERED_BY_COMPOSITE
+
+    return ranked_companies[0].get(
+        "ordered_by",
+        ORDERED_BY_COMPOSITE,
+    )
+
 
 
 async def scoring_node(
@@ -179,6 +201,10 @@ async def scoring_node(
             ),
             "intent": intent,
             "reranked_context_count": 0,
+            # A ranking whose scores disagree with its own order is not
+            # broken, but it looks broken unless it says which rule it
+            # used. See ORDERED_BY_SQL in ranker.py.
+            "ordering": ordering_basis(ranked_companies),
         }
 
         top_company = top_companies[0]

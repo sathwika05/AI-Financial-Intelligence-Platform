@@ -362,6 +362,7 @@ export default function App({
                     </h2>
                     <RankingMethodology
                       weights={result?.scoring_result?.weights_used}
+                      ordering={result?.scoring_result?.ordering}
                     />
                   </section>
                 )}

@@ -75,6 +75,18 @@ _ORDER_BY_PATTERN = re.compile(
 )
 
 
+# How the rank order was decided, reported alongside the ranking.
+#
+# A live query for "undervalued companies with low P/E ratios" came back
+# with rank 1 at 0.697 and rank 3 at 0.780. That is correct -- SQL's
+# ORDER BY answered the question and the composite stopped deciding
+# position -- but nothing in the response said so, and a score that
+# disagrees with its own rank reads as a broken sort. Naming the basis is
+# what lets the console say which rule applied.
+ORDERED_BY_SQL = "sql_order"
+ORDERED_BY_COMPOSITE = "composite"
+
+
 def _sql_order_is_authoritative(
     sql_result: dict | None,
     sql_tickers: list[str],
@@ -810,6 +822,8 @@ async def rerank(
             )
         )
 
+        ordered_by = ORDERED_BY_SQL
+
         logger.info(
             "[RANKER] SQL ORDER BY is authoritative — preserving SQL row "
             "order for %d company(s)",
@@ -819,9 +833,12 @@ async def rerank(
         # sort by final score descending
         ranked.sort(key=lambda x: x["final_score"], reverse=True)
 
-    # add rank number
+        ordered_by = ORDERED_BY_COMPOSITE
+
+    # add rank number, and say what produced it
     for i, company in enumerate(ranked, 1):
         company["rank"] = i
+        company["ordered_by"] = ordered_by
 
     if ranked:
         logger.info(

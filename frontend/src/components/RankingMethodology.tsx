@@ -20,9 +20,17 @@ const FACTOR_NOTES: Record<string, string> = {
  */
 export function RankingMethodology({
   weights,
+  ordering,
 }: {
   weights: FactorMap | null | undefined;
+  ordering?: string | null;
 }) {
+  // The rank order does not always follow these weights, and when it does
+  // not the table shows a lower score above a higher one. That is correct
+  // -- a question like "the five lowest P/E" is answered by the ORDER BY
+  // the SQL layer wrote, and the composite below cannot reproduce it --
+  // but it reads as a broken sort unless the page says which rule applied.
+  const orderedBySql = ordering === "sql_order";
   const entries = weights ? orderFactors(Object.keys(weights)) : [];
 
   if (entries.length === 0) {
@@ -80,6 +88,16 @@ export function RankingMethodology({
         Each company scores 0–1 per factor. Factors are combined using these
         weights, which the analysis sets per question.
       </p>
+
+      {orderedBySql && (
+        <p className="methodology__caption methodology__caption--order">
+          This question was answered by a database query that already sorted
+          the results, so the rank order comes from that query rather than
+          from the score above. The scores are shown to explain each company,
+          not to place it — which is why a lower score can appear higher in
+          the list.
+        </p>
+      )}
     </div>
   );
 }

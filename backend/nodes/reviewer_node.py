@@ -781,6 +781,14 @@ def build_final_output(
                 "total_flags",
                 0,
             ),
+            # Every flag raised, minus the confidence ones that never enter
+            # the retry decision. Carried into the response because the
+            # notice quotes it, and without it the reader was told a draft
+            # had 21 problems when the reviewer acted on 15.
+            "actionable_flag_count": review_result.get(
+                "actionable_flag_count",
+                review_result.get("total_flags", 0),
+            ),
             "flags": review_flags,
         },
         "sources_used": (

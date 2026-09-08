@@ -373,6 +373,13 @@ def score_company_sentiment(
 
 # ── Dynamic Weights ────────────────────────────────────────
 
+# The intents answered out of financial_metrics rather than out of
+# documents. Mirrors _METRICS_DRIVEN_INTENTS in the reviewer, which decides
+# whether metrics-only evidence is a failure — the same question, asked at
+# the other end of the pipeline.
+_METRICS_DRIVEN_INTENTS = frozenset({"VALUATION", "GROWTH"})
+
+
 def get_dynamic_weights(
     has_sql:    bool,
     has_vector: bool,
@@ -555,6 +562,27 @@ async def rerank(
         sql_result is not None and
         bool(sql_result.get("answer"))
     )
+
+    # Whether the numeric dimensions can be scored at all.
+    #
+    # They were gated on has_sql, which asks whether the *generated query*
+    # returned an answer. But score_company_growth reads company["metrics"],
+    # which comes from get_companies_from_db and is always populated. So a
+    # growth question whose SQL branch came back empty scored nothing on
+    # growth: all four weights were 0.0, every dimension read N/A, and the
+    # composite collapsed to the LLM score times 0.3.
+    #
+    # The console then showed "Revenue growth was 42.5%" as the reason a
+    # company ranked first, beside a Growth row weighted 0%, under the
+    # verdict "Avoid -- poor signals across dimensions". The signals were
+    # not poor. Nothing had been measured.
+    #
+    # Gated on intent as well as availability, because availability alone
+    # is not the question being asked: a SENTIMENT question has metrics too,
+    # and weighting valuation into it would answer a different question.
+    metrics_answer_this = (
+        str(intent or "").strip().upper() in _METRICS_DRIVEN_INTENTS
+    )
     has_vector = (
         vector_result is not None and
         bool(vector_result.get("retrieved_chunks"))
@@ -567,7 +595,11 @@ async def rerank(
 
 
 
-    weights   = get_dynamic_weights(has_sql, has_vector, has_market)
+    score_metrics = has_sql or metrics_answer_this
+
+    weights   = get_dynamic_weights(
+        score_metrics, has_vector, has_market
+    )
     logger.info(f"[RANKER] Weights: {weights}")
 
     # fetch companies from DB
@@ -680,11 +712,11 @@ async def rerank(
 
         val_score = score_company_valuation(
             company, market_result
-        ) if has_sql else None
+        ) if score_metrics else None
 
         growth_score = score_company_growth(
             company
-        ) if has_sql else None
+        ) if score_metrics else None
 
         rel_score = score_company_relevance(
             company, vector_result

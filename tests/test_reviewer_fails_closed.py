@@ -216,3 +216,111 @@ class TestEveryTriggeringFlagIsForwarded:
             assert actionable_feedback(review), (
                 f"{trigger} triggers a retry but forwards nothing"
             )
+
+
+class TestMetricsAreEvidenceWhenTheQuestionIsAboutNumbers:
+    """
+    "healthcare companies with the strongest revenue growth" was withheld
+    with 21 flags, five of them "no retrieval evidence — backed only by
+    database metrics". Revenue growth is a column; there is no filing to
+    cite for it. Demanding a document chunk for a database fact set
+    has_missing_evidence, forced three retries, and — once the forced pass
+    became a withhold — turned every metrics-only question into a refusal,
+    including two of the four questions the console offers as examples.
+
+    Same mistake the retrieval-precision metric made: judging a structured
+    result by document-retrieval criteria.
+    """
+
+    @staticmethod
+    def _metrics_only(ticker: str = "JNJ") -> list[dict]:
+        return [
+            {
+                "ticker": ticker,
+                "evidence": [
+                    {
+                        "citation_id": f"{ticker}-metrics-1",
+                        "source": "metrics",
+                        "text": f"{ticker}: revenue growth=12.7%.",
+                        "supports": "valuation/growth metrics",
+                    }
+                ],
+            }
+        ]
+
+    @pytest.mark.parametrize("intent", ["GROWTH", "VALUATION", "growth"])
+    def test_metrics_only_is_grounded_for_a_numeric_question(self, intent):
+        from backend.nodes.reviewer_node import _check_retrieval_evidence
+
+        assert _check_retrieval_evidence(
+            self._metrics_only(), intent=intent
+        ) == []
+
+    @pytest.mark.parametrize("intent", ["SENTIMENT", "MIXED", None])
+    def test_it_is_still_a_failure_when_the_question_is_about_narrative(
+        self, intent
+    ):
+        """
+        A claim about what management said needs a document. Unchanged.
+        """
+        from backend.nodes.reviewer_node import _check_retrieval_evidence
+
+        flags = _check_retrieval_evidence(
+            self._metrics_only(), intent=intent
+        )
+
+        assert len(flags) == 1
+        assert "database metrics" in flags[0]
+
+    @pytest.mark.parametrize("intent", ["GROWTH", "SENTIMENT"])
+    def test_no_evidence_at_all_is_a_failure_for_every_intent(self, intent):
+        """
+        The original comment was right that empty is worse than
+        metrics-only. Relaxing metrics-only must not relax empty.
+        """
+        from backend.nodes.reviewer_node import _check_retrieval_evidence
+
+        flags = _check_retrieval_evidence(
+            [{"ticker": "JNJ", "evidence": []}], intent=intent
+        )
+
+        assert len(flags) == 1
+        assert "no evidence of any kind" in flags[0]
+
+    def test_retrieved_evidence_is_never_flagged(self):
+        from backend.nodes.reviewer_node import _check_retrieval_evidence
+
+        assert _check_retrieval_evidence(
+            [
+                {
+                    "ticker": "JNJ",
+                    "evidence": [
+                        {"source": "metrics"},
+                        {"source": "vector"},
+                    ],
+                }
+            ],
+            intent="SENTIMENT",
+        ) == []
+
+
+class TestTheReaderIsToldHowManyIssuesMattered:
+    def test_confidence_flags_are_not_counted_as_unresolved(self):
+        """
+        Six of twenty-one flags on the withheld report were "confidence
+        0.45 is below threshold 0.70", one per company — derived from a
+        self-reported score that never enters the retry decision.
+        """
+        review = _review("forced_pass", flags=2) | {
+            "confidence_flags": ["low", "low", "low"],
+            "total_flags": 5,
+            "actionable_flag_count": 2,
+        }
+
+        output = build_final_output(
+            draft_report=_draft(confidence=0.86),
+            review_result=review,
+        )
+
+        assert "2" in output["review"]["notice"]
+        assert "5" not in output["review"]["notice"]

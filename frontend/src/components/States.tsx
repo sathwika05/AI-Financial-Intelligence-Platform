@@ -155,10 +155,18 @@ export function OutOfScopeState({ notice }: { notice?: string | null }) {
 export function WithheldState({
   notice,
   confidence,
+  reason,
 }: {
   notice?: string | null;
   confidence?: number | null;
+  /** Which of the two withholding reasons applied. */
+  reason?: string | null;
 }) {
+  // "Nothing is wrong with your question" is true of the thin-evidence
+  // case and false of this one: the reviewer raised specific unresolved
+  // issues with the draft, and telling the reader their question was fine
+  // contradicts the sentence directly above it.
+  const unresolved = reason === "forced_pass";
   return (
     <section className="state state--withheld panel" role="status">
       <div className="state__head">
@@ -178,9 +186,15 @@ export function WithheldState({
       </h2>
 
       <p className="state__caption">
-        Nothing is wrong with your question. The evidence behind this one was
-        too thin for the system to rank companies honestly — narrowing it to
-        named companies, or to a sector the corpus covers, usually helps.
+        {unresolved
+          ? "The pipeline produced a ranking and the reviewer could not " +
+            "stand behind it, so it has not been shown. Rephrasing the " +
+            "question, or narrowing it to named companies, often produces " +
+            "a draft that clears review."
+          : "Nothing is wrong with your question. The evidence behind this " +
+            "one was too thin for the system to rank companies honestly — " +
+            "narrowing it to named companies, or to a sector the corpus " +
+            "covers, usually helps."}
       </p>
     </section>
   );

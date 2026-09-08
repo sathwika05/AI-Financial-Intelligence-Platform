@@ -311,6 +311,7 @@ export default function App({
             <WithheldState
               notice={report?.review?.notice}
               confidence={report?.overall_confidence}
+              reason={report?.review?.decision}
             />
           </div>
         )}

@@ -183,8 +183,24 @@ def _check_missing_evidence(
     return flags
 
 
+# Intents whose answer comes out of the metrics table by design.
+#
+# "healthcare companies with the strongest revenue growth" is answered from
+# financial_metrics -- there is no filing to cite for a revenue-growth
+# number, because it is a column. Demanding a document chunk for a database
+# fact flagged every company, which set has_missing_evidence, which forced
+# three retries and then a pass. Once the forced pass became a withhold,
+# that turned every metrics-only question into a refusal -- including two
+# of the four questions the console offers as examples.
+#
+# This is the same mistake the retrieval-precision metric made: judging a
+# structured result by document-retrieval criteria.
+_METRICS_DRIVEN_INTENTS = frozenset({"VALUATION", "GROWTH"})
+
+
 def _check_retrieval_evidence(
     ranked_companies: list[dict[str, Any]],
+    intent: str | None = None,
 ) -> list[str]:
     """
     Flag companies backed only by their own DB metrics.
@@ -196,6 +212,10 @@ def _check_retrieval_evidence(
     """
     flags: list[str] = []
 
+    metrics_are_the_answer = (
+        str(intent or "").strip().upper() in _METRICS_DRIVEN_INTENTS
+    )
+
     for company in ranked_companies:
         ticker = company.get("ticker", "?")
 
@@ -204,8 +224,21 @@ def _check_retrieval_evidence(
             for evidence in company.get("evidence", [])
         }
 
-        # Empty counts too: no evidence at all is worse than metrics-only.
-        if not (sources - {"metrics"}):
+        retrieved = sources - {"metrics"}
+
+        if retrieved:
+            continue
+
+        # No evidence at all is a failure for every intent.
+        if not sources:
+            flags.append(
+                f"{ticker}: no evidence of any kind attached"
+            )
+            continue
+
+        # Metrics-only. A failure when the question asked about narrative,
+        # and the expected shape when it asked about numbers.
+        if not metrics_are_the_answer:
             flags.append(
                 f"{ticker}: no retrieval evidence — "
                 f"backed only by database metrics"
@@ -316,6 +349,11 @@ Rules:
   filings, transcripts, or retrieved documents are supported.
 - Reasonable conclusions directly derived from supplied metrics may
   be treated as supported but weak.
+- A qualitative characterisation of a supplied number is supported by
+  that number. "Trades at a moderate earnings multiple" is supported by
+  a supplied P/E, "large-cap" by a supplied market cap, "strong revenue
+  growth" by a supplied revenue growth figure. Do not flag these for
+  lacking a document that repeats the characterisation in words.
 - Do not require news or analyst evidence unless the claim explicitly
   refers to news, analysts, earnings calls, estimate revisions, or
   management commentary.
@@ -490,7 +528,10 @@ async def run_reviewer(
     )
     evidence_flags = [
         *_check_missing_evidence(draft_report),
-        *_check_retrieval_evidence(ranked_companies),
+        *_check_retrieval_evidence(
+            ranked_companies,
+            intent=draft_report.get("intent"),
+        ),
     ]
     company_flags = _check_company_flags(
         draft_report
@@ -602,6 +643,18 @@ async def run_reviewer(
         "should_retry": should_retry,
         "decision": decision,
         "retry_target": retry_target,
+        # Distinct from total_flags. Six of the twenty-one flags on one
+        # withheld report were "confidence 0.45 is below threshold 0.70",
+        # repeated per company -- derived from a self-reported score that
+        # floors around 0.49 and never enters the retry decision. Counting
+        # them told the reader the draft had three times as many problems
+        # as the reviewer actually acted on.
+        "actionable_flag_count": len(
+            hallucination_flags
+            + evidence_flags
+            + citation_flags
+            + company_flags
+        ),
         "confidence_flags": confidence_flags,
         "evidence_flags": evidence_flags,
         "hallucination_flags": hallucination_flags,
@@ -709,7 +762,10 @@ def build_final_output(
                 build_escalation_notice(confidence_value)
                 if low_confidence
                 else unresolved_flag_notice(
-                    review_result.get("total_flags", 0)
+                    review_result.get(
+                        "actionable_flag_count",
+                        review_result.get("total_flags", 0),
+                    )
                 )
                 if unresolved
                 else None

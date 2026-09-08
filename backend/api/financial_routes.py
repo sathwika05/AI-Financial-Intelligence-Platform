@@ -19,6 +19,7 @@ from backend.security import events
 from backend.security.input_guard import InputGuard
 from backend.security.output_validator import OutputValidator
 from backend.security.pii import PIIDetector
+from backend.security.concurrency import ConcurrencyBound
 from backend.security.rate_limit import RateLimiter
 from backend.llm.llm_config_service import LLMConfigService
 from backend.observability.logging import query_run
@@ -44,6 +45,18 @@ _output_validator = OutputValidator()
 _rate_limiter = RateLimiter(
     limit=settings.SECURITY_RATE_LIMIT,
     window_seconds=settings.SECURITY_RATE_WINDOW_SECONDS,
+)
+
+# A different ceiling from the one above, and not a substitute for it.
+# The rate limiter bounds one caller over time; this bounds everyone at an
+# instant. Five testers clicking together are five addresses, each inside
+# its own limit, and all five pipelines start at once -- on 0.5 CPU and
+# 512MB, against a provider ceiling of 8000 tokens per minute shared
+# between them. Both have been hit: an OOM restart that 502'd whoever was
+# mid-query, and a 429 that used to be reported as a hallucination.
+_concurrency = ConcurrencyBound(
+    limit=settings.SECURITY_MAX_CONCURRENT_QUERIES,
+    retry_after_seconds=settings.SECURITY_CONCURRENCY_RETRY_AFTER_SECONDS,
 )
 
 # Traced separately from the route handler: @traceable adds a `config`
@@ -100,6 +113,12 @@ async def financial_retrieval(
     # Opened around the whole handler, error paths included, so every line
     # this request produces — here and in every node below it — is tagged
     # apart from a benchmark running concurrently in the background.
+    # Set only once a permit is actually held, so the release below can
+    # tell "this request was admitted" from "this request was refused
+    # before it started". Releasing on the second would hand away a
+    # permit belonging to whoever is still running.
+    admitted = False
+
     with query_run():
         try:
             # ── Security, in order of cost ──────────────────────────────
@@ -128,6 +147,32 @@ async def financial_retrieval(
                         f"try again in {decision.retry_after} seconds."
                     ),
                     headers={"Retry-After": str(decision.retry_after)},
+                )
+
+            # Admission, before any work and before the guards below --
+            # a request that will not be served should not cost a PII
+            # scan, let alone six graph stages.
+            try:
+                _concurrency.acquire_or_raise()
+                admitted = True
+            except ConcurrencyBound.Busy as busy:
+                await events.record(
+                    kind="rate_limited",
+                    detail=(
+                        f"concurrency limit {busy.limit} reached; "
+                        f"caller {caller}"
+                    ),
+                    query=request.query,
+                )
+
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        "The demo is answering as many questions as it can "
+                        "at once. Each one runs a six-stage pipeline; try "
+                        f"again in {busy.retry_after} seconds."
+                    ),
+                    headers={"Retry-After": str(busy.retry_after)},
                 )
 
             # Instructions aimed at the assistant rather than questions
@@ -288,3 +333,11 @@ async def financial_retrieval(
                 status_code=500,
                 detail="Retrieval failed. Please try again.",
             ) from exc
+
+        finally:
+            # Every exit: the 500 above, a withheld report, a client that
+            # hung up mid-pipeline. A permit held by a request that raised
+            # is gone for the life of the process, and `limit` of those
+            # means the demo answers nothing until it restarts.
+            if admitted:
+                _concurrency.release()

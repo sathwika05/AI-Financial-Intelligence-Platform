@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     SECURITY_RATE_LIMIT: int = 20
     SECURITY_RATE_WINDOW_SECONDS: int = 60
 
+    # How many queries may run at the same time, across all callers.
+    # Two, because one query holds ~235MB of a 512MB instance through six
+    # graph stages and spends against a provider ceiling of 8000 tokens
+    # per minute. Three concurrent is where the OOM restarts and the 429s
+    # were observed. Distinct from the per-caller limit above: that one
+    # bounds a single address over a minute, this one bounds everybody at
+    # an instant.
+    SECURITY_MAX_CONCURRENT_QUERIES: int = 2
+    SECURITY_CONCURRENCY_RETRY_AFTER_SECONDS: int = 30
+
     # A SELECT-only role for the generated-SQL path. Falls back to
     # DATABASE_URL when unset, which is the current behaviour.
     READONLY_DATABASE_URL: str = ""

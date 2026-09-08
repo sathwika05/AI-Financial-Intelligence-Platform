@@ -34,9 +34,20 @@ services:
     # two and a half minutes on every deploy. This is 0.5 -- five times the
     # CPU for the same 512MB of RAM.
     #
-    # RAM is unchanged at 512MB, and backend.main imports at 379MB measured.
-    # Turning the cross-encoder on would add roughly 270MB for torch and
-    # sentence-transformers and need 1c-2g instead.
+    # RAM is unchanged at 512MB. backend.main imported at 379MB measured
+    # here, which is what OOM-restarted this instance: ~130MB of headroom,
+    # against a query that runs six graph stages for ~95s with no cap on
+    # how many run at once (the rate limiter needs a Redis this service
+    # does not have -- see REDIS_URL below -- and fails open without one).
+    #
+    # Most of that baseline was torch and transformers, imported on every
+    # start and unreachable in this mode. backend/_transformers_guard.py
+    # explains the chain and stops it; locally that moved backend.main from
+    # 404.5MB to 235.3MB. Re-measure here after the next deploy rather than
+    # trusting an arithmetic guess at the container figure.
+    #
+    # Turning the cross-encoder on would load torch for real and need
+    # 1c-2g instead.
     plan: 0.5c-512mb
     region: oregon
 

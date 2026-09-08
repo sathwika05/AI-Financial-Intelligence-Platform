@@ -137,6 +137,25 @@ def review_unavailable_notice() -> str:
     )
 
 
+def provider_unavailable_notice() -> str:
+    """
+    What the reader is shown when the account, not the question, ran out.
+
+    The demo's free tier allows 200,000 tokens per day across the whole
+    organisation, and a single question with retries can spend ten to
+    twenty thousand of them. When that runs out the analysis call raises
+    and no draft is written -- which the empty-draft branch used to
+    report as "The analysis produced no draft report", a sentence that
+    reads as a broken system to the only person who ever sees it.
+    """
+    return (
+        "This demo has reached its daily capacity with the model provider, "
+        "so this question was not analysed. Nothing is wrong with the "
+        "question and nothing is wrong with the data -- the allowance "
+        "simply resets on a daily cycle. Trying again tomorrow will work."
+    )
+
+
 def build_escalation_notice(overall_confidence: float) -> str:
     """
     What the reader is shown in place of the ranking.
@@ -562,6 +581,7 @@ async def run_reviewer(
     ranked_companies: list[dict[str, Any]],
     retry_count: int,
     config: RunnableConfig,
+    previous_review_feedback: list[str] | None = None,
 ) -> dict[str, Any]:
     """Review the report and decide whether to approve or retry."""
     logger.info(
@@ -638,6 +658,34 @@ async def run_reviewer(
         quality_failure
         and retry_count < MAX_RETRIES
     )
+
+    # Nothing new to say, so saying it again cannot help.
+    #
+    # The flags handed to analysis are the only thing a retry changes;
+    # the query, the cohort and the corpus are identical by this point.
+    # If this attempt would send exactly what the last one sent, the
+    # rewrite has already been tried against that feedback and produced
+    # a draft the reviewer rejected the same way. Set-compared, because
+    # the flags are gathered per company and their order carries no
+    # meaning.
+    if should_retry:
+        proposed_feedback = actionable_feedback({
+            "hallucination_flags": hallucination_flags,
+            "evidence_flags": evidence_flags,
+            "citation_flags": citation_flags,
+            "company_flags": company_flags,
+        })
+
+        already_sent = set(previous_review_feedback or [])
+
+        if proposed_feedback and set(proposed_feedback) == already_sent:
+            should_retry = False
+
+            logger.info(
+                "[REVIEWER] Identical feedback to the last attempt; "
+                "not retrying (%s flags)",
+                len(proposed_feedback),
+            )
 
     # Every retry regenerates the draft, because nothing upstream would
     # differ on a second attempt. The query, the cohort and the corpus are
@@ -729,6 +777,18 @@ async def run_reviewer(
         "citation_flags": citation_flags,
         "hallucination_rate": hallucination_rate,
         "total_flags": len(all_flags),
+        # What the next attempt will be handed, so the caller can store
+        # it and the attempt after that can tell it apart from progress.
+        "review_feedback": (
+            actionable_feedback({
+                "hallucination_flags": hallucination_flags,
+                "evidence_flags": evidence_flags,
+                "citation_flags": citation_flags,
+                "company_flags": company_flags,
+            })
+            if should_retry
+            else []
+        ),
     }
 
 
@@ -911,9 +971,23 @@ async def reviewer_node(
     if not draft_report or not draft_report.get(
         "companies"
     ):
+        # Two ways to arrive with nothing, and they are owed different
+        # sentences. The analysis node marks the one that is about the
+        # account rather than the question -- a refused provider call,
+        # most often the free tier's daily token ceiling.
+        provider_unavailable = bool(
+            (draft_report or {}).get("provider_unavailable")
+        )
+
+        decision = (
+            "withheld_provider_unavailable"
+            if provider_unavailable
+            else "withheld_empty_draft"
+        )
+
         logger.warning(
-            "[REVIEWER_NODE] Empty draft report; "
-            "returning forced pass"
+            "[REVIEWER_NODE] Empty draft report; withholding (%s)",
+            decision,
         )
 
         # Withheld, not passed. This branch returns before
@@ -925,9 +999,14 @@ async def reviewer_node(
         review_result = {
             "passed": False,
             "should_retry": False,
-            "decision": "withheld_empty_draft",
+            "decision": decision,
             "confidence_flags": [],
-            "evidence_flags": ["The analysis produced no draft report."],
+            "evidence_flags": [
+                "The model provider was unavailable, so no draft was "
+                "written."
+                if provider_unavailable
+                else "The analysis produced no draft report."
+            ],
             "hallucination_flags": [],
             "company_flags": [],
             "citation_flags": [],
@@ -946,8 +1025,12 @@ async def reviewer_node(
                 "evidence_quality": None,
                 "review": {
                     "escalated": True,
-                    "notice": unresolved_flag_notice(1),
-                    "decision": "withheld_empty_draft",
+                    "notice": (
+                        provider_unavailable_notice()
+                        if provider_unavailable
+                        else unresolved_flag_notice(1)
+                    ),
+                    "decision": decision,
                     "hallucination_rate": 0.0,
                     "total_flags": 1,
                     "flags": ["The analysis produced no draft report."],
@@ -963,6 +1046,13 @@ async def reviewer_node(
         ranked_companies=ranked_companies,
         retry_count=retry_count,
         config=config,
+        # Not review_feedback: analysis clears that after using it, so by
+        # now it is empty and would make every attempt look like the
+        # first. This field is the one analysis does not touch.
+        previous_review_feedback=state.get(
+            "previous_review_feedback",
+            [],
+        ),
     )
 
     should_retry = review_result[
@@ -1007,6 +1097,16 @@ async def reviewer_node(
         "should_retry": should_retry,
         "retry_target": retry_target,
         "review_feedback": review_feedback,
+        # Survives the analysis node's clear, which is the entire point:
+        # the next review compares against this, not against the working
+        # field it just emptied. Held when not retrying so a later,
+        # unrelated attempt is still measured against the last thing
+        # actually sent.
+        "previous_review_feedback": (
+            review_feedback
+            if should_retry
+            else state.get("previous_review_feedback", [])
+        ),
         "retry_count": (
             retry_count + 1
             if should_retry

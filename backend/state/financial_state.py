@@ -75,6 +75,16 @@ class FinancialState(TypedDict):
     # analysis when the failure was a grounding problem.
     retry_target: str
     review_feedback: list[str]
+    # The same list, kept for one more hop than review_feedback survives.
+    #
+    # analysis_node clears review_feedback after using it, which is right
+    # -- a later, unrelated pass must not re-apply stale flags. But it
+    # also means that by the time the reviewer runs again there is
+    # nothing to compare against, and a reviewer that cannot see what it
+    # already sent will send it again. One live SENTIMENT query produced
+    # the identical thirteen flags three times, at roughly 25s and
+    # several thousand tokens per attempt.
+    previous_review_feedback: list[str]
 
     # Evaluation / tracing
     executed_tools: Annotated[

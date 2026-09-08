@@ -312,6 +312,37 @@ Generate the financial report JSON now.
 """.strip()
 
 
+async def _call_analysis_model(
+    user_prompt: str,
+    config: RunnableConfig,
+) -> str:
+    """
+    The provider call, on its own so its failures are attributable.
+
+    Everything outside this function that raises is a fact about the
+    draft -- unparseable JSON, the wrong shape, nothing to rank.
+    Everything this raises is a fact about the account or the network:
+    a refused key, a timeout, or the 200,000-token daily ceiling the
+    demo's free tier imposes on the whole organisation.
+    """
+    llm = get_llm_client(config, LLMTier.LARGE)
+
+    response = await llm.ainvoke(
+        [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ],
+        config=config,
+    )
+
+    content = response.content
+
+    if not isinstance(content, str):
+        raise TypeError("Analysis LLM returned non-string content")
+
+    return content
+
+
 async def run_llm_analysis(
     query: str,
     intent: str,
@@ -353,30 +384,20 @@ async def run_llm_analysis(
     )
 
     try:
-        llm = get_llm_client(
-            config,
-            LLMTier.LARGE,
+        content = await _call_analysis_model(user_prompt, config)
+    except Exception as exc:
+        logger.exception(
+            "[ANALYSIS] Provider call failed; no draft was written"
         )
 
-        response = await llm.ainvoke(
-            [
-                SystemMessage(
-                    content=SYSTEM_PROMPT
-                ),
-                HumanMessage(
-                    content=user_prompt
-                ),
-            ],
-            config=config,
+        return _empty_report(
+            query=query,
+            intent=intent,
+            reason=f"Provider unavailable: {exc}",
+            provider_unavailable=True,
         )
 
-        content = response.content
-
-        if not isinstance(content, str):
-            raise TypeError(
-                "Analysis LLM returned non-string content"
-            )
-
+    try:
         cleaned_content = (
             content
             .replace("```json", "")
@@ -589,12 +610,24 @@ def _empty_report(
     query: str,
     intent: str,
     reason: str = "",
+    provider_unavailable: bool = False,
 ) -> dict[str, Any]:
-    """Return a safe fallback report."""
+    """
+    Return a safe fallback report.
+
+    `provider_unavailable` separates the two ways this is reached. An
+    empty draft because nothing ranked, or because the model answered
+    with something unparseable, is a fact about this question. An empty
+    draft because the provider refused the call is a fact about the
+    account, and the reader is owed the difference -- "the analysis
+    produced no draft report" reads as a broken system when the truth is
+    a spent allowance.
+    """
     return {
         "query_summary": query,
         "intent": intent,
         "companies": [],
+        "provider_unavailable": provider_unavailable,
         "overall_confidence": 0.0,
         "evidence_quality": "low",
         "report_flags": [

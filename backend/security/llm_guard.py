@@ -5,7 +5,7 @@ DISABLED BY DEFAULT. Set SECURITY_LLM_GUARD_ENABLED=true to turn it on.
 It is off because it is the only layer here with a real cost. Everything
 else in this package totals about 0.4ms per request, measured; this is an
 API round trip, so it adds one to three seconds and a per-query charge to a
-pipeline that already takes 30 to 150 seconds. That is a defensible trade
+pipeline that already takes roughly 10 to 45 seconds. That is a defensible trade
 against a determined attacker and a poor one against none, which is why it
 is a switch rather than a default.
 

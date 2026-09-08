@@ -65,7 +65,7 @@ render.yaml    API service, env vars, health check
 vercel.json    frontend build and /api proxy to Render
 ```
 
-The API cannot be a Vercel function: a query takes around 95 seconds, well
+The API cannot be a Vercel function: a query takes 10-45 seconds, well
 past serverless timeouts. Vercel serves the built frontend and proxies
 `/api/*` to Render.
 

@@ -38,7 +38,7 @@ router = APIRouter()
 
 # One instance each: the patterns compile once rather than per request.
 # Everything here costs about 0.4ms in total, measured, against a pipeline
-# that takes 30 to 150 seconds.
+# that takes roughly 10 to 45 seconds.
 _input_guard = InputGuard()
 _pii = PIIDetector()
 _output_validator = OutputValidator()
@@ -92,16 +92,25 @@ async def financial_retrieval(
 ):
     """
     Unified hybrid retrieval endpoint.
-    Flow:
-    1. Intent classifier   ->  SQL / VECTOR / MIXED
-    2. Query planner       -> decompose into subqueries
-    3. Hybrid retrieval    -> SQL + Vector with MMR + BM25 + Market (parallel)
-    4. Scoring   -> weighted multi-dimensional ranking
-    5. Analysis -> LLM structured report 
-    6. Reviewer -> hallucination check +retry 
-    """
-    """
-    Regular financial request flow.
+
+    Graph flow:
+
+    1. Intent      -> VALUATION / GROWTH / SENTIMENT / MIXED, or
+                      OUT_OF_SCOPE, which exits here rather than
+                      researching a greeting.
+    2. Planner     -> decompose into SQL, vector and market subqueries.
+    3. Retrieval   -> those three in parallel. Vector is pgvector cosine
+                      similarity, then BM25 reranking of what it returned.
+                      Corpus-wide lexical ranking fused by RRF, and the
+                      cross-encoder, are both off unless retrieval_flags
+                      turns them on -- which only the evaluation router
+                      does, so the demo serves the first two stages.
+    4. Scoring     -> weighted multi-dimensional ranking.
+    5. Analysis    -> LLM structured report.
+    6. Reviewer    -> grounding and hallucination checks, with one retry
+                      path back to analysis.
+
+    Request flow around it:
 
     1. Load the enabled default LLM provider.
     2. Load its configured models once.
@@ -123,7 +132,7 @@ async def financial_retrieval(
         try:
             # ── Security, in order of cost ──────────────────────────────
             #
-            # A query costs 30-150s and real provider spend, and preprod has
+            # A query costs 10-45s and real provider spend, and preprod has
             # no authentication, so the ceiling is about cost rather than
             # login abuse. Fails open: see RateLimiter.
             caller = (

@@ -27,7 +27,7 @@ services:
     #
     # Spin-down: only Free web services sleep (15 minutes without inbound
     # traffic), so a visitor to a demo nobody has touched today waited ~50s
-    # for a cold start before the ~95s query even began. A paid instance
+    # for a cold start before the query itself even began. A paid instance
     # never sleeps, and needs no keep-alive cron to fake it.
     #
     # CPU: free is 0.1 CPU, which is why importing backend.main took about
@@ -36,9 +36,14 @@ services:
     #
     # RAM is unchanged at 512MB. backend.main imported at 379MB measured
     # here, which is what OOM-restarted this instance: ~130MB of headroom,
-    # against a query that runs six graph stages for ~95s with no cap on
-    # how many run at once (the rate limiter needs a Redis this service
-    # does not have -- see REDIS_URL below -- and fails open without one).
+    # against a query that runs six graph stages. Both halves of that
+    # sentence have since changed: the query is roughly 10-45s now that
+    # the retry storms are fixed, and there is a cap on how many run at
+    # once -- SECURITY_MAX_CONCURRENT_QUERIES, default 2, which refuses
+    # the third caller with a 429 rather than letting three pipelines
+    # share 512MB. Redis is present after all (set in the dashboard, see
+    # REDIS_URL below), so the per-IP rate limiter is live too; the
+    # concurrency bound is process-local and separate from it.
     #
     # Most of that baseline was torch and transformers, imported on every
     # start and unreachable in this mode. backend/_transformers_guard.py
@@ -55,7 +60,7 @@ services:
     dockerContext: .
 
     # A query runs intent -> planner -> retrieval -> scoring -> analysis ->
-    # reviewer and takes roughly 95 seconds. That rules out any serverless
+    # reviewer and takes roughly 10-45 seconds. That rules out any serverless
     # host with a short timeout, which is why the API is here and not a
     # Vercel function.
     healthCheckPath: /health

@@ -1,6 +1,6 @@
 """A per-caller ceiling on how often the graph can be run.
 
-One query costs 30 to 150 seconds and real provider spend, and preprod has
+One query costs roughly 10 to 45 seconds and real provider spend, and preprod has
 no authentication, so the thing being limited is cost rather than login
 abuse.
 

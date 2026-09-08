@@ -191,14 +191,31 @@ async def search_similar_chunks(
     cross_encoder_enabled: bool = False,
 ) -> list:
     """
-    Full vector retrieval pipeline:
+    Full vector retrieval pipeline.
 
-    Step 1 — pgvector cosine similarity
-             fetch top_k * 4 candidates with metadata filters
+    Step 1 — pgvector cosine similarity, fetching top_k * 4 candidates
+             with metadata filters applied.
 
-    Step 2 — BM25 reranking
-             rerank by keyword relevance
-             return top_k results
+    Then one of two second stages, never both:
+
+    Step 2  — BM25 reranking of what step 1 returned. The default, and
+              what the demo serves. It can only reorder; it cannot
+              surface anything dense retrieval missed.
+
+    Step 2a — corpus-wide lexical ranking fused with the dense result by
+              reciprocal rank fusion, when rrf_enabled. This replaces the
+              rerank rather than following it, because once a list that
+              can disagree is being fused in, reordering by the same
+              signal adds nothing. Only evaluation_routes sets that flag,
+              so this path is exercised by benchmarks and not by traffic.
+
+    Step 3  — cross-encoder rerank, when cross_encoder_enabled. Off by
+              default: it loads torch, which the 512MB demo instance
+              cannot hold.
+
+    Both flags arrive on config["configurable"]["retrieval_flags"], and
+    absent means off, so any caller that does not set them gets steps 1
+    and 2.
     """
     # Scale the result budget with the number of companies in scope.
     #

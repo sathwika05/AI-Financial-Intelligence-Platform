@@ -26,12 +26,37 @@ logger = logging.getLogger(__name__)
 # ── Pydantic Schemas ───────────────────────────────────────
 
 class DocumentFilters(BaseModel):
+    """Metadata filters extracted from a financial research query."""
+
     # A comparison query names several companies. Extracting only one of
     # them filters the other's documents out at the database level, so
     # the report ends up with no evidence for it.
-    company_names: List[str] = Field(default_factory=list)
-    doc_type:      str | None = None
-    source:        str | None = None
+    #
+    # The descriptions are not documentation. They are what the provider
+    # receives: without them Groq's small tier answered in plain text
+    # instead of calling the tool and rejected its own response, six
+    # times out of twelve. With them, twelve out of twelve.
+    company_names: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Every company named in the query, as the full company name "
+            "from the supplied mappings. Empty when the query names none."
+        ),
+    )
+    doc_type: str | None = Field(
+        default=None,
+        description=(
+            "The document type if the query names one -- 10-K, 10-Q, "
+            "earnings_call or news. Null when it does not."
+        ),
+    )
+    source: str | None = Field(
+        default=None,
+        description=(
+            "The publication or source if the query names one. Null when "
+            "it does not."
+        ),
+    )
 
 class RankingKeywords(BaseModel):
     """Financial keywords extracted from a query, for lexical ranking."""

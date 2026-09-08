@@ -50,10 +50,14 @@ _rate_limiter = RateLimiter(
 # A different ceiling from the one above, and not a substitute for it.
 # The rate limiter bounds one caller over time; this bounds everyone at an
 # instant. Five testers clicking together are five addresses, each inside
-# its own limit, and all five pipelines start at once -- on 0.5 CPU and
-# 512MB, against a provider ceiling of 8000 tokens per minute shared
-# between them. Both have been hit: an OOM restart that 502'd whoever was
-# mid-query, and a 429 that used to be reported as a hallucination.
+# its own limit, and all five pipelines start at once. On preprod that is
+# 0.5 CPU and 512MB, against Groq's free tier -- 8000 tokens per minute
+# and 200,000 per day, shared across every caller. Both ceilings have been
+# hit there: an OOM restart that 502'd whoever was mid-query, and a 429
+# that used to be reported as a hallucination.
+#
+# Production is larger and metered, so this bound costs it nothing. It is
+# set from configuration rather than hardcoded for that reason.
 _concurrency = ConcurrencyBound(
     limit=settings.SECURITY_MAX_CONCURRENT_QUERIES,
     retry_after_seconds=settings.SECURITY_CONCURRENCY_RETRY_AFTER_SECONDS,

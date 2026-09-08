@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     SECURITY_RATE_WINDOW_SECONDS: int = 60
 
     # How many queries may run at the same time, across all callers.
-    # Two, because one query holds ~235MB of a 512MB instance through six
+    # Two, because one query holds ~235MB of preprod's 512MB through six
     # graph stages and spends against a provider ceiling of 8000 tokens
     # per minute. Three concurrent is where the OOM restarts and the 429s
     # were observed. Distinct from the per-caller limit above: that one

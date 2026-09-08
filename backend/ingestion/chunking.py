@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 # so every deployment paid it -- including the portfolio one, which never
 # chunks anything, because ingestion is not mounted there. That was the
 # difference between importing the app in ~300MB and in 574MB, and a
-# 512MB instance was killed mid-import with no traceback to show for it.
+# preprod instance (Render, 512MB) was killed mid-import with no traceback
+# to show for it.
 #
 # Nothing outside this module touches the splitter, so deferring it needs
 # no change anywhere else.

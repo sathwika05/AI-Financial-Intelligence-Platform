@@ -210,8 +210,9 @@ async def search_similar_chunks(
               so this path is exercised by benchmarks and not by traffic.
 
     Step 3  — cross-encoder rerank, when cross_encoder_enabled. Off by
-              default: it loads torch, which the 512MB demo instance
-              cannot hold.
+              default: it loads torch, roughly 270MB, which preprod's
+              512MB instance cannot hold. Production could, and this is a
+              per-run flag rather than a build-time one for that reason.
 
     Both flags arrive on config["configurable"]["retrieval_flags"], and
     absent means off, so any caller that does not set them gets steps 1

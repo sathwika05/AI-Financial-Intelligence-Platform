@@ -108,6 +108,38 @@ This is what lets the same code run on OpenAI locally and on Groq for a public d
 
 `/health` reports `auth_required`, and the frontend reads it to decide whether to render a sign-in screen — rather than probing an auth route that may not exist.
 
+### Environments
+
+Mode and environment are related but not the same thing, and comments in this
+repository name the environment whenever a number depends on it. There are three:
+
+| | **local** | **preprod** | **production** |
+|---|---|---|---|
+| Purpose | development and the test suite | the public demo anyone can open | the deployment the infrastructure targets |
+| Mode | `full` | `portfolio` | `full` |
+| Host | docker compose | Render, one web service | AWS ECS Fargate |
+| Size | your machine | **0.5 CPU / 512 MB**, one instance | task-sized, `desired_count = 1`, no autoscaling |
+| Database | local Postgres + pgvector | Neon | RDS |
+| Redis | compose service | Render, set in the dashboard | a sidecar container in the same task |
+| Provider | whatever is default in your database | Groq free tier — **200,000 tokens/day** | metered |
+| Auth | login | none, by design | login |
+
+**Most tight numbers in this repository are preprod numbers.** 512 MB, 0.5 CPU,
+the 200,000-token daily ceiling and the two-query concurrency bound all describe
+the Render deployment, because that is the constrained one and the one the
+public can reach. Production sizing is Terraform's business and is set in
+`infrastructure/production/`.
+
+Two consequences worth stating, because they are easy to read the wrong way:
+
+- **The concurrency bound and the rate limiter are process-local.** On preprod
+  that is the true ceiling, because there is one instance. On production with
+  more than one task they bound each task rather than the service, and the
+  count belongs in Redis.
+- **The EDGAR rate limiter has the same shape.** Its lock is per-process while
+  the NAT gateway's address is shared, so it is correct at
+  `desired_count = 1` and one Terraform line away from being silently wrong.
+
 ## Request flow
 
 1. Client `POST`s a natural-language question to `/api/retrieve/financial`.

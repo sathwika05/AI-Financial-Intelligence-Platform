@@ -322,8 +322,9 @@ async def _call_analysis_model(
     Everything outside this function that raises is a fact about the
     draft -- unparseable JSON, the wrong shape, nothing to rank.
     Everything this raises is a fact about the account or the network:
-    a refused key, a timeout, or the 200,000-token daily ceiling the
-    demo's free tier imposes on the whole organisation.
+    a refused key, a timeout, or the 200,000-token daily ceiling Groq's
+    free tier imposes on the whole organisation -- which is preprod's
+    provider, not production's.
     """
     llm = get_llm_client(config, LLMTier.LARGE)
 

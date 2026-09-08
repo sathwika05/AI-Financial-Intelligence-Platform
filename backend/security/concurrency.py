@@ -7,7 +7,7 @@ clicking simultaneously are five addresses, each inside its own limit,
 and all five pipelines start together.
 
 That matters here more than the request count does. One query runs six
-graph stages on a 0.5-CPU, 512MB instance and spends real provider
+graph stages on preprod's 0.5-CPU, 512MB instance and spends real provider
 budget, and both ceilings have been hit in practice -- an OOM restart
 that returned 502 to whoever was mid-query, and
 
@@ -20,10 +20,12 @@ cannot tell that from a hang. Saying "not now, try in 30 seconds" is
 worse service and a better experience, and it is the same shape the rate
 limiter already returns.
 
-Process-local, like the rate limiter's fallback. One task on the demo,
-so the ceiling is the real one; on a deployment with several tasks this
-bounds each task rather than the service, and the honest fix there is
-the same as for the rate limiter -- move the count to Redis.
+Process-local, like the rate limiter's fallback. Preprod is one Render
+instance, so this is the true ceiling there. Production runs ECS with
+desired_count = 1 today, which makes it true there too -- but only
+accidentally: raise that count and this bounds each task rather than the
+service, and the honest fix is the same as for the rate limiter, move the
+count to Redis.
 """
 from __future__ import annotations
 

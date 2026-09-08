@@ -141,9 +141,11 @@ def provider_unavailable_notice() -> str:
     """
     What the reader is shown when the account, not the question, ran out.
 
-    The demo's free tier allows 200,000 tokens per day across the whole
-    organisation, and a single question with retries can spend ten to
-    twenty thousand of them. When that runs out the analysis call raises
+    Preprod runs on Groq's free tier, which allows 200,000 tokens per day
+    across the whole organisation, and a single question with retries can
+    spend ten to twenty thousand of them. Production is metered and has no
+    equivalent cliff, so this notice is a preprod story -- but the code
+    path is not, because any provider can refuse a call. When that runs out the analysis call raises
     and no draft is written -- which the empty-draft branch used to
     report as "The analysis produced no draft report", a sentence that
     reads as a broken system to the only person who ever sees it.

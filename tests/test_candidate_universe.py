@@ -18,7 +18,10 @@ import inspect
 import pytest
 
 from backend.retrieval import hybrid_retrieval
-from backend.retrieval.theme_resolver import resolve_candidates
+from backend.retrieval.theme_resolver import (
+    resolve_candidates,
+    resolve_sector_companies,
+)
 from backend.scoring.ranker import rerank
 from backend.state.financial_state import FinancialState
 from backend.state.state_factory import build_initial_financial_state
@@ -167,3 +170,64 @@ class TestEndToEndResolution:
 
         assert result["candidate_tickers"] == []
         assert result["candidate_company_ids"] == []
+
+
+class TestSectorIsTheLastResortBeforeTheWholeCorpus:
+    """
+    "Which healthcare companies show the strongest revenue growth and margin
+    expansion?" came back NVDA, EOG, CVX and AMD — semiconductors and oil,
+    in descending revenue-growth order. That ordering is the signature of
+    get_companies_from_db(None), which returns the top 20 by revenue growth
+    regardless of what was asked.
+
+    The sector lookup that would have answered it correctly already exists.
+    resolve_candidates only reaches it for SENTIMENT and MIXED, because
+    narrowing a VALUATION or GROWTH question from outside would rewrite the
+    filter sql_equivalence grades the generated query against. That
+    reasoning holds while SQL actually expresses a population — it did not
+    here, and the alternative to consulting sector is ranking every company
+    in the corpus.
+
+    So the fallback stays in the ranker, where "SQL produced nothing" is
+    known, rather than in resolve_candidates, where it is not.
+    """
+
+    def test_the_ranker_consults_sector_before_the_whole_corpus(
+        self, ranker_source
+    ):
+        assert "resolve_sector_companies" in ranker_source
+
+    def test_sector_is_tried_only_after_market_and_sql_come_back_empty(
+        self, ranker_source
+    ):
+        """
+        Guarded, so a question whose branches did resolve is untouched and
+        a question naming no category at all still ranks unfiltered.
+        """
+        union = ranker_source.index(
+            "dict.fromkeys(market_tickers + sql_tickers)"
+        )
+        sector = ranker_source.index("resolve_sector_companies")
+
+        assert union < sector, (
+            "sector must be consulted after the union, not instead of it"
+        )
+        assert "if not resolved_candidates:" in ranker_source
+
+
+class TestSectorLookupAnswersTheQuestionThatFailed:
+    async def test_a_healthcare_question_resolves_to_healthcare(self):
+        companies = await resolve_sector_companies(
+            "Which healthcare companies show the strongest revenue growth "
+            "and margin expansion?"
+        )
+
+        assert companies, "healthcare is a sector in the corpus"
+
+        tickers = {company["ticker"] for company in companies}
+
+        # The four the fallback actually returned. None is a healthcare
+        # company, and every one of them outranks healthcare on revenue
+        # growth — which is exactly why the unfiltered path chose them.
+        for wrong in ("NVDA", "EOG", "CVX", "AMD"):
+            assert wrong not in tickers

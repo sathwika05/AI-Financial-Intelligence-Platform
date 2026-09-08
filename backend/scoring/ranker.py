@@ -18,6 +18,7 @@ from langsmith import traceable
 
 from backend.llm.llm_context import get_llm_client
 from backend.llm.llm_tiers import LLMTier
+from backend.retrieval.theme_resolver import resolve_sector_companies
 from backend.scoring.evidence_builder import extract_sql_rows
 
 logger = logging.getLogger(__name__)
@@ -601,6 +602,35 @@ async def rerank(
         resolved_candidates = list(
             dict.fromkeys(market_tickers + sql_tickers)
         )
+
+        if not resolved_candidates:
+            # Last resort before ranking the whole corpus.
+            #
+            # resolve_candidates consults sector only for SENTIMENT and
+            # MIXED, because narrowing a VALUATION or GROWTH question from
+            # outside would rewrite the filter sql_equivalence grades the
+            # generated query against. That reasoning holds while SQL
+            # actually expresses a population. Here neither branch returned
+            # one, so there is no filter to rewrite -- and the alternative
+            # is get_companies_from_db(None), which is the top 20 by
+            # revenue growth whatever the question asked for.
+            #
+            # "Which healthcare companies show the strongest revenue growth
+            # and margin expansion?" came back NVDA, EOG, CVX and AMD:
+            # semiconductors and oil, in descending growth order. The sector
+            # is a column on companies and the lookup already existed; it
+            # was simply unreachable from a GROWTH intent.
+            sector_companies = await resolve_sector_companies(query)
+
+            resolved_candidates = [
+                company["ticker"] for company in sector_companies
+            ]
+
+            if resolved_candidates:
+                logger.info(
+                    "[RANKER] Sector fallback resolved %d company(ies)",
+                    len(resolved_candidates),
+                )
 
         logger.info(
             "[RANKER] Candidates: %s (market=%s sql=%s union=%s)",

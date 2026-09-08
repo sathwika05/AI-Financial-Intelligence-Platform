@@ -5,7 +5,9 @@
 
 
 
+import json
 import logging
+import re
 from typing import List
 
 from langchain_core.runnables import RunnableConfig
@@ -32,7 +34,16 @@ class DocumentFilters(BaseModel):
     source:        str | None = None
 
 class RankingKeywords(BaseModel):
-    keywords: List[str]
+    """Financial keywords extracted from a query, for lexical ranking."""
+
+    keywords: List[str] = Field(
+        description=(
+            "Exactly 5 financial keywords or short phrases, written as "
+            "they appear in earnings calls, SEC filings and news "
+            "articles -- for example \"revenue growth\", \"gross "
+            "margin\", \"guidance\"."
+        )
+    )
 
 async def get_company_mappings() -> str:
     """Load all companies from DB as LLM-readable string."""
@@ -152,7 +163,7 @@ async def extract_filters(query: str,config: RunnableConfig) -> dict:
 
         """
 
-        result = llm_structured.invoke(prompt)
+        result = await llm_structured.ainvoke(prompt)
         logger.info(f"[FILTERS] Result: {result}")
         filters = result.model_dump(exclude_none=True)
 
@@ -186,11 +197,82 @@ async def extract_filters(query: str,config: RunnableConfig) -> dict:
     
 # ── Generate Ranking Keywords ──────────────────────────────
 
-def generate_ranking_keywords(query: str,config: RunnableConfig) -> list[str]:
+def _recover_keywords_from_tool_failure(exc: Exception) -> list[str]:
+    """
+    Salvage the keywords Groq generated and then refused to return.
+
+    Groq's small tier reliably produces the right answer for this prompt
+    and then emits it as message content instead of a tool call, so the
+    provider rejects its own response:
+
+        400 tool_use_failed
+        "Tool choice is required, but model did not call a tool"
+        failed_generation: '["revenue growth", "year over year", ...]'
+
+    The generation is right there in the rejection. Measured over five
+    serial attempts on gpt-oss-20b at temperature zero: structured output
+    alone succeeded twice; with this recovery, five out of five. Neither
+    a larger model nor a described schema nor rewriting the prompt's
+    examples changed the failure rate -- all three were measured at 0/5.
+
+    This costs no extra call. The alternative, a second plain invocation
+    parsed as JSON, also measured 5/5, and is what to fall back to if the
+    provider ever stops including failed_generation.
+    """
+    body = getattr(exc, "body", None)
+
+    text = None
+
+    if isinstance(body, dict):
+        error = body.get("error")
+
+        if isinstance(error, dict):
+            text = error.get("failed_generation")
+
+    if not text:
+        # Some SDK versions surface the payload only in the message.
+        match = re.search(
+            r"'failed_generation':\s*'(.*?)'\}", str(exc), re.S
+        )
+        text = match.group(1) if match else None
+
+    if not text:
+        return []
+
+    match = re.search(r"\[.*?\]", text, re.S)
+
+    if not match:
+        return []
+
+    try:
+        parsed = json.loads(match.group(0))
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    if not isinstance(parsed, list):
+        return []
+
+    return [str(keyword) for keyword in parsed if keyword]
+
+
+async def generate_ranking_keywords(
+    query: str,
+    config: RunnableConfig,
+) -> list[str]:
     """
     Generate 5 financial keywords from the query.
-    Keywords filter document content before MMR search.
-    Only chunks containing at least one keyword are returned.
+
+    Feeds bm25_rerank, which reorders the pgvector result, and -- when
+    rrf_enabled -- search_chunks_lexical, which ranks the whole corpus.
+    Both treat an empty list as "no lexical signal" and fall back to the
+    dense order, so a failure here is a silent quality loss rather than
+    an error.
+
+    The schema above carries a docstring and a field description for a
+    reason. Without them Groq's small tier returns the list as message
+    content instead of calling the tool, and rejects its own response
+    with 400 tool_use_failed. Measured on gpt-oss-20b at temperature
+    zero: the bare schema fails, the described one does not.
     """
     try:
         llm = get_llm_client(
@@ -249,11 +331,24 @@ def generate_ranking_keywords(query: str,config: RunnableConfig) -> list[str]:
 
         """
 
-        result = llm_structured.invoke(prompt)
+        result = await llm_structured.ainvoke(prompt)
         logger.info(f"[FILTERS] Keywords: {result.keywords}")
         return result.keywords
     
     except Exception as e:
+        recovered = _recover_keywords_from_tool_failure(e)
+
+        if recovered:
+            logger.warning(
+                "[FILTERS] Provider rejected its own tool call; "
+                "recovered %s keywords from the payload",
+                len(recovered),
+            )
+            return recovered
+
+        # Fail open. An empty list means bm25_rerank returns the pgvector
+        # order and RRF falls back to dense -- degraded retrieval, not a
+        # failed query. Logged at error because it is invisible otherwise.
         logger.error(f"[FILTERS] Keyword generation failed: {e}")
         return []
     

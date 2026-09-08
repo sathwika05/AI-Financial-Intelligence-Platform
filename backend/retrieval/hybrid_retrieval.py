@@ -153,7 +153,7 @@ async def run_vector_retrieval(
     """
     try:
         filters  = await extract_filters(query,config)
-        keywords = generate_ranking_keywords(query,config)
+        keywords = await generate_ranking_keywords(query,config)
 
         if candidate_company_ids:
             # Overrides any company the filter extractor inferred from the

@@ -316,7 +316,7 @@ async def retrieve_similar(
 
 
         filters  = await extract_filters(query, config)
-        keywords = generate_ranking_keywords(query, config)
+        keywords = await generate_ranking_keywords(query, config)
 
         # Per-run retrieval switches, carried on the same `configurable`
         # channel the nodes already read llm_runtime from. Absent means off,

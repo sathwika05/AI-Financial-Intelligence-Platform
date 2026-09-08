@@ -173,7 +173,7 @@ class TestFlagsReachRetrievalFromRunConfig:
         async def fake_filters(query, config):
             return {}
 
-        def fake_keywords(query, config):
+        async def fake_keywords(query, config):
             return ["intel"]
 
         monkeypatch.setattr(vector_search, "extract_filters", fake_filters)
@@ -201,7 +201,7 @@ class TestFlagsReachRetrievalFromRunConfig:
         async def fake_filters(query, config):
             return {}
 
-        def fake_keywords(query, config):
+        async def fake_keywords(query, config):
             return ["intel"]
 
         monkeypatch.setattr(vector_search, "extract_filters", fake_filters)

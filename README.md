@@ -60,6 +60,9 @@ The system is a set of **LangGraph state graphs** orchestrating LLM calls, tool 
 | `VALUATION` / `GROWTH` | SQL only | SQL 100% |
 | `SENTIMENT` | Vector only | Vector 100% |
 | `MIXED` | SQL + Vector + Market, in parallel | SQL 40 / Vector 30 / Market 30, redistributing to 60/40 when market data is unavailable |
+| `OUT_OF_SCOPE` | none — the graph exits at the classifier | — |
+
+`VALUATION` and `GROWTH` are answered from columns, so the reviewer accepts the metrics table as evidence for them. Requiring a document chunk to support a database fact is the same error the retrieval-precision metric made, and it turned every numeric question into a refusal. Narrative intents still require a retrieved document, and no evidence at all remains a failure for every intent.
 
 Per-source timeouts are SQL 45s, Vector 10s, Market 8s, with a 60s ceiling on the `MIXED` fan-out and graceful degradation on partial failure. `combine_results()` derives an `overall_confidence` from whichever sources actually returned.
 
@@ -70,9 +73,11 @@ Vector search is two-stage by default. A raw pgvector cosine query over `documen
 | Stage | Module | Default | Cost |
 |---|---|---|---|
 | pgvector ANN | `vector_search.py` | always | a query |
-| BM25 rerank | `lexical_search.py` | always | pure Python |
-| Reciprocal rank fusion | `fusion.py` | off | arithmetic — `1/(60 + rank)` |
+| BM25 **rerank** | `vector_search.py` — `bm25_rerank()` | always | pure Python |
+| BM25 **corpus-wide** + reciprocal rank fusion | `lexical_search.py` + `fusion.py` | off | an in-memory index; fusion is `1/(60 + rank)` |
 | Cross-encoder rerank | `cross_encoder.py` | off | loads torch, ~270 MB, plus per-query inference |
+
+There are two distinct BM25 stages and they are easy to confuse. `bm25_rerank` reorders what pgvector already returned, so it can only change the order of that list. `search_chunks_lexical` ranks the *whole* corpus independently, which is what reciprocal rank fusion needs — fusing two lists that cannot disagree adds nothing.
 
 Those flags are set per benchmark run, which is what they were built for: they make retrieval variants measurable against the same questions. A live query sets none of them and runs the baseline.
 
@@ -106,11 +111,15 @@ This is what lets the same code run on OpenAI locally and on Groq for a public d
 ## Request flow
 
 1. Client `POST`s a natural-language question to `/api/retrieve/financial`.
-2. `intent_node` classifies it; `planner_node` splits it into per-source sub-queries.
+2. `intent_node` classifies it as `VALUATION`, `GROWTH`, `SENTIMENT`, `MIXED` or `OUT_OF_SCOPE`. The last exits here — a greeting is answered in about a second rather than researched for forty. `planner_node` splits the rest into per-source sub-queries.
 3. `hybrid_retrieve_async` fans out to SQL, vector and market retrieval per the intent-weight table.
 4. `scoring_node` ranks companies and attaches evidence.
 5. `analysis_node` drafts a structured report citing that evidence.
-6. `reviewer_node` fact-checks the draft; on failure it loops back to retrieval with a refined strategy, otherwise it finalizes `final_report`.
+6. `reviewer_node` fact-checks the draft. A retry goes back to **analysis**, not retrieval: by that point the query, the cohort and the corpus are fixed, so re-retrieving returns the same documents and raises the same flags. What can differ is the draft, because the rejected claims are handed to the analysis prompt.
+
+A retry is also skipped when this attempt's feedback is identical to the last one's — the same flags produced the same draft once already.
+
+The reviewer has four terminals: `approved`, `forced_pass` at the retry limit, and two that withhold the ranking rather than present it as reviewed — `withheld_review_unavailable` when the fact-checking model could not be reached, and `withheld_provider_unavailable` when the provider refused the analysis call. Those two exist because a transport failure is not a finding about the answer, and telling a reader "the reviewer raised 0 unresolved issues" while withholding their result is worse than telling them nothing.
 
 ## API reference
 
@@ -186,12 +195,13 @@ Beyond RAGAS, a **claim audit** extracts individual factual claims from an answe
 
 ## Security
 
-`backend/security/` runs on the query path, measured at roughly 0.4 ms in total against a pipeline that takes 30–150 seconds:
+`backend/security/` runs on the query path, measured at roughly 0.4 ms in total against a pipeline that takes 10–45 seconds:
 
 - **input_guard** — prompt-injection and abuse patterns
 - **pii** — detection over inbound text
 - **output_validator** — checks on what the pipeline is about to return
 - **rate_limit** — per-caller ceiling, Redis-backed, **fails open** by design so a cache outage does not become an outage
+- **concurrency** — a ceiling on how many queries run *at once*, across all callers, refusing the surplus with a `Retry-After` rather than queueing them. Not a substitute for the line above: several callers are several addresses, each inside its own per-caller limit, and all their pipelines start together on one small instance
 - **llm_guard** — an optional LLM-based check, off by default because it costs an API round trip per query
 
 Every layer records what it did to `system_logs`, which the admin security feed reads.
@@ -339,4 +349,6 @@ Note that `.env` sets `DEPLOYMENT_MODE=portfolio` for local demo work, and the r
 - **Six tables have no writers.** `retrieval_logs`, `pipeline_traces`, `retrieved_evidence`, `model_costs`, `alerts` and `human_reviews` are defined in the schema and read by parts of the dashboard, but nothing inserts into them yet. (`system_logs` *is* written, by the security event log.)
 - **`backend/observability/metrics.py` and `backend/services/embedding_service.py` are empty files.** Embedding logic lives inline in `ingestion/indexing_service.py` and `retrieval/vector_search.py`; metrics are covered by tracing and the evaluation tables instead.
 - **The Alembic chain cannot build a database from scratch.** Its first revision alters tables that `create_all` is expected to have made. `backend/startup_migration.py` handles both cases; calling Alembic directly on an empty database does not.
-- **`backend.main` imports ~379 MB.** It fits a 512 MB instance, but enabling the cross-encoder adds roughly 270 MB more and would not. The text splitter is imported lazily for this reason.
+- **`backend.main` imports ~235 MB.** It was 404 MB until `backend/_transformers_guard.py` stopped `langchain_core`'s import-time feature probe from pulling in torch, which arrives transitively through `docling`. Enabling the cross-encoder adds roughly 270 MB and would not fit a 512 MB instance. The text splitter is imported lazily for the same reason.
+- **The public demo's provider has a daily token ceiling.** Groq's free tier allows 200,000 tokens per day for the whole organisation, and one question with retries can spend ten to twenty thousand — so the demo answers roughly twenty questions a day before refusing. It says so plainly when it happens. `scripts/switch_default_provider.py` moves the deployment to a metered provider when that matters, after proving the new one answers.
+- **An LLM holistic score is blended into the ranking at a hardcoded 30%.** Nothing justifies 30 over 10 or 50. Either an ablation defends the weight or the component should go.

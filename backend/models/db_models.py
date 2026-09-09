@@ -894,37 +894,6 @@ class SystemLog(Base):
     )
 
 
-class Alert(Base):
-    """Threshold breach generated from evaluation or observability metrics."""
-
-    __tablename__ = "alerts"
-
-    id = Column(Integer, primary_key=True, index=True)
-    run_id = Column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("benchmark_runs.run_id"),
-        nullable=True,
-    )
-
-    # hallucination / latency / retry_rate / cache_hit
-    alert_type = Column(String)
-
-    threshold = Column(Float)
-    actual_value = Column(Float)
-
-    # warning / critical
-    severity = Column(String)
-
-    triggered_at = Column(
-        DateTime,
-        server_default=func.now(),
-    )
-    resolved_at = Column(
-        DateTime,
-        nullable=True,
-    )
-
-
 class HumanReview(Base):
     """Human feedback that may later be synchronized with LangSmith."""
 

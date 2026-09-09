@@ -199,7 +199,7 @@ Postgres with pgvector, via SQLAlchemy (`backend/models/db_models.py`). 23 table
 `benchmark_runs`, `evaluation_metrics`, `question_results`, `claim_evaluations`, `escalations`, `human_reviews`.
 
 **Operations**
-`ingestion_events` (one row per attempt, including the attempts that produced no document — duplicates, unreadable PDFs), `system_logs`, `retrieval_logs`, `pipeline_traces`, `retrieved_evidence`, `model_costs`, `alembic_version`.
+`ingestion_events` (one row per attempt, including the attempts that produced no document — duplicates, unreadable PDFs), `system_logs`, `retrieval_logs`, `retrieved_evidence`, `model_costs`, `alembic_version`.
 
 ### A note on migrations
 
@@ -224,6 +224,32 @@ uv run python -m backend.evaluation.datasets.verify_ground_truth     # check eve
 **Reseeding invalidates all of it.** The seed pulls live fundamentals, so market caps and P/E ratios move and the membership of a "top five" can change outright — one reseed dropped NVDA out of the five smallest technology market caps and brought CRM in. The pipeline then answers correctly and the benchmark marks it wrong, which looks exactly like a regression. This is what the [frozen snapshot](#seeding-and-the-frozen-snapshot) exists to prevent.
 
 Beyond RAGAS, a **claim audit** extracts individual factual claims from an answer and checks each against the retrieved evidence, so an answer that is right overall but unsupported in one sentence is visible as such.
+
+### What the database records, and what LangSmith does
+
+Three systems observe a run and the split between them is deliberate.
+
+**LangSmith owns the trace hierarchy.** LangGraph opens one run per registered
+node and the retrieval branches carry `@traceable` — 57 instrumented spans. For
+inspecting a single query after the fact, nothing here competes with it, and
+`observability/tracing.py` deliberately avoids adding a second span per node.
+
+**The database keeps what has to be joined or aggregated.** *"p95 latency for
+withheld answers on healthcare questions last week"* needs traces joined to
+decisions and to the corpus; that is one SQL query and an export-and-spreadsheet
+exercise anywhere else. It also survives a third party's quota and retention,
+and an enterprise deployment that cannot send data outside its own network.
+
+| Table | Written | Earns its place by |
+|---|---|---|
+| `retrieval_logs` | per live query | percentile latency and the withheld share, grouped by decision |
+| `model_costs` | per benchmark run | which node spends the money — one call was 91% of it |
+| `retrieved_evidence` | per benchmark question | diffing which chunks two retrieval arms surfaced |
+
+**`pipeline_traces` was dropped**, along with `alerts`. It held `node_name`,
+`latency_ms`, `tokens_in`, `tokens_out` and `cost_usd` — four of which
+`model_costs` now holds, with the latency already in `node_timings` and the
+trace detail already in LangSmith. A third copy in the one place nothing read.
 
 ## Security
 
@@ -378,7 +404,7 @@ Note that `.env` sets `DEPLOYMENT_MODE=portfolio` for local demo work, and the r
 ## Known issues
 
 - **No CORS middleware.** `backend/main.py` registers none, so a browser app on a different origin cannot call the API. Every deployment shares an origin or rewrites `/api` and `/health`; local development uses the Vite proxy. Deliberate, but it constrains how the API can be consumed.
-- **Four tables have no writers.** `retrieval_logs`, `pipeline_traces`, `retrieved_evidence` and `model_costs` are defined and read by parts of the dashboard, but nothing inserts into them yet. (`system_logs` *is* written, by the security event log.) `alerts` was a fifth and has been dropped — it described a threshold-breach feature that was never built and had no destination for an alert, so the schema was promising a system that did not exist. Deleting a feature you decided against is a decision; an empty table is an unfinished sentence.
+- **`human_reviews` has a screen but no writer.** Every other empty table has been resolved: `retrieval_logs`, `retrieved_evidence` and `model_costs` now have writers, and `alerts` and `pipeline_traces` were dropped. This one is undecided.
 - **`human_reviews` has a screen but no writer.** `HumanReviewScreen.tsx` is in the admin UI and `escalations` records that a report was withheld, but nothing records what a human then decided about one. Either the loop gets closed or the table goes.
 - **The Alembic chain cannot build a database from scratch.** Its first revision alters tables that `create_all` is expected to have made. `backend/startup_migration.py` handles both cases; calling Alembic directly on an empty database does not.
 - **`backend.main` imports ~235 MB.** It was 404 MB until `backend/_transformers_guard.py` stopped `langchain_core`'s import-time feature probe from pulling in torch, which arrives transitively through `docling`. Enabling the cross-encoder adds roughly 270 MB and would not fit a 512 MB instance. The text splitter is imported lazily for the same reason.

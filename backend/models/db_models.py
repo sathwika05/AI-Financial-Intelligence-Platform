@@ -769,61 +769,6 @@ class ClaimEvaluation(Base):
     )
 
 
-class PipelineTrace(Base):
-    """One row per graph node per run."""
-
-    __tablename__ = "pipeline_traces"
-
-    id = Column(Integer, primary_key=True, index=True)
-    run_id = Column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("benchmark_runs.run_id"),
-        index=True,
-    )
-
-    node_name = Column(
-        String,
-        nullable=False,
-    )
-    started_at = Column(DateTime)
-    ended_at = Column(DateTime)
-    latency_ms = Column(Float)
-
-    tokens_in = Column(
-        Integer,
-        default=0,
-    )
-    tokens_out = Column(
-        Integer,
-        default=0,
-    )
-    cost_usd = Column(
-        Float,
-        default=0.0,
-    )
-
-    retry_count = Column(
-        Integer,
-        default=0,
-    )
-
-    # success / failed / retried
-    status = Column(
-        String,
-        default="success",
-    )
-
-    error_msg = Column(
-        Text,
-        nullable=True,
-    )
-
-    created_at = Column(
-        DateTime,
-        server_default=func.now(),
-    )
-
-
 class RetrievedEvidence(Base):
     """Top evidence chunks retained for a benchmark run."""
 

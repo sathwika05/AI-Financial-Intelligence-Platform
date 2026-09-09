@@ -246,10 +246,21 @@ and an enterprise deployment that cannot send data outside its own network.
 | `model_costs` | per benchmark run | which node spends the money — one call was 91% of it |
 | `retrieved_evidence` | per benchmark question | diffing which chunks two retrieval arms surfaced |
 
-**`pipeline_traces` was dropped**, along with `alerts`. It held `node_name`,
-`latency_ms`, `tokens_in`, `tokens_out` and `cost_usd` — four of which
-`model_costs` now holds, with the latency already in `node_timings` and the
-trace detail already in LangSmith. A third copy in the one place nothing read.
+Three tables were dropped rather than filled, each because something else
+already answered the question:
+
+- **`alerts`** — threshold-breach alerting that was never built, with no
+  destination for an alert and no plan to add one.
+- **`pipeline_traces`** — `node_name`, `latency_ms`, `tokens_in`, `tokens_out`
+  and `cost_usd`, four of which `model_costs` now holds, with latency already
+  in `node_timings` and the trace detail already in LangSmith.
+- **`human_reviews`** — a human rating a *benchmark* answer. The review loop
+  that matters runs on `escalations`, which already carries `status`,
+  `reviewed_by`, `resolution_note` and `reviewed_at`, is served by
+  `GET /api/escalations` and `POST /api/escalations/{id}/resolve`, and is read
+  by the admin screen. A second loop for grading evaluation output is one we
+  decided against — authored ground truth is written before a run, not rated
+  after it.
 
 ## Security
 
@@ -404,7 +415,7 @@ Note that `.env` sets `DEPLOYMENT_MODE=portfolio` for local demo work, and the r
 ## Known issues
 
 - **No CORS middleware.** `backend/main.py` registers none, so a browser app on a different origin cannot call the API. Every deployment shares an origin or rewrites `/api` and `/health`; local development uses the Vite proxy. Deliberate, but it constrains how the API can be consumed.
-- **`human_reviews` has a screen but no writer.** Every other empty table has been resolved: `retrieval_logs`, `retrieved_evidence` and `model_costs` now have writers, and `alerts` and `pipeline_traces` were dropped. This one is undecided.
+- **Escalation rows are written in `portfolio` mode and cannot be read back there.** `record_escalation` files a row in every mode; `escalation_router` is mounted only in `full`. That is deliberate — the rows record what the public demo declined to stand behind, and they are read out of band or by a full-mode deployment against the same database. Rows nobody serves are not the same as a table nobody writes.
 - **`human_reviews` has a screen but no writer.** `HumanReviewScreen.tsx` is in the admin UI and `escalations` records that a report was withheld, but nothing records what a human then decided about one. Either the loop gets closed or the table goes.
 - **The Alembic chain cannot build a database from scratch.** Its first revision alters tables that `create_all` is expected to have made. `backend/startup_migration.py` handles both cases; calling Alembic directly on an empty database does not.
 - **`backend.main` imports ~235 MB.** It was 404 MB until `backend/_transformers_guard.py` stopped `langchain_core`'s import-time feature probe from pulling in torch, which arrives transitively through `docling`. Enabling the cross-encoder adds roughly 270 MB and would not fit a 512 MB instance. The text splitter is imported lazily for the same reason.

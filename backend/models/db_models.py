@@ -871,39 +871,6 @@ class SystemLog(Base):
     )
 
 
-class HumanReview(Base):
-    """Human feedback that may later be synchronized with LangSmith."""
-
-    __tablename__ = "human_reviews"
-
-    id = Column(Integer, primary_key=True, index=True)
-    run_id = Column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("benchmark_runs.run_id"),
-    )
-
-    question = Column(Text)
-    answer = Column(Text)
-
-    # Expected range: 1 through 5.
-    rating = Column(Integer)
-
-    reviewer_notes = Column(
-        Text,
-        nullable=True,
-    )
-
-    reviewed_at = Column(
-        DateTime,
-        server_default=func.now(),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Configurable LLM provider and model tables
-# ---------------------------------------------------------------------------
-
-
 class LLMProvider(Base):
     __tablename__ = "llm_providers"
 

@@ -302,6 +302,19 @@ async def financial_retrieval(
             # the draft attached, because the response no longer carries
             # it -- top_companies is empty by the time it gets here.
             #
+            # Filed in every mode, including portfolio, where
+            # escalation_router is not mounted and so nothing can read the
+            # queue back over HTTP. That is deliberate rather than an
+            # oversight: the rows are the record of what the public demo
+            # declined to stand behind, and they are worth having whether
+            # or not a route exposes them. They are read out of band, with
+            # SQL, or by a full-mode deployment against the same database.
+            #
+            # The alternative -- stop writing them where they cannot be
+            # served -- would trade a real record for a tidier route
+            # table, and lose the only evidence of how often the demo
+            # withholds.
+            #
             # Wrapped, because filing is a side effect of answering rather
             # than part of it: a queue that will not take the row must not
             # turn a completed pipeline run into a 500 for the analyst.

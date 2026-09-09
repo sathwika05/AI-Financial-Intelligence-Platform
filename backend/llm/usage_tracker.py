@@ -99,6 +99,41 @@ class UsageTracker(BaseCallbackHandler):
 
         return str(params.get("model") or params.get("model_name") or "")
 
+    def _rates_for(self, model_name: str | None) -> tuple | None:
+        """
+        The configured rates for a model the provider just named.
+
+        Not a dictionary lookup, because the two names disagree.
+        Providers return a dated snapshot -- "gpt-5.4-nano-2026-03-17" --
+        while llm_models holds the name it was configured under,
+        "gpt-5.4-nano". An exact lookup missed every dated model, counted
+        it as unpriced, and left its cost out of the run.
+
+        That was easy to miss because a run with *no* priced calls
+        reports total_cost_usd as None, which is visible, while a run
+        with *some* priced calls reports a number that silently omits the
+        rest. One measured run showed $0.058 for six nodes when four of
+        them had spent money.
+
+        Longest configured match first, so a provider offering both
+        "gpt-5.4-nano" and "gpt-5.4-nano-pro" does not price the second
+        at the first's rate -- quietly, and in the direction of
+        understating.
+        """
+        if not model_name:
+            return None
+
+        exact = self._rates.get(model_name)
+
+        if exact is not None:
+            return exact
+
+        for configured in sorted(self._rates, key=len, reverse=True):
+            if model_name.startswith(configured):
+                return self._rates[configured]
+
+        return None
+
     # ── Callback ────────────────────────────────────────────────
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
@@ -109,7 +144,7 @@ class UsageTracker(BaseCallbackHandler):
             self.input_tokens += prompt_tokens
             self.output_tokens += completion_tokens
 
-            rates = self._rates.get(
+            rates = self._rates_for(
                 self._model_name(response, kwargs)
             )
 

@@ -4,7 +4,9 @@ import {
   formatDateTime,
   parseModelSnapshot,
   questionSetLabel,
+  blendPillLabel,
   retrievalLabel,
+  retrievalPipelineLabel,
   shortRunId,
 } from "../format";
 import {
@@ -62,7 +64,24 @@ function RunFacts({ run }: { run: RunMetrics }) {
       <div className="ev-compare__facts">
         <Field label="Provider" value={run.provider_name} />
         <Field label="Dataset" value={run.dataset} />
-        <Field label="Retrieval" value={retrievalLabel(run.retrieval_mode)} />
+        <Field
+          label="Retrieval"
+          value={
+            <>
+              {retrievalLabel(run.retrieval_mode)}
+              {retrievalPipelineLabel(run) && (
+                <span className="ev-pipeline-pill">
+                  {retrievalPipelineLabel(run)}
+                </span>
+              )}
+              {blendPillLabel(run) && (
+                <span className="ev-pipeline-pill">
+                  {blendPillLabel(run)}
+                </span>
+              )}
+            </>
+          }
+        />
         <Field
           label="Question Set"
           value={questionSetLabel(run.question_set)}

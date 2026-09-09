@@ -8,11 +8,14 @@ import {
   RETRIEVAL_MODES,
   RETRIEVAL_PIPELINES,
   cancelRun,
+  blendChoiceToWeight,
+  LLM_BLEND_WEIGHTS,
   pipelineToFlags,
   DEFAULT_TOP_K,
   triggerRun,
   type IndexType,
   type QuestionSet,
+  type LlmBlendChoice,
   type RetrievalPipeline,
 } from "../api";
 import {
@@ -77,6 +80,12 @@ export function RunBar({
     QUESTION_SETS[0],
   );
   const [topK, setTopK] = useState(DEFAULT_TOP_K);
+  // A ranking parameter, like topK beside it, and deliberately not folded
+  // into the pipeline dropdown above: that one chooses which documents
+  // come back, this one chooses how much of the final score is the
+  // model's opinion of them.
+  const [blendChoice, setBlendChoice] =
+    useState<LlmBlendChoice>("default");
 
   // Retrieval pipeline switches. Both off is the baseline, so the default
   // launch is the pipeline as it has always run.
@@ -144,6 +153,9 @@ export function RunBar({
         company_filter: "all",
         top_k: topK,
         ...pipelineToFlags(pipeline),
+        // Null on Default, so the field is sent as null and the row
+        // records that no weight was chosen rather than asserting 0.3.
+        llm_blend_weight: blendChoiceToWeight(blendChoice),
       });
 
       setLaunchNotice(
@@ -328,6 +340,23 @@ export function RunBar({
               );
             }}
           />
+        </label>
+
+        <label className="ev-control ev-control--wide">
+          <span className="ev-control__label">LLM Blend Weight</span>
+          <select
+            className="ev-control__input"
+            value={blendChoice}
+            onChange={(event) =>
+              setBlendChoice(event.target.value as LlmBlendChoice)
+            }
+          >
+            {LLM_BLEND_WEIGHTS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </label>
 
       </div>

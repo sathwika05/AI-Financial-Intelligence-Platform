@@ -23,6 +23,7 @@ import {
   parseModelSnapshot,
   questionSetLabel,
   retrievalLabel,
+  blendPillLabel,
   retrievalPipelineLabel,
   shortRunId,
   titleCase,
@@ -158,6 +159,11 @@ function RunHeader({ run }: { run: RunMetrics }) {
               {retrievalPipelineLabel(run) && (
                 <span className="ev-pipeline-pill">
                   {retrievalPipelineLabel(run)}
+                </span>
+              )}
+              {blendPillLabel(run) && (
+                <span className="ev-pipeline-pill">
+                  {blendPillLabel(run)}
                 </span>
               )}
             </>

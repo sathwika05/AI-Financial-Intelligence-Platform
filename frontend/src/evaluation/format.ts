@@ -209,6 +209,34 @@ export function retrievalLabel(mode: string | null | undefined): string {
  * flags existed used the baseline pipeline, and tagging all of history with
  * a new badge would imply a distinction that did not exist at the time.
  */
+/**
+ * A short pill for a run whose LLM blend weight was not the default.
+ *
+ * Null on the default, matching retrievalPipelineLabel below: a run that
+ * changed nothing gets no pill, so the ones that did stand out in a list.
+ * Without this the four ablation arms render identically and there is no
+ * way to tell which was which — which would defeat the point of running
+ * them.
+ *
+ * Null and 0.0 are different readings and are shown differently. Null is
+ * "did not choose", so the ranker's default applied. 0.0 is "chose to
+ * remove the model from the ranking", which is the whole ablation.
+ */
+export function blendPillLabel(run: {
+  llm_blend_weight?: number | null;
+}): string | null {
+  if (run.llm_blend_weight === null || run.llm_blend_weight === undefined) {
+    return null;
+  }
+
+  if (run.llm_blend_weight === 0) {
+    return "blend off";
+  }
+
+  return `blend ${run.llm_blend_weight.toFixed(2)}`;
+}
+
+
 export function retrievalPipelineLabel(run: {
   rrf_enabled?: boolean;
   cross_encoder_enabled?: boolean;

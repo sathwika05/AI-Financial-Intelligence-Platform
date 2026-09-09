@@ -170,6 +170,11 @@ class MetricsResponse(BaseModel):
     rrf_enabled: bool = False
     cross_encoder_enabled: bool = False
 
+    # Which blend arm this run was. Null means the run did not choose,
+    # so the ranker's default applied -- rendered as "Default" rather
+    # than as a number the row never asserted.
+    llm_blend_weight: float | None = None
+
     status: str
     total_requests: int
     total_cost: float
@@ -1527,6 +1532,11 @@ def _build_metrics_response(
         cross_encoder_enabled=bool(
             run.cross_encoder_enabled
         ),
+        # Not coerced. None is a distinct reading from 0.0 -- "did not
+        # choose" against "chose to remove the model from the ranking" --
+        # and bool()-style flattening here would erase the difference the
+        # column exists to keep.
+        llm_blend_weight=run.llm_blend_weight,
 
         status=run.status,
         total_requests=(

@@ -445,6 +445,23 @@ class BenchmarkRun(Base):
         server_default=text("false"),
     )
 
+    # How much of the ranking was the model's holistic opinion.
+    #
+    # A different stage from the two flags above: those decide which
+    # documents come back, this decides how much of a company's final
+    # score is an LLM's judgment rather than the measured dimensions.
+    #
+    # Nullable rather than defaulting to 0.3, unlike the flags. Both flags
+    # off is what every earlier run genuinely was, so false records a
+    # known fact. A run written before the weight was configurable used
+    # whatever the ranker's default was then, which is not the same claim
+    # as "this run chose 0.3" -- and the two readings diverge the moment
+    # that default moves.
+    llm_blend_weight = Column(
+        Float,
+        nullable=True,
+    )
+
     benchmark_version = Column(
         String(20),
         nullable=False,

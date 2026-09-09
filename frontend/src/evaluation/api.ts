@@ -23,6 +23,13 @@ export interface RunMetrics {
   rrf_enabled: boolean;
   cross_encoder_enabled: boolean;
 
+  /**
+   * Which blend arm this run was. Null means the run did not choose, so
+   * the ranker's default applied — a different reading from 0.0, which
+   * means the model was deliberately removed from the ranking.
+   */
+  llm_blend_weight: number | null;
+
   status: string;
   total_requests: number;
   total_cost: number;
@@ -152,6 +159,12 @@ export interface RunRequest {
   /** Both off is the baseline pipeline. Independent of each other. */
   rrf_enabled: boolean;
   cross_encoder_enabled: boolean;
+
+  /**
+   * Omitted entirely when the launcher chose Default, so the ranker's own
+   * default applies and the row records that no choice was made.
+   */
+  llm_blend_weight?: number | null;
 }
 
 /** Mirrors `RunResponse` from the 202 returned by POST /run. */
@@ -238,6 +251,81 @@ export const RETRIEVAL_PIPELINES = [
 ] as const;
 
 export type RetrievalPipeline = (typeof RETRIEVAL_PIPELINES)[number]["value"];
+
+/**
+ * How much of the final ranking is the model's holistic opinion.
+ *
+ * A separate control from RETRIEVAL_PIPELINES above, and deliberately so.
+ * Those two flags are retrieval stages -- they decide which documents come
+ * back. This applies afterwards, in the ranker, deciding how much of a
+ * company's final score is an LLM's judgment rather than the measured
+ * valuation, growth, relevance and sentiment dimensions. Folding them into
+ * one control would invite reading "RRF + blend off" as a single pipeline
+ * choice when they are two independent axes.
+ *
+ * Presets rather than a free number, for the same reason the pipelines are
+ * named combinations rather than two checkboxes: arms only compare if runs
+ * choose the same values, and one run at 0.37 compares to nothing.
+ *
+ * `weight: null` sends no value at all, so the ranker's own default
+ * applies. That is what every run before the weight became configurable
+ * did. Sending 0.3 explicitly would behave identically today and record a
+ * different thing -- "chose 0.3" rather than "did not choose" -- which
+ * matters if the default ever moves.
+ */
+export const LLM_BLEND_WEIGHTS = [
+  {
+    value: "default",
+    label: "Default (0.30)",
+    weight: null,
+  },
+  {
+    value: "off",
+    label: "Off — measured scores only (0.00)",
+    weight: 0.0,
+  },
+  {
+    value: "light",
+    label: "Light (0.10)",
+    weight: 0.1,
+  },
+  {
+    value: "heavy",
+    label: "Heavy (0.50)",
+    weight: 0.5,
+  },
+] as const;
+
+export type LlmBlendChoice = (typeof LLM_BLEND_WEIGHTS)[number]["value"];
+
+/** The weight a choice sends. Unknown values fall back to the default. */
+export function blendChoiceToWeight(
+  value: LlmBlendChoice,
+): number | null {
+  const found = LLM_BLEND_WEIGHTS.find((w) => w.value === value);
+
+  return found ? found.weight : null;
+}
+
+/**
+ * The inverse, for labelling a finished run.
+ *
+ * Without this the runs list shows four ablation arms identically and no
+ * way to tell which was which, which would defeat the point of running
+ * them.
+ */
+export function weightToBlendLabel(weight: number | null | undefined): string {
+  if (weight === null || weight === undefined) {
+    return "Default (0.30)";
+  }
+
+  const found = LLM_BLEND_WEIGHTS.find((w) => w.weight === weight);
+
+  return found ? found.label : `Custom (${weight.toFixed(2)})`;
+}
+
+
+
 
 /** The two flags a pipeline maps to. Unknown values fall back to baseline. */
 export function pipelineToFlags(value: RetrievalPipeline): {

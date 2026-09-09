@@ -8,6 +8,7 @@ import {
   formatScore,
   questionSetLabel,
   retrievalLabel,
+  blendPillLabel,
   retrievalPipelineLabel,
   shortRunId,
 } from "../format";
@@ -104,6 +105,11 @@ export function RunsView({
                   {retrievalPipelineLabel(run) && (
                     <span className="ev-pipeline-pill">
                       {retrievalPipelineLabel(run)}
+                    </span>
+                  )}
+                  {blendPillLabel(run) && (
+                    <span className="ev-pipeline-pill">
+                      {blendPillLabel(run)}
                     </span>
                   )}
                 </td>

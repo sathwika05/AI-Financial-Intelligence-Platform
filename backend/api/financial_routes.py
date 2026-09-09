@@ -20,6 +20,9 @@ from backend.security.input_guard import InputGuard
 from backend.security.output_validator import OutputValidator
 from backend.security.pii import PIIDetector
 from backend.security.concurrency import ConcurrencyBound
+from time import perf_counter
+
+from backend.observability import query_log
 from backend.security.rate_limit import RateLimiter
 from backend.llm.llm_config_service import LLMConfigService
 from backend.observability.logging import query_run
@@ -168,6 +171,12 @@ async def financial_retrieval(
             try:
                 _concurrency.acquire_or_raise()
                 admitted = True
+                # From admission rather than from the pipeline call, so
+                # the number is what the caller waited for -- guards,
+                # provider setup and all -- rather than what one stage
+                # spent. A refused caller is not timed: they waited for a
+                # 429, which is a different question.
+                started = perf_counter()
             except ConcurrencyBound.Busy as busy:
                 await events.record(
                     kind="rate_limited",
@@ -311,6 +320,14 @@ async def financial_retrieval(
                     "[FINANCIAL_ROUTES] Could not file the escalation"
                 )
                 await session.rollback()
+
+            # One row per answered query, so p95 and the withheld share
+            # are questions with answers. Never raises -- see query_log.
+            await query_log.record(
+                query=safe_query,
+                final_report=final_report,
+                latency_ms=(perf_counter() - started) * 1000,
+            )
 
             return {
                 "query":  safe_query,

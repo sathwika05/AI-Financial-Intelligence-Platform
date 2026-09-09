@@ -244,12 +244,33 @@ class DocumentChunk(Base):
 
 
 class RetrievalLog(Base):
+    """
+    One row per answered query, for counting rather than for reading.
+
+    system_logs holds text lines a person reads. This holds a row a
+    person aggregates: percentile latency, queries per day, which route
+    is slowest. No amount of grep over log text produces a p95.
+    """
+
     __tablename__ = "retrieval_logs"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    # PII-masked and truncated. This is a public unauthenticated endpoint
+    # in portfolio mode, so what people type is not assumed to be safe to
+    # keep -- the same treatment security events already give it.
     query = Column(Text)
+
+    # The classified intent, which is what decided the route:
+    # VALUATION / GROWTH / SENTIMENT / MIXED / OUT_OF_SCOPE.
     retrieval_path = Column(String)
+
     latency_ms = Column(Float)
+
+    # How it ended. Without this, "p95 latency" averages together answered
+    # queries and out-of-scope refusals that returned in a second, which
+    # describes neither population.
+    decision = Column(String, nullable=True)
 
     created_at = Column(
         DateTime,

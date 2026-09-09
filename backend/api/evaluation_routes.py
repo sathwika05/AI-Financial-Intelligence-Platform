@@ -115,6 +115,18 @@ class RunRequest(BaseModel):
     rrf_enabled: bool = False
     cross_encoder_enabled: bool = False
 
+    # How much of the final ranking is the model's holistic opinion.
+    #
+    # None runs the ranker's default of 0.3, which is what every arm got
+    # before this existed. Set it to compare arms: 0.0 removes the model
+    # from the ranking entirely, which is the run that answers whether the
+    # component earns its weight at all.
+    llm_blend_weight: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+    )
+
     top_k: int = Field(
         default=5,
         ge=1,
@@ -471,6 +483,7 @@ async def trigger_benchmark_run(
 
             rrf_enabled=request.rrf_enabled,
             cross_encoder_enabled=request.cross_encoder_enabled,
+            llm_blend_weight=request.llm_blend_weight,
 
             status="queued",
 
@@ -511,6 +524,7 @@ async def trigger_benchmark_run(
 
             rrf_enabled=request.rrf_enabled,
             cross_encoder_enabled=request.cross_encoder_enabled,
+            llm_blend_weight=request.llm_blend_weight,
 
             top_k=request.top_k,
 
@@ -576,6 +590,9 @@ async def _execute_benchmark(
 
     rrf_enabled: bool = False,
     cross_encoder_enabled: bool = False,
+    # None is "use the ranker's default", which is what every arm ran
+    # before the weight became configurable.
+    llm_blend_weight: float | None = None,
 
     top_k: int,
 
@@ -640,6 +657,9 @@ async def _execute_benchmark(
                             "cross_encoder_enabled": (
                                 cross_encoder_enabled
                             ),
+                            # None means the ranker's default, so an arm
+                            # that does not set it is today's pipeline.
+                            "llm_blend_weight": llm_blend_weight,
                         },
                     },
 

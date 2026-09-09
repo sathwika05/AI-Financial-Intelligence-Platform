@@ -87,6 +87,92 @@ ORDERED_BY_SQL = "sql_order"
 ORDERED_BY_COMPOSITE = "composite"
 
 
+# How much of the final ranking is the model's holistic opinion.
+#
+# 0.3 was hardcoded, and nothing chose it -- there is no measurement
+# behind 0.3 rather than 0.1 or 0.5. Worse, the model is not contributing
+# independent information: llm_rerank_companies is handed "PE=...,
+# Growth=..., EPS=...", the same quantities the composite has already
+# scored, and then gets 30% of the vote on the result.
+#
+# Configurable per run so a benchmark can vary it and find out. The
+# default is unchanged, so every existing caller gets today's behaviour;
+# this makes the weight measurable rather than picking a new one.
+DEFAULT_LLM_BLEND_WEIGHT = 0.3
+
+
+def llm_blend_weight(config: RunnableConfig | None) -> float:
+    """
+    The blend weight for this run, from the same channel rrf_enabled uses.
+
+    Anything unusable falls back to the default rather than to zero. A
+    benchmark arm with a garbled weight must run today's pipeline, not an
+    undefined one, or the comparison is silently against a configuration
+    nobody chose.
+    """
+    flags = (
+        (config or {}).get("configurable") or {}
+    ).get("retrieval_flags") or {}
+
+    weight = flags.get("llm_blend_weight")
+
+    if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+        return DEFAULT_LLM_BLEND_WEIGHT
+
+    if not 0.0 <= weight <= 1.0:
+        return DEFAULT_LLM_BLEND_WEIGHT
+
+    return float(weight)
+
+
+def blend_llm_score(
+    composite: float,
+    llm_score: float | None,
+    weight: float,
+) -> float:
+    """
+    Mix the measured composite with the model's holistic score.
+
+    An absent llm_score returns the composite untouched at every weight —
+    the model failing is not the same as the model scoring zero.
+    """
+    if llm_score is None:
+        return composite
+
+    return round(
+        (composite * (1.0 - weight)) + (llm_score * weight),
+        3,
+    )
+
+
+def sql_returned_rows(sql_result: dict | None) -> bool:
+    """
+    Whether the SQL branch actually found anything.
+
+    Read from db_result rather than from `answer`. `answer` is the SQL
+    agent's last message -- prose written for a human -- and when the
+    query matches nothing the agent still writes a sentence explaining
+    that, which is a non-empty string. The previous check,
+    bool(sql_result.get("answer")), was therefore True for a branch that
+    returned no rows, and get_dynamic_weights then weighted valuation and
+    growth as though SQL had succeeded.
+
+    extract_sql_rows already normalises every shape db_result arrives in,
+    so this is a row count and nothing else. An error makes the result
+    untrusted even when rows came back with it: a partial result from a
+    failed execution is not a result.
+    """
+    if not isinstance(sql_result, dict):
+        return False
+
+    db_result = sql_result.get("db_result")
+
+    if isinstance(db_result, dict) and db_result.get("error"):
+        return False
+
+    return bool(extract_sql_rows(db_result))
+
+
 def _sql_order_is_authoritative(
     sql_result: dict | None,
     sql_tickers: list[str],
@@ -570,10 +656,7 @@ async def rerank(
     as-is — see _sql_order_is_authoritative. Otherwise the composite score
     sorts descending, as before.
     """
-    has_sql    = (
-        sql_result is not None and
-        bool(sql_result.get("answer"))
-    )
+    has_sql = sql_returned_rows(sql_result)
 
     # Whether the numeric dimensions can be scored at all.
     #
@@ -694,6 +777,10 @@ async def rerank(
         logger.warning("[RANKER] No companies found in DB")
         return []
 
+    # Resolved once, so every company in a run is blended identically and
+    # the run's own weight is what a benchmark arm varies.
+    blend_weight = llm_blend_weight(config)
+
     # optional LLM scoring
     llm_scores = await llm_rerank_companies(
     companies=companies,
@@ -773,12 +860,14 @@ async def rerank(
             ) / active_weight,
             3,
         ) if active_weight else 0.0
-        # blend with LLM score if available
+        # blend with LLM score if available, at whatever weight this run
+        # asked for. See DEFAULT_LLM_BLEND_WEIGHT for why it is a variable.
         llm_score = llm_scores.get(ticker)
-        if llm_score is not None:
-            final_score = round(
-                (final_score * 0.7) + (llm_score * 0.3), 3
-            )
+        final_score = blend_llm_score(
+            final_score,
+            llm_score,
+            blend_weight,
+        )
 
         ranked.append({
             # Evidence matching joins reranked records on company_id.

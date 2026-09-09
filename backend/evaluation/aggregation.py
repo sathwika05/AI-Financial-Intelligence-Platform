@@ -436,6 +436,14 @@ def build_node_latency(
     return {
         name: {
             "avg_latency_ms": _average(values),
+            # Per node, for the same reason the run and route levels carry
+            # them: a mean hides the tail, and the tail is what a person
+            # waiting on this actually experiences. The reviewer in
+            # particular runs a variable number of times per question, so
+            # its mean is the least representative number in the set.
+            "p50_latency": _percentile(values, 50),
+            "p95_latency": _percentile(values, 95),
+            "p99_latency": _percentile(values, 99),
             "executions": len(values),
         }
         for name, values in collected.items()

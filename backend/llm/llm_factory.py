@@ -72,7 +72,15 @@ def create_llm_client(
     try:
         return init_chat_model(
             model=model_name,
-            model_provider=provider_name,
+            # The resolved alias, not the name that was typed. LangChain
+            # identifies Google's integration as "google_genai" and nobody
+            # configures a provider under that name -- which is what
+            # PROVIDER_ALIASES is for. Passing provider_name here consulted
+            # the table, used the answer only to decide whether the
+            # provider was supported, and then sent the raw name anyway.
+            # Three of the five aliases are identity mappings, so the only
+            # two that translate were the only two that broke.
+            model_provider=provider,
             api_key=api_key,
             temperature=0,
             timeout=REQUEST_TIMEOUT_SECONDS,

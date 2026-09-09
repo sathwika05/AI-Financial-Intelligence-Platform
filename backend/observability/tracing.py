@@ -82,6 +82,77 @@ def node_boundary(name: str) -> Generator[Callable[[], float]]:
     )
 
 
+def usage_snapshot(config) -> dict | None:
+    """
+    The tracker's counters right now, or None if there is no tracker.
+
+    Found among the callbacks rather than passed in, because that is where
+    build_usage_config already puts it and threading it through every node
+    signature would change the graph's shape for a diagnostic.
+
+    Duck-typed on the counter names rather than isinstance-checked, so
+    tests can stand in a plain object and this module does not import the
+    LLM layer.
+
+    `callbacks` is a plain list when the config is built and an
+    AsyncCallbackManager by the time LangGraph invokes a node, which is
+    not iterable -- so both shapes are unwrapped here. Getting this wrong
+    raises inside every node, which is exactly why the wrapper below is
+    also defensive.
+    """
+    callbacks = (config or {}).get("callbacks")
+
+    if callbacks is None:
+        return None
+
+    if not isinstance(callbacks, (list, tuple)):
+        callbacks = (
+            getattr(callbacks, "handlers", None)
+            or getattr(callbacks, "inheritable_handlers", None)
+            or []
+        )
+
+    for callback in callbacks:
+        if all(
+            hasattr(callback, attribute)
+            for attribute in (
+                "input_tokens", "output_tokens", "cost_usd", "call_count"
+            )
+        ):
+            return {
+                "tokens_in": callback.input_tokens,
+                "tokens_out": callback.output_tokens,
+                "cost": float(callback.cost_usd),
+                "calls": callback.call_count,
+            }
+
+    return None
+
+
+def usage_delta(before: dict | None, after: dict | None) -> dict | None:
+    """
+    What ran between two snapshots.
+
+    Clamped at zero. The tracker only ever accumulates, so a negative
+    delta means something is wrong upstream -- and a negative cost in a
+    report is worse than a zero, because it silently reduces a total
+    somebody is reading.
+
+    A node that called nothing reports zeros rather than being dropped:
+    scoring and output make no provider call, and "this stage is free" is
+    a fact worth having in the breakdown.
+    """
+    if before is None or after is None:
+        return None
+
+    return {
+        "tokens_in": max(0, after["tokens_in"] - before["tokens_in"]),
+        "tokens_out": max(0, after["tokens_out"] - before["tokens_out"]),
+        "cost_usd": round(max(0.0, after["cost"] - before["cost"]), 6),
+        "calls": max(0, after["calls"] - before["calls"]),
+    }
+
+
 def timed_node(name: str, node: Callable) -> Callable:
     """
     Wrap a graph node so its wall-clock time is logged and recorded in state.
@@ -106,6 +177,13 @@ def timed_node(name: str, node: Callable) -> Callable:
     """
 
     async def run(state, config):
+        # Read either side of the node. Sound because graph nodes run one
+        # at a time -- the parallel fan-out to SQL, vector and market
+        # happens inside the retrieval node, not between nodes. If nodes
+        # were ever run concurrently these deltas would interleave and
+        # attribute to the wrong stage.
+        usage_before = usage_snapshot(config)
+
         with node_boundary(name) as elapsed_ms:
             result = node(state, config)
 
@@ -122,6 +200,11 @@ def timed_node(name: str, node: Callable) -> Callable:
             "node": name,
             "latency_ms": round(elapsed, 3),
         }
+
+        spent = usage_delta(usage_before, usage_snapshot(config))
+
+        if spent is not None:
+            timing.update(spent)
 
         if not isinstance(result, dict):
             # Nodes are expected to return state updates; anything else is

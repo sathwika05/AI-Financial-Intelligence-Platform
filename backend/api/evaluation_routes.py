@@ -50,6 +50,7 @@ from backend.evaluation.evidence_recorder import build_evidence_rows
 from backend.models.db_models import (
     BenchmarkRun,
     EvaluationMetric,
+    ModelCost,
     QuestionResult,
     RetrievedEvidence,
 )
@@ -863,6 +864,22 @@ async def _execute_benchmark(
                     ),
                 )
 
+                # Once, at the end, rather than beside each question. The
+                # table is keyed on run_id and this replaces the run's
+                # rows, so writing it from the per-question path would
+                # wipe the run's totals on every question and leave only
+                # the last one.
+                await _replace_model_costs(
+                    session=session,
+                    run_id=run_id,
+                    model=model_snapshot,
+                    node_timings=[
+                        entry
+                        for result in benchmark_result.question_results
+                        for entry in (result.execution.node_timings or [])
+                    ],
+                )
+
                 await session.commit()
 
                 logger.info(
@@ -896,6 +913,72 @@ async def _execute_benchmark(
                     )
 
                     await session.commit()
+
+
+async def _replace_model_costs(
+    *,
+    session: AsyncSession,
+    run_id: UUID,
+    model: str,
+    node_timings: list[dict[str, Any]] | None,
+) -> None:
+    """
+    Write the per-node token and cost breakdown for one question.
+
+    The totals were never the interesting part. Measured on one live
+    query: analysis accounted for 91% of the cost and 63% of the latency
+    in a single call, while four other nodes together came to under a
+    cent. A run total cannot show that, and it is the number that decides
+    what to optimise.
+
+    Rows with no provider call are kept. "Scoring is free" is a fact worth
+    having in a breakdown, and dropping the zeros would make the node list
+    disagree with the graph.
+
+    Delete-then-insert for the same reason as the evidence rows: a retry
+    changes how many times a node ran, so matching on node name would
+    leave stale rows exactly when the shape changed.
+
+    Failure is swallowed. This is a diagnostic beside the benchmark, not
+    part of its result.
+    """
+    try:
+        await session.execute(
+            delete(ModelCost).where(ModelCost.run_id == run_id)
+        )
+
+        aggregated: dict[str, dict[str, float]] = {}
+
+        for entry in node_timings or []:
+            if not isinstance(entry, dict) or "tokens_in" not in entry:
+                continue
+
+            node = str(entry.get("node") or "unknown")
+            totals = aggregated.setdefault(
+                node,
+                {"tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0},
+            )
+
+            totals["tokens_in"] += int(entry.get("tokens_in") or 0)
+            totals["tokens_out"] += int(entry.get("tokens_out") or 0)
+            totals["cost_usd"] += float(entry.get("cost_usd") or 0.0)
+
+        for node, totals in aggregated.items():
+            session.add(
+                ModelCost(
+                    run_id=run_id,
+                    model=model,
+                    node_name=node,
+                    tokens_in=int(totals["tokens_in"]),
+                    tokens_out=int(totals["tokens_out"]),
+                    cost_usd=round(totals["cost_usd"], 6),
+                )
+            )
+    except Exception:
+        logger.exception(
+            "[EVAL] Could not record model costs for run %s",
+            run_id,
+        )
 
 
 async def _replace_retrieved_evidence(

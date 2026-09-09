@@ -28,7 +28,7 @@ from fastapi import (
 )
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select, update
+from sqlalchemy import delete, desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.dependencies import require_role
@@ -46,10 +46,12 @@ from backend.graph.financial_graph import (
 from backend.llm.llm_config_service import (
     LLMConfigService,
 )
+from backend.evaluation.evidence_recorder import build_evidence_rows
 from backend.models.db_models import (
     BenchmarkRun,
     EvaluationMetric,
     QuestionResult,
+    RetrievedEvidence,
 )
 # Aliased: `benchmark_run` is already used as a local variable for the ORM
 # row inside _execute_benchmark, which would shadow the import.
@@ -896,6 +898,48 @@ async def _execute_benchmark(
                     await session.commit()
 
 
+async def _replace_retrieved_evidence(
+    *,
+    session: AsyncSession,
+    run_id: UUID,
+    question_id: str,
+    records: list[dict[str, Any]] | None,
+) -> None:
+    """
+    Write this question's reranked evidence, replacing any earlier attempt.
+
+    Delete-then-insert rather than upsert, because the rows have no stable
+    key: rank_position is the thing most likely to differ between two
+    attempts at the same question, so matching on it would leave stale
+    rows behind at exactly the moment the ordering changed -- which is the
+    change worth seeing.
+
+    Failure here must not fail the run. The evidence is a diagnostic
+    beside the benchmark, not part of its result, and losing a question's
+    rows is better than losing the run that produced them.
+    """
+    rows = build_evidence_rows(
+        question_id=question_id,
+        records=records,
+    )
+
+    try:
+        await session.execute(
+            delete(RetrievedEvidence).where(
+                RetrievedEvidence.run_id == run_id,
+                RetrievedEvidence.question_id == question_id,
+            )
+        )
+
+        for row in rows:
+            session.add(RetrievedEvidence(run_id=run_id, **row))
+    except Exception:
+        logger.exception(
+            "[EVAL] Could not record retrieved evidence for %s",
+            question_id,
+        )
+
+
 @log_span("run_id")
 async def _upsert_question_results(
     *,
@@ -928,6 +972,16 @@ async def _upsert_question_results(
     }
 
     for result in question_results:
+        # The evidence the answer was built from, beside the question for
+        # the same reason the claims are: it is a different grain, and an
+        # ablation needs to diff it row by row rather than read an average.
+        await _replace_retrieved_evidence(
+            session=session,
+            run_id=run_id,
+            question_id=result.question_id,
+            records=result.execution.reranked_context_records,
+        )
+
         # Claim rows live in their own table and are written beside the
         # question rather than inside it: evaluator_results is the
         # benchmark's record, and the audit is deliberately not part of it.

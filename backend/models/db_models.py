@@ -815,11 +815,22 @@ class RetrievedEvidence(Base):
         index=True,
     )
 
+    # Matches question_results.question_id, so the two join.
+    #
+    # run_id alone was the wrong grain. The reason to keep retrieved
+    # evidence at all is to make an ablation explainable -- "which chunk
+    # did the RRF arm surface that the dense arm ranked fourteenth" -- and
+    # that question is per question, not per run. Without this the two
+    # arms are two undifferentiated piles of rows.
+    question_id = Column(String, nullable=True, index=True)
+
     filename = Column(String)
     snippet = Column(Text)
     relevance_score = Column(Float)
 
-    # sec_filing / earnings_call / news / fundamentals
+    # sql / vector / market -- the branch the evidence came from, which is
+    # the distinction the RAGAS context metrics need: grading retrieval
+    # over market rows measures the market API, not the document corpus.
     source_type = Column(String)
 
     rank_position = Column(Integer)

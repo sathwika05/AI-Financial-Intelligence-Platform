@@ -8,3 +8,5 @@ __pycache__/
 # and they were being committed as churn on every UI change.
 .playwright-mcp/
 *.png
+
+README.private.md

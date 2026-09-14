@@ -14,7 +14,6 @@ Around that pipeline sit the parts that make its quality measurable: a 100-quest
 - [Evaluation](#evaluation)
 - [Security](#security)
 - [Setup](#setup)
-- [Configuration](#configuration)
 - [Seeding and the frozen snapshot](#seeding-and-the-frozen-snapshot)
 - [Deployment](#deployment)
 - [Project layout](#project-layout)
@@ -93,7 +92,7 @@ Query embeddings are cached in Redis for 30 days, keyed on a SHA-256 of `(model,
 
 Models are **not hardcoded**. Providers and their models live in the `llm_providers` and `llm_models` tables, and the pipeline asks for a tier — `small`, `medium` or `large` — rather than a model name. Provider API keys are stored Fernet-encrypted under `LLM_KEY_ENCRYPTION_SECRET`; nothing reads a provider key from the environment.
 
-This is what lets the same code run on OpenAI locally and on Groq for a public deployment, where an unauthenticated endpoint makes a free tier the difference between a rate limit and a bill. The one exception is embeddings: `text-embedding-3-small` (1536-dim) via `OPENAI_API_KEY`, because Groq has no embeddings API.
+This is what lets the same code run against a metered provider locally and a free-tier one for a public deployment, where an unauthenticated endpoint makes a free tier the difference between a rate limit and a bill. The one exception is embeddings: `text-embedding-3-small` (1536-dim) via `OPENAI_API_KEY`, because not every provider offers an embeddings API.
 
 ## Deployment modes
 
@@ -117,17 +116,16 @@ repository name the environment whenever a number depends on it. There are three
 |---|---|---|---|
 | Purpose | development and the test suite | the public demo anyone can open | the deployment the infrastructure targets |
 | Mode | `full` | `portfolio` | `full` |
-| Host | docker compose | Render, one web service | AWS ECS Fargate |
+| Host | docker compose | one managed web service | container orchestration |
 | Size | your machine | **0.5 CPU / 512 MB**, one instance | task-sized, `desired_count = 1`, no autoscaling |
-| Database | local Postgres + pgvector | Neon | RDS |
-| Redis | compose service | Render, set in the dashboard | a sidecar container in the same task |
-| Provider | whatever is default in your database | Groq free tier — **200,000 tokens/day** | metered |
+| Database | local Postgres + pgvector | managed Postgres | managed Postgres |
+| Redis | compose service | managed | a sidecar container in the same task |
 | Auth | login | none, by design | login |
 
 **Most tight numbers in this repository are preprod numbers.** 512 MB, 0.5 CPU,
-the 200,000-token daily ceiling and the two-query concurrency bound all describe
-the Render deployment, because that is the constrained one and the one the
-public can reach. Production sizing is Terraform's business and is set in
+the daily token ceiling and the two-query concurrency bound all describe the
+preprod deployment, because that is the constrained one and the one the public
+can reach. Production sizing is Terraform's business and is set in
 `infrastructure/production/`.
 
 Two consequences worth stating, because they are easy to read the wrong way:
@@ -196,7 +194,7 @@ Postgres with pgvector, via SQLAlchemy (`backend/models/db_models.py`). 23 table
 `llm_providers` (encrypted keys, a partial unique index enforcing at most one default), `llm_models` (one model per provider per tier), `users`.
 
 **Evaluation**
-`benchmark_runs`, `evaluation_metrics`, `question_results`, `claim_evaluations`, `escalations`, `human_reviews`.
+`benchmark_runs`, `evaluation_metrics`, `question_results`, `claim_evaluations`, `escalations`.
 
 **Operations**
 `ingestion_events` (one row per attempt, including the attempts that produced no document — duplicates, unreadable PDFs), `system_logs`, `retrieval_logs`, `retrieved_evidence`, `model_costs`, `alembic_version`.
@@ -301,38 +299,9 @@ cd frontend && npm install && npm run dev     # :5173
 
 It calls the API through a Vite dev proxy rather than directly, because the backend registers no CORS middleware and the frontend uses relative `/api` paths throughout. Every deployment therefore serves both halves from one origin, or rewrites `/api` and `/health` to the API.
 
-## Configuration
-
-Loaded from `.env` by `backend/config.py` (`pydantic-settings`). Environment variables take precedence over the file.
-
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `DATABASE_URL` | yes | — | Postgres, async driver (`postgresql+asyncpg://`) |
-| `SYNC_DATABASE_URL` | yes | — | Postgres, sync driver — Alembic and the SQL agent |
-| `LLM_KEY_ENCRYPTION_SECRET` | yes | — | Fernet key for provider API keys in `llm_providers` |
-| `REDIS_URL` | no | `redis://localhost:6379/0` | Cache and rate-limit store; unreachable is tolerated, blank is not |
-| `OPENAI_API_KEY` | for embeddings | `""` | `text-embedding-3-small` only; chat models come from the database |
-| `DEPLOYMENT_MODE` | no | `full` | `portfolio` or `full` — see [Deployment modes](#deployment-modes) |
-| `APP_ENV` | no | `development` | Environment name |
-| `JWT_SECRET` | for `full` | `""` | Signs access tokens; no default on purpose |
-| `JWT_EXPIRE_HOURS` | no | `12` | Token lifetime |
-| `ADMIN_API_KEY` | no | `""` | Guards the indexing route; empty means refuse |
-| `SECURITY_RATE_LIMIT` | no | `20` | Requests per window, per caller |
-| `SECURITY_RATE_WINDOW_SECONDS` | no | `60` | Window length |
-| `SECURITY_LLM_GUARD_ENABLED` | no | `false` | The optional LLM guard |
-| `READONLY_DATABASE_URL` | no | `""` | SELECT-only role for generated SQL; falls back to `DATABASE_URL` |
-| `SEC_USER_AGENT` | for EDGAR | `""` | SEC requires a caller and contact; empty disables the collector |
-| `ALPHA_VANTAGE_API_KEY` | for seeding | `""` | News sentiment during a live seed |
-| `AWS_REGION`, `RAW_BUCKET`, `PROCESSED_BUCKET`, `INGESTION_QUEUE_URL` | no | — | The S3 → SQS → worker ingestion path; empty means the fetcher writes straight to Postgres |
-| `LANGSMITH_API_KEY`, `LANGSMITH_TRACING`, `LANGCHAIN_PROJECT` | no | — | Tracing |
-| `CLOUDWATCH_LOGS_URL`, `LANGSMITH_PROJECT_URL` | no | `""` | Console links for the admin rail |
-
-Two notes worth knowing before a deployment fails obscurely:
-
-- **`backend.main` cannot be imported without `OPENAI_API_KEY`.** `OpenAIEmbeddings` is constructed at module scope and validates credentials on construction, so uvicorn exits at import from a clean shell. Export `.env` first.
-- **A blank `REDIS_URL` is worse than a missing one.** Missing falls back to the default; blank is a string `redis.from_url` rejects at import.
-
-**Docker Compose ports:** Postgres `5433→5432`, Redis `6379→6379`, API `8000→8000`.
+Configuration is read from `.env` by `backend/config.py`, which declares every
+variable, its default and whether it is required. That file is the reference;
+`.env.example` is not maintained.
 
 ## Seeding and the frozen snapshot
 
@@ -352,20 +321,11 @@ With the snapshot restored, a score change can only have come from the code. Wha
 
 ## Deployment
 
-**The preprod deployment** runs on managed services, none of which need an always-on machine:
-
-| Piece | Service | Why |
-|---|---|---|
-| API | Render web service (Docker) | A query takes ~95s, which rules out any serverless host with a short timeout |
-| UI | Render static site | Never sleeps, so the page paints instantly and only the query waits |
-| Database | Neon Postgres | Free tier supports pgvector and does not sleep |
-| Cache | Upstash Redis | Makes the rate limit real and the embedding cache shared |
-
-`infrastructure/preprod/render.yaml` is the blueprint, and it carries the reasoning for each choice in comments. The static site rewrites `/api/*` and `/health` to the API, which keeps the browser same-origin — necessary because the backend mounts no CORS middleware.
+**The preprod deployment** runs on managed services, none of which need an always-on machine. `infrastructure/preprod/render.yaml` is the blueprint, and it carries the reasoning for each choice in comments. The UI is served as a static site that rewrites `/api/*` and `/health` to the API, which keeps the browser same-origin — necessary because the backend mounts no CORS middleware.
 
 **The AWS topology** is defined in `infrastructure/production/`: ALB → ECS Fargate (an API task and an ingestion worker sharing one image), RDS Postgres in private subnets, S3 → SQS → worker ingestion, and Secrets Manager, all in Terraform.
 
-One gotcha it encodes: the ECS image serves the frontend from the same container, and it only has a frontend because `frontend/dist` exists in the developer's working tree at `docker build` time. `dist` is gitignored, so an image built from a clean clone is API-only and answers `/` with a 404. That is exactly why the Render deployment builds the UI as a separate static site instead.
+One gotcha it encodes: the ECS image serves the frontend from the same container, and it only has a frontend because `frontend/dist` exists in the developer's working tree at `docker build` time. `dist` is gitignored, so an image built from a clean clone is API-only and answers `/` with a 404. That is exactly why preprod builds the UI as a separate static site instead.
 
 ## Project layout
 
@@ -397,7 +357,7 @@ frontend/         Vite + React + TypeScript
   src/evaluation/ Benchmark dashboard — runs, metrics, per-question, comparisons
   src/admin/      Providers, indexing, ingestion, human review
 infrastructure/
-  preprod/        Render blueprint and Vercel config
+  preprod/        Managed-host blueprint and rewrite config
   production/     Terraform for the AWS topology
   shared/         ECR repository and ACM certificate
 ```
@@ -415,9 +375,6 @@ Note that `.env` sets `DEPLOYMENT_MODE=portfolio` for local demo work, and the r
 ## Known issues
 
 - **No CORS middleware.** `backend/main.py` registers none, so a browser app on a different origin cannot call the API. Every deployment shares an origin or rewrites `/api` and `/health`; local development uses the Vite proxy. Deliberate, but it constrains how the API can be consumed.
-- **Escalation rows are written in `portfolio` mode and cannot be read back there.** `record_escalation` files a row in every mode; `escalation_router` is mounted only in `full`. That is deliberate — the rows record what the public demo declined to stand behind, and they are read out of band or by a full-mode deployment against the same database. Rows nobody serves are not the same as a table nobody writes.
-- **`human_reviews` has a screen but no writer.** `HumanReviewScreen.tsx` is in the admin UI and `escalations` records that a report was withheld, but nothing records what a human then decided about one. Either the loop gets closed or the table goes.
 - **The Alembic chain cannot build a database from scratch.** Its first revision alters tables that `create_all` is expected to have made. `backend/startup_migration.py` handles both cases; calling Alembic directly on an empty database does not.
 - **`backend.main` imports ~235 MB.** It was 404 MB until `backend/_transformers_guard.py` stopped `langchain_core`'s import-time feature probe from pulling in torch, which arrives transitively through `docling`. Enabling the cross-encoder adds roughly 270 MB and would not fit a 512 MB instance. The text splitter is imported lazily for the same reason.
-- **The public demo's provider has a daily token ceiling.** Groq's free tier allows 200,000 tokens per day for the whole organisation, and one question with retries can spend ten to twenty thousand — so the demo answers roughly twenty questions a day before refusing. It says so plainly when it happens. `scripts/switch_default_provider.py` moves the deployment to a metered provider when that matters, after proving the new one answers.
 - **An LLM holistic score is blended into the ranking at a hardcoded 30%.** Nothing justifies 30 over 10 or 50. Either an ablation defends the weight or the component should go.

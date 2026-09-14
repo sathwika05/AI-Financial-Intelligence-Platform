@@ -378,3 +378,10 @@ Note that `.env` sets `DEPLOYMENT_MODE=portfolio` for local demo work, and the r
 - **The Alembic chain cannot build a database from scratch.** Its first revision alters tables that `create_all` is expected to have made. `backend/startup_migration.py` handles both cases; calling Alembic directly on an empty database does not.
 - **`backend.main` imports ~235 MB.** It was 404 MB until `backend/_transformers_guard.py` stopped `langchain_core`'s import-time feature probe from pulling in torch, which arrives transitively through `docling`. Enabling the cross-encoder adds roughly 270 MB and would not fit a 512 MB instance. The text splitter is imported lazily for the same reason.
 - **An LLM holistic score is blended into the ranking at a hardcoded 30%.** Nothing justifies 30 over 10 or 50. Either an ablation defends the weight or the component should go.
+
+## License
+
+Copyright (c) 2026 Sathwika P. All rights reserved.
+
+Published to be read and evaluated, not to be reused. See [LICENSE](LICENSE)
+for what that permits and what it does not.

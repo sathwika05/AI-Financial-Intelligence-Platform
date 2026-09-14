@@ -1,0 +1,37 @@
+Copyright (c) 2026 Sathwika P. All rights reserved.
+
+This source code is published so that it can be read and evaluated. It is
+not open source, and no licence to use it is granted.
+
+PERMITTED
+
+  Viewing the source, and running it locally for the sole purpose of
+  evaluating the author's work — for example, as part of a hiring process.
+
+NOT PERMITTED, without prior written permission from the author
+
+  Copying, reproducing or redistributing this code or any part of it.
+  Modifying it or creating derivative works.
+  Using it, in whole or in part, in any product, service or project,
+  whether commercial or not.
+  Using it as training data for a machine learning model.
+  Removing or altering this notice.
+
+Publishing this repository grants no rights beyond those stated above.
+Permissions available through the platform hosting it — the ability to
+fork or clone a public repository — are a function of that platform and
+do not constitute a licence to use this code.
+
+The documentation, written analysis and evaluation datasets in this
+repository are covered by the same terms as the source.
+
+NO WARRANTY
+
+  This code is provided "as is", without warranty of any kind, express or
+  implied, including but not limited to the warranties of merchantability,
+  fitness for a particular purpose and non-infringement. In no event shall
+  the author be liable for any claim, damages or other liability, whether
+  in an action of contract, tort or otherwise, arising from, out of or in
+  connection with this code or its use.
+
+For permission to use this code, contact the author.
